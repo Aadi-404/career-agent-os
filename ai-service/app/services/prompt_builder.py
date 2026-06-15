@@ -15,6 +15,7 @@ Candidate profile:
 - Experience: {context.experienceYears} years
 - Current stack: {stack}
 - Target market: {context.targetMarket}
+- Preparation plan length: {request.preparationPlanDays} days
 
 Important instructions:
 - Be practical and interview-focused.
@@ -110,6 +111,7 @@ Rules:
 - Give at least 5 resume improvements.
 - Give at least 8 interview questions.
 - Give at least 8 cross-questions.
-- sevenDayPlan must contain exactly 7 days.
+- sevenDayPlan must contain exactly {request.preparationPlanDays} day(s).
+- day must start at 1 and end at {request.preparationPlanDays}.
 - Keep the answer realistic for the candidate's experience level.
 """.strip()

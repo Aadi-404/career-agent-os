@@ -157,8 +157,26 @@ It returns normalized resume text, a structured resume draft, and warnings for s
 Recommended flow:
 
 ```text
-Upload resume -> extract text -> normalize resume -> review/edit -> analyze JD
+Upload resume -> extract text -> normalize resume -> review/edit resume -> parse JD -> review/edit JD -> analyze
 ```
+
+## JD Parsing
+
+The JD parsing endpoint is:
+
+```text
+POST /ai/jd/parse
+```
+
+Input:
+
+```json
+{
+  "rawJobDescriptionText": "string"
+}
+```
+
+It returns normalized JD text, extracted skills, experience range, location, work mode, responsibilities, and warnings.
 
 ## Level 2 Scoring
 
@@ -175,3 +193,11 @@ recommendedAction
 ```
 
 The score is calculated by the explainable scoring engine. LLM mode still generates coaching content, but the numeric score is attached by the backend scoring layer.
+
+The request also accepts:
+
+```text
+preparationPlanDays
+```
+
+Default is `7`. Valid range is `1` to `30`.

@@ -44,6 +44,7 @@ def _analyze_with_llm(request: AnalyzeRequest) -> AnalysisResponse:
         raise HTTPException(status_code=502, detail=f"AI response schema validation failed: {exc}") from exc
 
     _attach_algorithmic_scoring(response, request)
+    _ensure_plan_length(response, request.preparationPlanDays)
     response.debug = DebugInfo(
         mode="llm",
         provider=provider,
@@ -153,15 +154,7 @@ def _analyze_with_mock(request: AnalyzeRequest) -> AnalysisResponse:
             reason="The candidate has API and database exposure but needs clearer examples of ownership, deployment, scaling, and reliability decisions.",
             topicsToPrepare=["Layered architecture", "API pagination", "Caching basics", "SQL indexing", "Authentication and authorization", "Logging and monitoring"],
         ),
-        sevenDayPlan=[
-            DayPlan(day=1, focus=".NET API story", tasks=["Prepare one end-to-end API feature explanation.", "Revise middleware, DI, routing, and filters."]),
-            DayPlan(day=2, focus="SQL and LINQ", tasks=["Practice 15 LINQ queries.", "Revise joins, indexes, grouping, and query optimization."]),
-            DayPlan(day=3, focus="Entity Framework", tasks=["Build a small EF Core CRUD module.", "Practice migrations and relationship mapping."]),
-            DayPlan(day=4, focus="Azure and CI/CD", tasks=["Learn a basic Azure DevOps build-release flow.", "Prepare deployment-related interview answers."]),
-            DayPlan(day=5, focus="Frontend integration", tasks=["Prepare React API integration examples.", "Revise loading, error, and validation states."]),
-            DayPlan(day=6, focus="System design basics", tasks=["Design a job application tracker API.", "Cover schema, APIs, pagination, auth, and caching."]),
-            DayPlan(day=7, focus="Mock interview", tasks=["Answer all cross-questions aloud.", "Rewrite 5 resume bullets based on this analysis."]),
-        ],
+        sevenDayPlan=_build_preparation_plan(request.preparationPlanDays),
         debug=DebugInfo(
             mode="mock",
             provider=provider,
@@ -191,6 +184,53 @@ def _attach_algorithmic_scoring(response: AnalysisResponse, request: AnalyzeRequ
     response.overallOpportunityScore = scoring.overall_opportunity_score
     response.shortlistingFactors = scoring.shortlisting_factors
     response.recommendedAction = scoring.recommended_action
+
+
+def _build_preparation_plan(days: int) -> list[DayPlan]:
+    base_plan = [
+        DayPlan(day=1, focus=".NET API story", tasks=["Prepare one end-to-end API feature explanation.", "Revise middleware, DI, routing, and filters."]),
+        DayPlan(day=2, focus="SQL and LINQ", tasks=["Practice LINQ queries.", "Revise joins, indexes, grouping, and query optimization."]),
+        DayPlan(day=3, focus="Entity Framework", tasks=["Build or revise a small EF Core CRUD module.", "Practice migrations and relationship mapping."]),
+        DayPlan(day=4, focus="Azure and CI/CD", tasks=["Learn a basic Azure DevOps build-release flow.", "Prepare deployment-related interview answers."]),
+        DayPlan(day=5, focus="Frontend integration", tasks=["Prepare React or Angular API integration examples.", "Revise loading, error, and validation states."]),
+        DayPlan(day=6, focus="System design basics", tasks=["Design a job application tracker API.", "Cover schema, APIs, pagination, auth, and caching."]),
+        DayPlan(day=7, focus="Mock interview", tasks=["Answer all cross-questions aloud.", "Rewrite resume bullets based on this analysis."]),
+    ]
+    extended_topics = [
+        ("Production debugging", ["Practice explaining logs, correlation IDs, SQL checks, and root cause analysis."]),
+        ("Authentication and authorization", ["Revise JWT flow, role checks, policies, middleware, and secure API defaults."]),
+        ("Project ownership story", ["Prepare STAR-format answers for requirement, implementation, testing, release, and impact."]),
+        ("Database depth", ["Practice transactions, indexes, execution plans, and stored procedure tradeoffs."]),
+        ("Cloud basics", ["Revise App Service, Azure SQL, Key Vault, monitoring, and environment variables."]),
+        ("Behavioral and HR screen", ["Prepare notice period, role switch reason, salary expectation, and project explanation answers."]),
+        ("Final revision", ["Revisit weak topics, retake mock questions, and refine concise interview answers."]),
+    ]
+
+    plan = base_plan[: min(days, len(base_plan))]
+    next_day = len(plan) + 1
+    while len(plan) < days:
+        focus, tasks = extended_topics[(next_day - len(base_plan) - 1) % len(extended_topics)]
+        plan.append(DayPlan(day=next_day, focus=focus, tasks=tasks))
+        next_day += 1
+    return [item.model_copy(update={"day": index + 1}) for index, item in enumerate(plan)]
+
+
+def _ensure_plan_length(response: AnalysisResponse, days: int) -> None:
+    if len(response.sevenDayPlan) == days:
+        return
+    if len(response.sevenDayPlan) > days:
+        response.sevenDayPlan = [
+            item.model_copy(update={"day": index + 1})
+            for index, item in enumerate(response.sevenDayPlan[:days])
+        ]
+        return
+
+    generated_plan = _build_preparation_plan(days)
+    existing = [
+        item.model_copy(update={"day": index + 1})
+        for index, item in enumerate(response.sevenDayPlan)
+    ]
+    response.sevenDayPlan = existing + generated_plan[len(existing) :]
 
 
 def _resolve_llm_options(request: AnalyzeRequest) -> tuple[str, str, str]:

@@ -31,6 +31,7 @@ class AnalyzeRequest(BaseModel):
     jobDescriptionText: str = Field(min_length=50)
     candidateContext: CandidateContext
     llmOptions: LlmOptions | None = None
+    preparationPlanDays: int = Field(default=7, ge=1, le=30)
 
 
 class MatchingSkill(BaseModel):
@@ -79,7 +80,7 @@ class SystemDesignReadiness(BaseModel):
 
 
 class DayPlan(BaseModel):
-    day: int = Field(ge=1, le=7)
+    day: int = Field(ge=1, le=30)
     focus: str
     tasks: list[str] = Field(min_length=1)
 
@@ -126,5 +127,5 @@ class AnalysisResponse(BaseModel):
     interviewQuestions: list[InterviewQuestion]
     crossQuestions: list[CrossQuestion]
     systemDesignReadiness: SystemDesignReadiness
-    sevenDayPlan: list[DayPlan] = Field(min_length=7, max_length=7)
+    sevenDayPlan: list[DayPlan] = Field(min_length=1, max_length=30)
     debug: DebugInfo | None = None

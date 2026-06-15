@@ -75,6 +75,8 @@ Upload resume
 -> Extract raw text
 -> Normalize resume
 -> User reviews/edits normalized text
+-> Parse JD
+-> User reviews/edits normalized JD text
 -> Analyze against JD
 ```
 
@@ -211,13 +213,17 @@ technicalMatchScore * 0.45
 This slice adds:
 
 - `POST /ai/resume/normalize`
+- `POST /ai/jd/parse`
 - Structured resume normalization models
+- Structured JD parsing models
 - Experience-wise technical scoring weights
 - Score breakdown response fields
 - Shortlisting score response fields
 - Opportunity score response fields
 - Frontend shortlisting inputs
 - Frontend normalized resume review button
+- Frontend parsed JD review button and extracted requirement summary
+- Dynamic preparation plan length input, defaulting to 7 days
 - Frontend score breakdown and shortlisting factor panels
 
 ## Future Level 2.5: Research-Grounded Company and Role Insights

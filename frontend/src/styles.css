@@ -202,6 +202,48 @@ button {
   font-weight: 600;
 }
 
+.reviewSummary {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.reviewSummary > div {
+  display: grid;
+  gap: 6px;
+}
+
+.reviewSummary span {
+  color: #526070;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.reviewSummary strong {
+  color: #162033;
+  font-size: 14px;
+}
+
+.miniTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.miniTags em {
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #075985;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
 button:disabled {
   background: #94a3b8;
   cursor: wait;

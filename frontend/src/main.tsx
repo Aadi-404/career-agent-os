@@ -36,6 +36,21 @@ type LlmMode = "mock" | "live";
 type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 
+type JdParseResponse = {
+  normalizedJobDescriptionText: string;
+  warnings: string[];
+  parsedJobDescription: {
+    roleTitle?: string | null;
+    experienceRange: { minYears?: number | null; maxYears?: number | null };
+    requiredSkills: string[];
+    preferredSkills: string[];
+    responsibilities: string[];
+    locations: string[];
+    workModes: string[];
+    senioritySignals: string[];
+  };
+};
+
 const modelOptions: Record<LlmProvider, string[]> = {
   groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
   openai: ["gpt-4.1-mini", "gpt-4o-mini"],
@@ -53,6 +68,7 @@ function App() {
   const [jobDescriptionText, setJobDescriptionText] = useState(defaultJd);
   const [targetRole, setTargetRole] = useState("Full Stack Developer with AI Integration");
   const [experienceYears, setExperienceYears] = useState(3);
+  const [preparationPlanDays, setPreparationPlanDays] = useState(7);
   const [currentStack, setCurrentStack] = useState(".NET, React, SQL, Java Spring Boot, Python");
   const [targetMarket, setTargetMarket] = useState("Indian software job market");
   const [currentLocation, setCurrentLocation] = useState("Navi Mumbai");
@@ -68,8 +84,11 @@ function App() {
   const [resumeSource, setResumeSource] = useState<ResumeSource>("text");
   const [uploading, setUploading] = useState(false);
   const [normalizing, setNormalizing] = useState(false);
+  const [parsingJd, setParsingJd] = useState(false);
   const [uploadInfo, setUploadInfo] = useState("");
   const [normalizeInfo, setNormalizeInfo] = useState("");
+  const [jdParseInfo, setJdParseInfo] = useState("");
+  const [parsedJd, setParsedJd] = useState<JdParseResponse["parsedJobDescription"] | null>(null);
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -104,6 +123,7 @@ function App() {
             provider: llmProvider,
             model: llmModel,
           },
+          preparationPlanDays,
         }),
       });
 
@@ -200,6 +220,38 @@ function App() {
     }
   }
 
+  async function parseCurrentJd() {
+    setParsingJd(true);
+    setError("");
+    setJdParseInfo("");
+    setParsedJd(null);
+
+    try {
+      const response = await fetch("http://localhost:8000/ai/jd/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawJobDescriptionText: jobDescriptionText }),
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(details || "JD parsing failed");
+      }
+
+      const parsed = await response.json() as JdParseResponse;
+      setJobDescriptionText(parsed.normalizedJobDescriptionText);
+      setParsedJd(parsed.parsedJobDescription);
+      const warnings = parsed.warnings.length ? ` Warnings: ${parsed.warnings.join(" ")}` : "";
+      const requiredCount = parsed.parsedJobDescription.requiredSkills.length;
+      const preferredCount = parsed.parsedJobDescription.preferredSkills.length;
+      setJdParseInfo(`Parsed ${requiredCount} required skill(s), ${preferredCount} preferred skill(s).${warnings}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "JD parsing failed");
+    } finally {
+      setParsingJd(false);
+    }
+  }
+
   return (
     <main className="shell">
       <section className="header">
@@ -253,6 +305,10 @@ function App() {
               <input type="number" min={0} max={50} value={experienceYears} onChange={(event) => setExperienceYears(Number(event.target.value))} />
             </label>
           </div>
+          <label>
+            Preparation plan days
+            <input type="number" min={1} max={30} value={preparationPlanDays} onChange={(event) => setPreparationPlanDays(Math.max(1, Math.min(30, Number(event.target.value) || 7)))} />
+          </label>
           <label>
             Current stack
             <input value={currentStack} onChange={(event) => setCurrentStack(event.target.value)} />
@@ -309,7 +365,7 @@ function App() {
             </label>
           )}
           <label>
-            Resume text
+            Resume review window
             <textarea value={resumeText} onChange={(event) => setResumeText(event.target.value)} rows={8} />
           </label>
           <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
@@ -317,9 +373,14 @@ function App() {
           </button>
           {normalizeInfo && <p className="hint">{normalizeInfo}</p>}
           <label>
-            Job description
+            JD review window
             <textarea value={jobDescriptionText} onChange={(event) => setJobDescriptionText(event.target.value)} rows={8} />
           </label>
+          <button type="button" className="secondaryButton" disabled={parsingJd || jobDescriptionText.trim().length < 20} onClick={parseCurrentJd}>
+            {parsingJd ? "Parsing JD..." : "Parse JD for Review"}
+          </button>
+          {jdParseInfo && <p className="hint">{jdParseInfo}</p>}
+          {parsedJd && <ParsedJdPanel parsedJd={parsedJd} />}
           <button disabled={loading}>{loading ? "Analyzing..." : "Analyze Technical Fit"}</button>
           {error && <p className="error">{error}</p>}
         </form>
@@ -367,8 +428,43 @@ function Results({ result }: { result: AnalysisResponse }) {
         <p>{result.systemDesignReadiness.reason}</p>
         <div className="tags">{result.systemDesignReadiness.topicsToPrepare.map((topic) => <span key={topic}>{topic}</span>)}</div>
       </div>
-      <Card title="7-Day Plan" items={result.sevenDayPlan.map((item) => `Day ${item.day} - ${item.focus}: ${item.tasks.join(" ")}`)} />
+      <Card title={`${result.sevenDayPlan.length}-Day Plan`} items={result.sevenDayPlan.map((item) => `Day ${item.day} - ${item.focus}: ${item.tasks.join(" ")}`)} />
     </>
+  );
+}
+
+function ParsedJdPanel({ parsedJd }: { parsedJd: JdParseResponse["parsedJobDescription"] }) {
+  const experience =
+    parsedJd.experienceRange.minYears === undefined || parsedJd.experienceRange.minYears === null
+      ? "Not detected"
+      : `${parsedJd.experienceRange.minYears}${parsedJd.experienceRange.maxYears ? `-${parsedJd.experienceRange.maxYears}` : "+"} years`;
+
+  return (
+    <div className="reviewSummary">
+      <div>
+        <span>Role</span>
+        <strong>{parsedJd.roleTitle || "Not detected"}</strong>
+      </div>
+      <div>
+        <span>Experience</span>
+        <strong>{experience}</strong>
+      </div>
+      <ReviewTags title="Required" items={parsedJd.requiredSkills} />
+      <ReviewTags title="Preferred" items={parsedJd.preferredSkills} />
+      <ReviewTags title="Location" items={parsedJd.locations} />
+      <ReviewTags title="Work mode" items={parsedJd.workModes} />
+    </div>
+  );
+}
+
+function ReviewTags({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <span>{title}</span>
+      <div className="miniTags">
+        {items.length ? items.map((item) => <em key={`${title}-${item}`}>{item}</em>) : <em>None</em>}
+      </div>
+    </div>
   );
 }
 
