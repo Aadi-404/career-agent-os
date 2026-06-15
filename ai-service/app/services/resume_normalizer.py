@@ -8,6 +8,7 @@ from app.models.resume_normalize import (
     ResumeProject,
     StructuredResume,
 )
+from app.services.certificate_matcher import extract_certificate_evidence
 
 
 SECTION_HEADERS = {
@@ -266,6 +267,8 @@ def _extract_certifications(section_lines: list[str], all_lines: list[str]) -> l
             if re.search(pattern, lowered, flags=re.IGNORECASE):
                 candidates.append(line)
                 break
+    evidence_text = "\n".join([*candidates, *all_lines])
+    candidates.extend(item.raw_text for item in extract_certificate_evidence(evidence_text))
     return _dedupe_preserve_order(candidates)
 
 

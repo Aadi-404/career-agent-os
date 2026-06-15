@@ -1,6 +1,7 @@
 import re
 
 from app.models.jd_parse import ExperienceRange, JdParseRequest, JdParseResponse, ParsedJobDescription
+from app.services.certificate_matcher import extract_certification_requirements
 
 
 SKILL_ALIASES: dict[str, list[str]] = {
@@ -156,24 +157,12 @@ def _extract_preferred_skills(text: str) -> list[str]:
 
 
 def _extract_required_certifications(text: str) -> list[str]:
-    lowered = text.lower()
-    certifications = []
-    required_text = " ".join(
-        sentence
-        for sentence in _sentences(lowered)
-        if any(token in sentence for token in ["must have", "required", "mandatory", "should have"])
-        and not any(token in sentence for token in ["good to have", "nice to have", "preferred"])
-    )
-    certification_patterns = {
-        "AZ-900 / Azure Fundamentals": [r"\baz-900\b", r"\bazure fundamentals\b"],
-        "AWS Certified": [r"\baws certified\b", r"\baws certification\b"],
-        "Microsoft Certified": [r"\bmicrosoft certified\b", r"\bmicrosoft certification\b"],
-        "Certification Required": [r"\bcertification required\b", r"\bcertified\b", r"\bcertification\b"],
-    }
-    for label, patterns in certification_patterns.items():
-        if required_text and any(re.search(pattern, required_text) for pattern in patterns):
-            certifications.append(label)
-    return certifications
+    requirements = extract_certification_requirements(text)
+    labels = []
+    for requirement in requirements:
+        provider = requirement.provider.upper() if requirement.provider else "Any provider"
+        labels.append(f"{provider} {requirement.domain} {requirement.level}: {requirement.raw_text}")
+    return labels
 
 
 def _extract_skills(text: str) -> list[str]:

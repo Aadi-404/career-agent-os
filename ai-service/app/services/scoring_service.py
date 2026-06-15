@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass
 
 from app.models.analysis import AnalyzeRequest, ScoreBreakdownItem, ShortlistingFactor
+from app.services.certificate_matcher import best_certificate_match
 
 
 @dataclass
@@ -123,11 +124,18 @@ def _category_scores(request: AnalyzeRequest, jd_skills: set[str], resume_skills
     core_score = round((skill_ratio * 75) + (semantic_ratio * 25))
     core_reason = _skill_reason(matched_skills, missing_skills)
     database_score = _topic_score(resume, jd, ["SQL", "SQL Server", "Entity Framework", "LINQ"], fallback=45)
-    cloud_score = _topic_score(
+    cloud_topic_score = _topic_score(
         resume,
         jd,
         ["Azure", "Azure DevOps", "Docker", "Azure Fundamentals", "AWS Certification", "Microsoft Certification", "Certification"],
         fallback=35,
+    )
+    certificate_match = best_certificate_match(resume, jd)
+    cloud_score = certificate_match.score if certificate_match else cloud_topic_score
+    cloud_reason = (
+        certificate_match.reason
+        if certificate_match
+        else "Cloud/DevOps score checks Azure, CI/CD, pipelines, deployment, Docker, release ownership, and cloud/vendor certifications."
     )
     system_score = _topic_score(resume, jd, ["System Design"], fallback=35)
     dsa_score = _topic_score(resume, jd, ["DSA"], fallback=45)
@@ -152,7 +160,7 @@ def _category_scores(request: AnalyzeRequest, jd_skills: set[str], resume_skills
         "projectOwnership": (ownership_score, "Ownership score looks for end-to-end delivery, production work, measurable impact, and responsibility depth."),
         "backendFrontendDepth": (backend_frontend_score, "Checks deeper backend/frontend role alignment against the JD and resume evidence."),
         "debuggingProduction": (debugging_score, "Production-readiness checks debugging, monitoring, logs, support, and root-cause evidence."),
-        "cloudDevOps": (cloud_score, "Cloud/DevOps score checks Azure, CI/CD, pipelines, deployment, Docker, release ownership, and cloud/vendor certifications."),
+        "cloudDevOps": (cloud_score, cloud_reason),
         "systemDesignReadiness": (system_score, "System design readiness checks architecture, scaling, caching, queues, reliability, and distributed-system signals."),
         "architecture": (architecture_score, "Senior-level architecture score checks design decisions, boundaries, scalability, and ownership beyond implementation."),
         "scalabilityReliability": (scalability_score, "Scalability score checks performance, monitoring, indexing, caching, queues, and reliability evidence."),
