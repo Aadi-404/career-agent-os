@@ -39,7 +39,7 @@ def _resolve_api_key(settings: Settings, provider: str) -> str:
     if provider == "openai":
         return settings.openai_api_key or settings.llm_api_key
     if provider == "gemini":
-        return settings.gemini_api_key or settings.llm_api_key
+        return settings.gemini_api_key or settings.google_api_key or settings.llm_api_key
     return settings.llm_api_key
 
 

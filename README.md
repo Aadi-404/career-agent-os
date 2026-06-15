@@ -112,7 +112,10 @@ LLM_PROVIDER=gemini
 LLM_MODEL=gemini-2.0-flash
 LLM_API_KEY=your_gemini_key
 GEMINI_API_KEY=your_gemini_key
+GOOGLE_API_KEY=your_google_ai_studio_key
 ```
+
+For Gemini, the backend accepts `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or the generic `LLM_API_KEY`.
 
 The service still returns the same Pydantic response contract in both `mock` and `live` mode.
 
