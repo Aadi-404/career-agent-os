@@ -44,6 +44,7 @@ type JdParseResponse = {
     experienceRange: { minYears?: number | null; maxYears?: number | null };
     requiredSkills: string[];
     preferredSkills: string[];
+    requiredCertifications: string[];
     responsibilities: string[];
     locations: string[];
     workModes: string[];
@@ -244,7 +245,8 @@ function App() {
       const warnings = parsed.warnings.length ? ` Warnings: ${parsed.warnings.join(" ")}` : "";
       const requiredCount = parsed.parsedJobDescription.requiredSkills.length;
       const preferredCount = parsed.parsedJobDescription.preferredSkills.length;
-      setJdParseInfo(`Parsed ${requiredCount} required skill(s), ${preferredCount} preferred skill(s).${warnings}`);
+      const certificationCount = parsed.parsedJobDescription.requiredCertifications.length;
+      setJdParseInfo(`Parsed ${requiredCount} required skill(s), ${preferredCount} preferred skill(s), ${certificationCount} certification requirement(s).${warnings}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "JD parsing failed");
     } finally {
@@ -451,6 +453,7 @@ function ParsedJdPanel({ parsedJd }: { parsedJd: JdParseResponse["parsedJobDescr
       </div>
       <ReviewTags title="Required" items={parsedJd.requiredSkills} />
       <ReviewTags title="Preferred" items={parsedJd.preferredSkills} />
+      <ReviewTags title="Certifications" items={parsedJd.requiredCertifications} />
       <ReviewTags title="Location" items={parsedJd.locations} />
       <ReviewTags title="Work mode" items={parsedJd.workModes} />
     </div>

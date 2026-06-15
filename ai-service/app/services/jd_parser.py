@@ -12,9 +12,10 @@ SKILL_ALIASES: dict[str, list[str]] = {
     "Java": ["java"],
     "Spring Boot": ["spring boot"],
     "Python": ["python"],
-    "Web API": ["web api", "rest api", "restful api"],
+    "Web API": ["web api", "rest api", "restapi", "restful api"],
     "SQL": ["sql"],
     "SQL Server": ["sql server", "ssms"],
+    "SQLite": ["sqlite", "sqlite3"],
     "Entity Framework": ["entity framework", "ef core", "ef"],
     "LINQ": ["linq"],
     "Angular": ["angular"],
@@ -25,6 +26,10 @@ SKILL_ALIASES: dict[str, list[str]] = {
     "CSS": ["css"],
     "Azure": ["azure", "azure cloud"],
     "Azure DevOps": ["azure devops", "ci/cd", "pipeline", "pipelines"],
+    "Azure Fundamentals": ["azure fundamentals", "az-900"],
+    "AWS Certification": ["aws certified", "aws certification"],
+    "Microsoft Certification": ["microsoft certified", "microsoft certification"],
+    "Certification": ["certification", "certified", "certificate"],
     "Docker": ["docker"],
     "Git": ["git"],
     "Authentication": ["jwt", "authentication", "authorization"],
@@ -60,6 +65,7 @@ def parse_jd(request: JdParseRequest) -> JdParseResponse:
         experienceRange=_extract_experience_range(text),
         requiredSkills=_extract_required_skills(text),
         preferredSkills=_extract_preferred_skills(text),
+        requiredCertifications=_extract_required_certifications(text),
         responsibilities=_extract_responsibilities(lines),
         locations=_extract_locations(text),
         workModes=_extract_work_modes(text),
@@ -121,9 +127,15 @@ def _extract_required_skills(text: str) -> list[str]:
     found = _extract_skills(text)
     high_signal = []
     lowered = text.lower()
+    required_sentences = [
+        sentence
+        for sentence in _sentences(lowered)
+        if any(token in sentence for token in ["must have", "required", "mandatory", "should have"])
+        and not any(token in sentence for token in ["good to have", "nice to have", "preferred"])
+    ]
     for skill in found:
         aliases = SKILL_ALIASES[skill]
-        if any(f"must have {alias}" in lowered or f"required {alias}" in lowered for alias in aliases):
+        if any(any(_contains_phrase(sentence, alias) for alias in aliases) for sentence in required_sentences):
             high_signal.append(skill)
     if high_signal:
         return sorted(set(high_signal), key=str.lower)
@@ -143,6 +155,27 @@ def _extract_preferred_skills(text: str) -> list[str]:
     return sorted(set(explicit_preferred or preferred), key=str.lower)
 
 
+def _extract_required_certifications(text: str) -> list[str]:
+    lowered = text.lower()
+    certifications = []
+    required_text = " ".join(
+        sentence
+        for sentence in _sentences(lowered)
+        if any(token in sentence for token in ["must have", "required", "mandatory", "should have"])
+        and not any(token in sentence for token in ["good to have", "nice to have", "preferred"])
+    )
+    certification_patterns = {
+        "AZ-900 / Azure Fundamentals": [r"\baz-900\b", r"\bazure fundamentals\b"],
+        "AWS Certified": [r"\baws certified\b", r"\baws certification\b"],
+        "Microsoft Certified": [r"\bmicrosoft certified\b", r"\bmicrosoft certification\b"],
+        "Certification Required": [r"\bcertification required\b", r"\bcertified\b", r"\bcertification\b"],
+    }
+    for label, patterns in certification_patterns.items():
+        if required_text and any(re.search(pattern, required_text) for pattern in patterns):
+            certifications.append(label)
+    return certifications
+
+
 def _extract_skills(text: str) -> list[str]:
     lowered = text.lower()
     found = []
@@ -155,6 +188,10 @@ def _extract_skills(text: str) -> list[str]:
 def _contains_phrase(text: str, phrase: str) -> bool:
     escaped = re.escape(phrase).replace("\\ ", r"\s+")
     return bool(re.search(rf"(?<![a-z0-9+#]){escaped}(?![a-z0-9+#])", text))
+
+
+def _sentences(text: str) -> list[str]:
+    return [part.strip() for part in re.split(r"(?:[.!?]\s+|[\n;])", text) if part.strip()]
 
 
 def _extract_responsibilities(lines: list[str]) -> list[str]:
@@ -224,6 +261,8 @@ def _format_normalized_jd(parsed: ParsedJobDescription, lines: list[str]) -> str
         output.extend(["", "Required Skills", ", ".join(parsed.requiredSkills)])
     if parsed.preferredSkills:
         output.extend(["", "Preferred Skills", ", ".join(parsed.preferredSkills)])
+    if parsed.requiredCertifications:
+        output.extend(["", "Required Certifications", ", ".join(parsed.requiredCertifications)])
     if parsed.locations or parsed.workModes:
         details = []
         if parsed.locations:

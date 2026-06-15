@@ -11,6 +11,7 @@ class ParsedJobDescription(BaseModel):
     experienceRange: ExperienceRange = Field(default_factory=ExperienceRange)
     requiredSkills: list[str] = Field(default_factory=list)
     preferredSkills: list[str] = Field(default_factory=list)
+    requiredCertifications: list[str] = Field(default_factory=list)
     responsibilities: list[str] = Field(default_factory=list)
     locations: list[str] = Field(default_factory=list)
     workModes: list[str] = Field(default_factory=list)

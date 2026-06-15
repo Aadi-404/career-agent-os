@@ -16,7 +16,7 @@ SECTION_HEADERS = {
     "skills": ["skills", "technical skills"],
     "education": ["education"],
     "achievements": ["achievements", "online coding platform"],
-    "certifications": ["certifications", "certificates"],
+    "certifications": ["certifications", "certification", "certificates", "courses", "licenses"],
 }
 
 KNOWN_SKILLS = [
@@ -40,6 +40,8 @@ KNOWN_SKILLS = [
     "css",
     "sql",
     "sql server",
+    "sqlite",
+    "sqlite3",
     "ssms",
     "entity framework",
     "ef",
@@ -47,10 +49,16 @@ KNOWN_SKILLS = [
     "jwt",
     "azure",
     "azure devops",
+    "azure fundamentals",
+    "az-900",
     "ci/cd",
     "docker",
+    "aws",
+    "aws certified",
+    "microsoft certified",
     "git",
     "rest api",
+    "restapi",
     "web api",
     "dbms",
     "dsa",
@@ -70,7 +78,7 @@ def normalize_resume(request: ResumeNormalizeRequest) -> ResumeNormalizeResponse
         skills=_extract_skills(cleaned_lines, sections.get("skills", [])),
         education=_extract_simple_items(sections.get("education", [])),
         achievements=_extract_simple_items(sections.get("achievements", [])),
-        certifications=_extract_simple_items(sections.get("certifications", [])),
+        certifications=_extract_certifications(sections.get("certifications", []), cleaned_lines),
     )
     warnings = _build_warnings(structured, sections)
     return ResumeNormalizeResponse(
@@ -114,10 +122,15 @@ def _split_sections(lines: list[str]) -> dict[str, list[str]]:
 
 
 def _match_section_header(line: str) -> str | None:
-    lowered = line.lower().strip(":")
+    lowered = re.sub(r"[^a-z0-9 ]+", " ", line.lower()).strip()
+    lowered = re.sub(r"\s+", " ", lowered)
     for section, headers in SECTION_HEADERS.items():
         if lowered in headers:
             return section
+    if "certification" in lowered or "certificate" in lowered:
+        return "certifications"
+    if "project" in lowered and len(lowered.split()) <= 4:
+        return "projects"
     return None
 
 
@@ -186,8 +199,14 @@ def _extract_projects(lines: list[str]) -> list[ResumeProject]:
     current_duration: str | None = None
     current_lines: list[str] = []
 
-    for line in lines:
-        looks_like_project = _looks_like_title(line) and not _looks_like_detail(line)
+    for index, line in enumerate(lines):
+        next_line = lines[index + 1] if index + 1 < len(lines) else ""
+        duration = _find_duration([line])
+        if duration and current_name and not current_duration:
+            current_duration = duration
+            continue
+
+        looks_like_project = _looks_like_project_title(line, next_line)
         if looks_like_project:
             if current_name:
                 projects.append(_build_project(current_name, current_duration, current_lines))
@@ -207,7 +226,7 @@ def _build_project(name: str, duration: str | None, lines: list[str]) -> ResumeP
     return ResumeProject(
         name=name,
         duration=duration or _find_duration(lines),
-        techStack=_extract_skills(lines, lines),
+        techStack=_extract_project_tech_stack(lines),
         highlights=_extract_highlights(lines),
     )
 
@@ -224,6 +243,49 @@ def _extract_skills(all_lines: list[str], skill_lines: list[str]) -> list[str]:
 
 def _extract_simple_items(lines: list[str]) -> list[str]:
     return [line for line in lines if len(line) > 2 and not _match_section_header(line)]
+
+
+def _extract_certifications(section_lines: list[str], all_lines: list[str]) -> list[str]:
+    candidates = _extract_simple_items(section_lines)
+    certification_patterns = [
+        r"\b(?:az|ai|dp|pl|sc|ms)-\d{3}\b",
+        r"\baws certified\b[^,\n]*",
+        r"\bmicrosoft certified\b[^,\n]*",
+        r"\bazure fundamentals\b",
+        r"\bgoogle cloud\b[^,\n]*cert[^,\n]*",
+        r"\boracle\b[^,\n]*cert[^,\n]*",
+    ]
+    for line in all_lines:
+        if _match_section_header(line):
+            continue
+        lowered = line.lower()
+        if any(keyword in lowered for keyword in ["certified", "certification", "certificate", "az-900", "aws certified"]):
+            candidates.append(line)
+            continue
+        for pattern in certification_patterns:
+            if re.search(pattern, lowered, flags=re.IGNORECASE):
+                candidates.append(line)
+                break
+    return _dedupe_preserve_order(candidates)
+
+
+def _extract_project_tech_stack(lines: list[str]) -> list[str]:
+    tech_lines = []
+    pending_prefix = ""
+    for line in lines:
+        lowered = line.lower()
+        if _find_duration([line]):
+            continue
+        if len(line.split()) <= 2 and lowered in ["used", "tech", "technology", "technologies", "stack"]:
+            pending_prefix = lowered
+            continue
+        if pending_prefix:
+            tech_lines.append(line)
+            pending_prefix = ""
+            continue
+        if lowered.startswith(("tech", "used ", "stack")) or _line_has_skill(line):
+            tech_lines.append(line)
+    return _extract_skills(tech_lines, tech_lines)
 
 
 def _extract_highlights(lines: list[str]) -> list[str]:
@@ -279,9 +341,34 @@ def _looks_like_title(line: str) -> bool:
     return bool(re.match(r"^[A-Z0-9][A-Za-z0-9 .,&/+:-]+(?:\([^)]*\))?$", line))
 
 
+def _looks_like_project_title(line: str, next_line: str) -> bool:
+    if _looks_like_detail(line) or _find_duration([line]):
+        return False
+    if not _looks_like_title(line):
+        return False
+    lowered = line.lower()
+    project_tokens = ["system", "application", "app", "project", "platform", "tool", "analyzer", "reservation"]
+    if _line_has_skill(line) and not any(token in lowered for token in project_tokens):
+        return False
+    if any(token in lowered for token in project_tokens):
+        return True
+    if _find_duration([next_line]):
+        return True
+    return False
+
+
 def _looks_like_detail(line: str) -> bool:
     lowered = line.lower()
     return lowered.startswith(("used ", "implemented ", "designed ", "tech ", "with ", "and "))
+
+
+def _line_has_skill(line: str) -> bool:
+    lowered = line.lower()
+    for skill in KNOWN_SKILLS:
+        pattern = re.escape(skill).replace("\\ ", r"\s+")
+        if re.search(rf"(?<![a-z0-9+#]){pattern}(?![a-z0-9+#])", lowered):
+            return True
+    return False
 
 
 def _sentence(text: str) -> str:
@@ -297,19 +384,42 @@ def _skill_label(skill: str) -> str:
         "c#": "C#",
         "c++": "C++",
         "reactjs": "React",
+        "sql": "SQL",
         "sql server": "SQL Server",
+        "sqlite": "SQLite",
+        "sqlite3": "SQLite",
         "ssms": "SSMS",
         "entity framework": "Entity Framework",
         "ef": "EF",
         "linq": "LINQ",
+        "azure fundamentals": "Azure Fundamentals",
+        "az-900": "AZ-900",
         "jwt": "JWT",
         "ci/cd": "CI/CD",
+        "aws": "AWS",
+        "aws certified": "AWS Certified",
+        "microsoft certified": "Microsoft Certified",
         "rest api": "REST API",
+        "restapi": "REST API",
         "web api": "Web API",
         "dbms": "DBMS",
         "dsa": "DSA",
+        "electron.js": "Electron.js",
+        "scapy": "Scapy",
     }
     return labels.get(skill, skill.title() if skill != ".net" else ".NET")
+
+
+def _dedupe_preserve_order(items: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for item in items:
+        normalized = item.strip()
+        key = normalized.lower()
+        if normalized and key not in seen:
+            seen.add(key)
+            result.append(normalized)
+    return result
 
 
 def _build_warnings(structured: StructuredResume, sections: dict[str, list[str]]) -> list[str]:
