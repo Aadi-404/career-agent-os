@@ -32,6 +32,33 @@ type AnalysisResponse = {
   crossQuestions: Array<{ question: string; whyAsked: string; expectedAnswerHint: string }>;
   systemDesignReadiness: { level: "strong" | "moderate" | "weak"; reason: string; topicsToPrepare: string[] };
   sevenDayPlan: Array<{ day: number; focus: string; tasks: string[] }>;
+  preparationIntelligence?: {
+    summary: string;
+    priorityTopics: Array<{
+      topic: string;
+      priority: "critical" | "high" | "medium" | "low";
+      sourceRequirement: string;
+      reason: string;
+      currentEvidence?: string | null;
+      targetDepth: string;
+      actions: string[];
+    }>;
+    dailyPlan: Array<{
+      day: number;
+      focus: string;
+      goal: string;
+      tasks: string[];
+      output: string;
+    }>;
+    crossQuestionChains: Array<{
+      topic: string;
+      openingQuestion: string;
+      followUps: string[];
+      expectedAnswerFocus: string;
+      risk: string;
+    }>;
+    phase5ResearchBacklog: string[];
+  } | null;
   debug?: {
     mode: "mock" | "llm";
     provider?: string | null;
@@ -486,6 +513,7 @@ function Results({ result }: { result: AnalysisResponse }) {
       <OpportunityPanel result={result} />
       {result.scoreBreakdown?.length > 0 && <ScoreBreakdown items={result.scoreBreakdown} />}
       {result.requirementMatches?.length > 0 && <RequirementMatrix items={result.requirementMatches} />}
+      {result.preparationIntelligence && <PreparationIntelligencePanel preparation={result.preparationIntelligence} />}
       {result.shortlistingFactors?.length > 0 && <ShortlistingFactors items={result.shortlistingFactors} />}
       <Card title="Matching Skills" items={result.matchingSkills.map((item) => `${item.skill}: ${item.evidenceFromResume}`)} />
       <Card title="Weakly Evidenced Skills" items={result.weaklyEvidencedSkills.map((item) => `${item.skill}: ${item.whyWeak}`)} />
@@ -917,6 +945,85 @@ function RequirementMatrix({ items }: { items: AnalysisResponse["requirementMatc
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PreparationIntelligencePanel({ preparation }: { preparation: NonNullable<AnalysisResponse["preparationIntelligence"]> }) {
+  return (
+    <div className="panel prepPanel">
+      <div className="panelHeader">
+        <div>
+          <p className="eyebrow">Phase 3</p>
+          <h3>Preparation Intelligence</h3>
+        </div>
+      </div>
+      <p className="recommendation">{preparation.summary}</p>
+
+      <div className="prepSection">
+        <h4>Priority Topics</h4>
+        <div className="prepTopicList">
+          {preparation.priorityTopics.map((topic) => (
+            <div className="prepTopic" key={`${topic.topic}-${topic.sourceRequirement}`}>
+              <div className="prepTopicTop">
+                <strong>{topic.topic}</strong>
+                <span className={`priority ${topic.priority}`}>{topic.priority}</span>
+              </div>
+              <p>{topic.reason}</p>
+              {topic.currentEvidence && <small>Evidence: {topic.currentEvidence}</small>}
+              <small>Target depth: {topic.targetDepth}</small>
+              <ul>
+                {topic.actions.map((action, index) => <li key={`${topic.topic}-action-${index}`}>{action}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="prepSection">
+        <h4>Dynamic Daily Plan</h4>
+        <div className="prepDayList">
+          {preparation.dailyPlan.map((day) => (
+            <div className="prepDay" key={`prep-day-${day.day}`}>
+              <div className="prepDayTop">
+                <strong>Day {day.day}</strong>
+                <span>{day.focus}</span>
+              </div>
+              <p>{day.goal}</p>
+              <ul>
+                {day.tasks.map((task, index) => <li key={`prep-day-${day.day}-task-${index}`}>{task}</li>)}
+              </ul>
+              <small>Output: {day.output}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="prepSection">
+        <h4>Cross-Question Chains</h4>
+        <div className="prepChainList">
+          {preparation.crossQuestionChains.map((chain) => (
+            <div className="prepChain" key={`${chain.topic}-${chain.openingQuestion}`}>
+              <strong>{chain.topic}</strong>
+              <p>{chain.openingQuestion}</p>
+              <ol>
+                {chain.followUps.map((question, index) => <li key={`${chain.topic}-follow-${index}`}>{question}</li>)}
+              </ol>
+              <small>Expected focus: {chain.expectedAnswerFocus}</small>
+              <small>Risk: {chain.risk}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {preparation.phase5ResearchBacklog.length > 0 && (
+        <div className="prepSection researchBacklog">
+          <h4>Phase 5 Research Backlog</h4>
+          <ul>
+            {preparation.phase5ResearchBacklog.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

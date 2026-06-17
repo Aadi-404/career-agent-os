@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class CandidateContext(BaseModel):
     targetRole: str = Field(min_length=2, max_length=120)
-    experienceYears: int = Field(ge=0, le=50)
+    experienceYears: float = Field(ge=0, le=50)
     currentStack: list[str] = Field(min_length=1, max_length=30)
     targetMarket: str = Field(min_length=2, max_length=120)
     currentLocation: str | None = Field(default=None, max_length=120)
@@ -85,12 +85,46 @@ class DayPlan(BaseModel):
     tasks: list[str] = Field(min_length=1)
 
 
+class PriorityTopic(BaseModel):
+    topic: str
+    priority: Literal["critical", "high", "medium", "low"]
+    sourceRequirement: str
+    reason: str
+    currentEvidence: str | None = None
+    targetDepth: str
+    actions: list[str] = Field(default_factory=list)
+
+
+class PreparationDay(BaseModel):
+    day: int = Field(ge=1, le=30)
+    focus: str
+    goal: str
+    tasks: list[str] = Field(min_length=1)
+    output: str
+
+
+class CrossQuestionChain(BaseModel):
+    topic: str
+    openingQuestion: str
+    followUps: list[str] = Field(min_length=1)
+    expectedAnswerFocus: str
+    risk: str
+
+
+class PreparationIntelligence(BaseModel):
+    summary: str
+    priorityTopics: list[PriorityTopic] = Field(default_factory=list)
+    dailyPlan: list[PreparationDay] = Field(default_factory=list)
+    crossQuestionChains: list[CrossQuestionChain] = Field(default_factory=list)
+    phase5ResearchBacklog: list[str] = Field(default_factory=list)
+
+
 class DebugInfo(BaseModel):
     mode: Literal["mock", "llm"]
     provider: str | None = None
     model: str | None = None
     promptPreview: str
-    receivedExperienceYears: int
+    receivedExperienceYears: float
     receivedTargetRole: str
     receivedCurrentStack: list[str]
     scoreReason: str
@@ -140,4 +174,5 @@ class AnalysisResponse(BaseModel):
     crossQuestions: list[CrossQuestion]
     systemDesignReadiness: SystemDesignReadiness
     sevenDayPlan: list[DayPlan] = Field(min_length=1, max_length=30)
+    preparationIntelligence: PreparationIntelligence | None = None
     debug: DebugInfo | None = None

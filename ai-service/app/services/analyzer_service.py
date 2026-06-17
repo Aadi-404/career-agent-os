@@ -19,6 +19,7 @@ from app.models.analysis import (
     WeaklyEvidencedSkill,
 )
 from app.services.llm_client import call_llm
+from app.services.preparation_service import build_preparation_intelligence
 from app.services.prompt_builder import build_analysis_prompt
 from app.services.scoring_service import score_resume_against_jd
 
@@ -89,71 +90,18 @@ def _analyze_with_mock(request: AnalyzeRequest) -> AnalysisResponse:
         technicalMatchScore=score,
         overallSummary=(
             f"This mock analysis used the submitted context: {experience_label} of experience, "
-            f"targeting {context.targetRole}, with current stack {stack_label}. The candidate has "
-            "technical signals around backend API, SQL, frontend exposure, and delivery work. The "
-            "main gaps remain clear evidence of cloud, CI/CD, ORM depth, and end-to-end ownership."
+            f"targeting {context.targetRole}, with current stack {stack_label}. The numeric score, "
+            "requirement matches, gaps, and resume suggestions are generated from dynamically extracted "
+            "JD requirements rather than a fixed skill list."
         ),
         fitCategory=fit_category,
-        matchingSkills=[
-            MatchingSkill(skill="Backend APIs", evidenceFromResume="Mentions ASP.NET Core APIs and API integration.", jdRequirement="ASP.NET, .NET Core, Web API."),
-            MatchingSkill(skill="SQL", evidenceFromResume="Mentions SQL Server experience.", jdRequirement="SQL and enterprise application development."),
-            MatchingSkill(skill="Frontend exposure", evidenceFromResume="Mentions React UI changes.", jdRequirement="HTML, CSS, JavaScript, jQuery frontend skills."),
-            MatchingSkill(skill="Agile delivery", evidenceFromResume="Mentions Agile delivery and production support.", jdRequirement="Collaborative agile environment."),
-            MatchingSkill(skill=".NET experience", evidenceFromResume=f"Candidate context says {experience_label}; resume text is still the primary evidence for actual project depth.", jdRequirement="2 to 5 years of ASP.NET, .NET Core, C# experience."),
-        ],
-        weaklyEvidencedSkills=[
-            WeaklyEvidencedSkill(
-                skill="Entity Framework",
-                source="The resume mentions .NET APIs and SQL Server but not ORM usage.",
-                whyWeak="The JD explicitly asks for Entity Framework, but the resume does not prove hands-on usage.",
-                howToStrengthenResume="Add a bullet about EF Core models, LINQ queries, migrations, or repository/data access work if applicable.",
-            ),
-            WeaklyEvidencedSkill(
-                skill="Azure DevOps CI/CD",
-                source="The resume mentions Agile and production support but not pipeline ownership.",
-                whyWeak="Production support does not automatically prove CI/CD pipeline experience.",
-                howToStrengthenResume="Mention build/release pipelines, deployment steps, pull request checks, or Azure DevOps boards if used.",
-            ),
-        ],
-        missingSkills=[
-            MissingSkill(skill="Azure Cloud Services", importance="high", whyItMatters="The JD calls out Azure Cloud Services for Microsoft client projects.", howToPrepare="Learn App Service, Azure SQL, Key Vault, Storage, monitoring, and deployment basics."),
-            MissingSkill(skill="LINQ", importance="high", whyItMatters="LINQ is a core .NET interview topic and appears directly in the JD.", howToPrepare="Practice filtering, projection, grouping, joins, deferred execution, and IQueryable vs IEnumerable."),
-            MissingSkill(skill="MVC", importance="medium", whyItMatters="The JD lists MVC and may ask about request flow and controller responsibilities.", howToPrepare="Revise routing, controllers, views, model binding, filters, and middleware differences."),
-            MissingSkill(skill="Code compliance", importance="medium", whyItMatters="Enterprise projects care about maintainability, standards, and review practices.", howToPrepare="Prepare examples around code reviews, static analysis, naming, exception handling, logging, and secure coding."),
-            MissingSkill(skill="End-to-end ownership", importance="high", whyItMatters="The JD emphasizes ownership from ideation to deployment.", howToPrepare="Prepare one project story covering requirement, design, implementation, testing, deployment, and production issue handling."),
-        ],
-        resumeImprovements=[
-            ResumeImprovement(currentIssue="Resume is responsibility-heavy and low on measurable impact.", suggestedBullet="Built and maintained ASP.NET Core Web APIs for business workflows, improving reliability of API integrations and reducing manual support effort.", reason="Impact-based bullets create stronger interview discussion points."),
-            ResumeImprovement(currentIssue="Database work is mentioned too broadly.", suggestedBullet="Implemented SQL Server queries, stored procedures, and data validation logic for high-volume application modules.", reason="Specific database ownership helps match SQL-heavy .NET roles."),
-            ResumeImprovement(currentIssue="Frontend work is vague.", suggestedBullet="Delivered React UI enhancements, form validations, and API integration changes for user-facing workflow screens.", reason="This proves fullstack exposure instead of only backend support."),
-            ResumeImprovement(currentIssue="Production support is not framed as engineering value.", suggestedBullet="Resolved production defects by debugging API logs, SQL data issues, and integration failures in an Agile delivery environment.", reason="Support experience can become valuable if written as debugging and reliability work."),
-            ResumeImprovement(currentIssue="Cloud and CI/CD evidence is missing.", suggestedBullet="Supported deployments through Azure DevOps pipelines and environment validation for .NET services.", reason="Only use this if true; it directly addresses JD expectations."),
-        ],
-        interviewQuestions=[
-            InterviewQuestion(topic=".NET Core", question="Explain the request pipeline in ASP.NET Core.", difficulty="medium", expectedFocus="Middleware order, routing, controllers, dependency injection, filters, and response handling."),
-            InterviewQuestion(topic="Web API", question="How do you design a clean REST API endpoint?", difficulty="medium", expectedFocus="Resources, HTTP methods, status codes, validation, pagination, and error response shape."),
-            InterviewQuestion(topic="C#", question="What is the difference between interface and abstract class?", difficulty="easy", expectedFocus="Contract, shared implementation, multiple inheritance behavior, and use cases."),
-            InterviewQuestion(topic="LINQ", question="What is deferred execution in LINQ?", difficulty="medium", expectedFocus="When queries execute, IEnumerable vs IQueryable, and performance implications."),
-            InterviewQuestion(topic="Entity Framework", question="How do migrations work in Entity Framework Core?", difficulty="medium", expectedFocus="Model changes, migration files, database update, rollback, and production caution."),
-            InterviewQuestion(topic="SQL", question="How would you optimize a slow SQL query?", difficulty="medium", expectedFocus="Execution plan, indexes, joins, filtering, select columns, and query statistics."),
-            InterviewQuestion(topic="Frontend", question="How do you handle API integration from a frontend application?", difficulty="easy", expectedFocus="Loading, error state, validation, response mapping, and retry behavior."),
-            InterviewQuestion(topic="Azure DevOps", question="What happens in a basic CI/CD pipeline?", difficulty="medium", expectedFocus="Build, test, artifact, release/deploy, approvals, and environment variables."),
-        ],
-        crossQuestions=[
-            CrossQuestion(question="You mentioned ASP.NET Core APIs. Did you design any endpoint yourself or only modify existing ones?", whyAsked="Interviewers check real ownership depth.", expectedAnswerHint="Explain one endpoint from requirement to validation, service logic, database, and testing."),
-            CrossQuestion(question="How did you handle authentication and authorization in your APIs?", whyAsked="Security is common in enterprise .NET roles.", expectedAnswerHint="Mention JWT/session, role checks, policies, middleware/filters, and secure defaults."),
-            CrossQuestion(question="Where exactly did you use SQL Server in your project?", whyAsked="They want to separate real database work from basic CRUD exposure.", expectedAnswerHint="Discuss schema, joins, stored procedures, indexing, transactions, or debugging data issues."),
-            CrossQuestion(question="Have you worked with Entity Framework or raw SQL?", whyAsked="JD requires EF and LINQ.", expectedAnswerHint="Be honest, then explain repository/data access patterns and what you have practiced."),
-            CrossQuestion(question="What was your role in deployment or release activities?", whyAsked="JD expects Azure DevOps CI/CD exposure.", expectedAnswerHint="Explain build/release pipeline visibility, deployment validation, rollback awareness, and environment checks."),
-            CrossQuestion(question="How do you debug production issues?", whyAsked="Production support is on the resume and can become a strong signal.", expectedAnswerHint="Discuss logs, repro steps, correlation IDs, SQL checks, API response tracing, and root cause analysis."),
-            CrossQuestion(question="What is one feature you owned end-to-end?", whyAsked="The JD stresses ownership.", expectedAnswerHint="Use a STAR format: requirement, design, implementation, testing, release, result."),
-            CrossQuestion(question="How would you make a .NET API scalable and maintainable?", whyAsked="Checks system design readiness for a 3-year developer.", expectedAnswerHint="Talk about layered architecture, async calls, caching, database indexes, logging, and horizontal scaling basics."),
-        ],
-        systemDesignReadiness=SystemDesignReadiness(
-            level="moderate",
-            reason="The candidate has API and database exposure but needs clearer examples of ownership, deployment, scaling, and reliability decisions.",
-            topicsToPrepare=["Layered architecture", "API pagination", "Caching basics", "SQL indexing", "Authentication and authorization", "Logging and monitoring"],
-        ),
+        matchingSkills=_mock_matching_skills(scoring.requirement_matches),
+        weaklyEvidencedSkills=_mock_weakly_evidenced_skills(scoring.requirement_matches),
+        missingSkills=_mock_missing_skills(scoring.requirement_matches),
+        resumeImprovements=_mock_resume_improvements(scoring.requirement_matches),
+        interviewQuestions=_mock_interview_questions(scoring.requirement_matches),
+        crossQuestions=_mock_cross_questions(scoring.requirement_matches),
+        systemDesignReadiness=_mock_system_design_readiness(scoring.requirement_matches),
         sevenDayPlan=_build_preparation_plan(request.preparationPlanDays),
         debug=DebugInfo(
             mode="mock",
@@ -172,6 +120,138 @@ def _analyze_with_mock(request: AnalyzeRequest) -> AnalysisResponse:
         shortlistingFactors=scoring.shortlisting_factors,
         requirementMatches=scoring.requirement_matches,
         recommendedAction=scoring.recommended_action,
+        preparationIntelligence=build_preparation_intelligence(
+            request,
+            scoring.requirement_matches,
+            scoring.score_breakdown,
+        ),
+    )
+
+
+def _mock_matching_skills(matches) -> list[MatchingSkill]:
+    strong = [match for match in matches if match.score >= 55 and match.bestEvidence]
+    if not strong:
+        return [
+            MatchingSkill(
+                skill="Dynamic JD fit",
+                evidenceFromResume="No strong requirement-level evidence was found yet.",
+                jdRequirement="Review the extracted requirement matrix for missing or weak evidence.",
+            )
+        ]
+    return [
+        MatchingSkill(
+            skill=match.requirement,
+            evidenceFromResume=match.bestEvidence or "Resume evidence not available.",
+            jdRequirement=match.requirement,
+        )
+        for match in strong[:6]
+    ]
+
+
+def _mock_weakly_evidenced_skills(matches) -> list[WeaklyEvidencedSkill]:
+    weak = [match for match in matches if 20 <= match.score < 55]
+    if not weak:
+        return [
+            WeaklyEvidencedSkill(
+                skill="Requirement evidence depth",
+                source="The current dynamic matrix did not find many weak matches.",
+                whyWeak="This can mean the resume either matches clearly or the JD has few extractable requirements.",
+                howToStrengthenResume="Check the requirement matrix and add specific project bullets for any requirement that feels important.",
+            )
+        ]
+    return [
+        WeaklyEvidencedSkill(
+            skill=match.requirement,
+            source=match.bestEvidence or "Weak or indirect resume evidence.",
+            whyWeak=match.reason,
+            howToStrengthenResume=f"Add a concrete project, responsibility, or measurable result that proves: {match.requirement}.",
+        )
+        for match in weak[:5]
+    ]
+
+
+def _mock_missing_skills(matches) -> list[MissingSkill]:
+    missing = [match for match in matches if match.score < 20]
+    if not missing:
+        return [
+            MissingSkill(
+                skill="No major missing dynamic requirement detected",
+                importance="low",
+                whyItMatters="The current requirement matrix did not find a hard missing requirement.",
+                howToPrepare="Use the weak evidence and interview questions sections to strengthen proof depth.",
+            )
+        ]
+    return [
+        MissingSkill(
+            skill=match.requirement,
+            importance=match.importance,
+            whyItMatters="This requirement was extracted from the JD but not proven strongly in the resume.",
+            howToPrepare=f"Prepare the concept and add truthful resume evidence for: {match.requirement}.",
+        )
+        for match in missing[:6]
+    ]
+
+
+def _mock_resume_improvements(matches) -> list[ResumeImprovement]:
+    weak_or_missing = [match for match in matches if match.score < 55]
+    if not weak_or_missing:
+        return [
+            ResumeImprovement(
+                currentIssue="Resume evidence mostly aligns with the extracted JD requirements.",
+                suggestedBullet="Add one measurable result to the most relevant project so the recruiter can see impact, not only responsibility.",
+                reason="Strong matches still improve when backed by numbers, ownership, and outcome.",
+            )
+        ]
+    return [
+        ResumeImprovement(
+            currentIssue=f"Weak or missing evidence for: {match.requirement}",
+            suggestedBullet=f"Add a truthful bullet showing where you used or prepared {match.requirement}, including project context and outcome.",
+            reason="The scorer found the JD requirement dynamically, but the resume did not prove it strongly enough.",
+        )
+        for match in weak_or_missing[:5]
+    ]
+
+
+def _mock_interview_questions(matches) -> list[InterviewQuestion]:
+    topics = [match.requirement for match in matches[:8]] or ["the target role requirements"]
+    return [
+        InterviewQuestion(
+            topic=topic,
+            question=f"Explain your practical experience with {topic}.",
+            difficulty="medium",
+            expectedFocus="Give project context, your exact responsibility, tradeoffs, problems faced, and measurable outcome.",
+        )
+        for topic in topics[:8]
+    ]
+
+
+def _mock_cross_questions(matches) -> list[CrossQuestion]:
+    topics = [match.requirement for match in matches[:8]] or ["the most important JD requirement"]
+    return [
+        CrossQuestion(
+            question=f"Where exactly is {topic} proven in your resume?",
+            whyAsked="Interviewers validate whether a claimed JD match is real hands-on experience or only keyword familiarity.",
+            expectedAnswerHint="Point to one project or work item, explain your role, and describe the result or learning.",
+        )
+        for topic in topics[:8]
+    ]
+
+
+def _mock_system_design_readiness(matches) -> SystemDesignReadiness:
+    strong_count = sum(1 for match in matches if match.score >= 55)
+    total = max(len(matches), 1)
+    ratio = strong_count / total
+    if ratio >= 0.7:
+        level = "strong"
+    elif ratio >= 0.4:
+        level = "moderate"
+    else:
+        level = "weak"
+    weak_topics = [match.requirement for match in matches if match.score < 55]
+    return SystemDesignReadiness(
+        level=level,
+        reason="Readiness is inferred from how many dynamically extracted JD requirements are supported by resume evidence.",
+        topicsToPrepare=weak_topics[:6] or [match.requirement for match in matches[:6]] or ["Role-specific system design fundamentals"],
     )
 
 
@@ -186,24 +266,27 @@ def _attach_algorithmic_scoring(response: AnalysisResponse, request: AnalyzeRequ
     response.shortlistingFactors = scoring.shortlisting_factors
     response.requirementMatches = scoring.requirement_matches
     response.recommendedAction = scoring.recommended_action
+    response.preparationIntelligence = build_preparation_intelligence(
+        request,
+        scoring.requirement_matches,
+        scoring.score_breakdown,
+    )
 
 
 def _build_preparation_plan(days: int) -> list[DayPlan]:
     base_plan = [
-        DayPlan(day=1, focus=".NET API story", tasks=["Prepare one end-to-end API feature explanation.", "Revise middleware, DI, routing, and filters."]),
-        DayPlan(day=2, focus="SQL and LINQ", tasks=["Practice LINQ queries.", "Revise joins, indexes, grouping, and query optimization."]),
-        DayPlan(day=3, focus="Entity Framework", tasks=["Build or revise a small EF Core CRUD module.", "Practice migrations and relationship mapping."]),
-        DayPlan(day=4, focus="Azure and CI/CD", tasks=["Learn a basic Azure DevOps build-release flow.", "Prepare deployment-related interview answers."]),
-        DayPlan(day=5, focus="Frontend integration", tasks=["Prepare React or Angular API integration examples.", "Revise loading, error, and validation states."]),
-        DayPlan(day=6, focus="System design basics", tasks=["Design a job application tracker API.", "Cover schema, APIs, pagination, auth, and caching."]),
-        DayPlan(day=7, focus="Mock interview", tasks=["Answer all cross-questions aloud.", "Rewrite resume bullets based on this analysis."]),
+        DayPlan(day=1, focus="Requirement evidence review", tasks=["Review the requirement matrix.", "Mark each weak or missing requirement as true experience, learning gap, or not applicable."]),
+        DayPlan(day=2, focus="Resume proof rewrite", tasks=["Rewrite bullets for the top weak requirements.", "Add project context, ownership, tools used, and measurable outcome where truthful."]),
+        DayPlan(day=3, focus="Core technical revision", tasks=["Revise the highest-importance missing requirement from the JD.", "Prepare one practical explanation and one tradeoff for that topic."]),
+        DayPlan(day=4, focus="Project deep dive", tasks=["Prepare one end-to-end project story mapped to the JD.", "Cover requirement, design, implementation, testing, deployment, and result."]),
+        DayPlan(day=5, focus="Operational depth", tasks=["Prepare debugging, monitoring, release, or support examples relevant to the JD.", "Write concise answers for failures, tradeoffs, and ownership."]),
+        DayPlan(day=6, focus="System thinking", tasks=["Design a small system related to the target role.", "Cover APIs/interfaces, data flow, scaling, reliability, security, and observability."]),
+        DayPlan(day=7, focus="Mock interview", tasks=["Answer dynamic cross-questions aloud.", "Update the resume based on weak answers and missing proof."]),
     ]
     extended_topics = [
-        ("Production debugging", ["Practice explaining logs, correlation IDs, SQL checks, and root cause analysis."]),
-        ("Authentication and authorization", ["Revise JWT flow, role checks, policies, middleware, and secure API defaults."]),
-        ("Project ownership story", ["Prepare STAR-format answers for requirement, implementation, testing, release, and impact."]),
-        ("Database depth", ["Practice transactions, indexes, execution plans, and stored procedure tradeoffs."]),
-        ("Cloud basics", ["Revise App Service, Azure SQL, Key Vault, monitoring, and environment variables."]),
+        ("Weak requirement drill", ["Pick one weak requirement and prepare concept, implementation example, and interview explanation."]),
+        ("Hands-on practice", ["Build or revise a small proof-of-work task around the most important missing requirement."]),
+        ("Architecture and tradeoffs", ["Prepare tradeoffs, constraints, failure modes, and scaling considerations for the target role."]),
         ("Behavioral and HR screen", ["Prepare notice period, role switch reason, salary expectation, and project explanation answers."]),
         ("Final revision", ["Revisit weak topics, retake mock questions, and refine concise interview answers."]),
     ]
