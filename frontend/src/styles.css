@@ -257,6 +257,43 @@ button {
   font-weight: 900;
 }
 
+.reviewStatus,
+.editorStats {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.reviewStatus {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.reviewStatus div {
+  display: grid;
+  gap: 4px;
+}
+
+.reviewStatus span,
+.editorStats span {
+  color: #526070;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.reviewStatus strong {
+  color: #162033;
+  font-size: 13px;
+}
+
+.editorStats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
 .editorSection {
   display: grid;
   gap: 12px;
@@ -286,6 +323,33 @@ button {
   padding: 14px;
 }
 
+.itemToolbar,
+.listRow {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+}
+
+.itemToolbar {
+  grid-template-columns: 1fr auto;
+}
+
+.itemToolbar div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.listEditor {
+  display: grid;
+  gap: 10px;
+}
+
+.listRow {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+}
+
 .tinyButton,
 .dangerButton {
   min-height: 34px;
@@ -300,6 +364,20 @@ button {
 
 .dangerButton {
   color: #b42318;
+}
+
+.tinyButton:disabled,
+.dangerButton:disabled {
+  border-color: #d7e0ea;
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.textPreview {
+  max-height: 280px;
+  border-color: #d7e0ea;
+  background: #ffffff;
 }
 
 button:disabled {
@@ -625,6 +703,13 @@ pre {
 
   .scoreGrid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .reviewStatus,
+  .editorStats,
+  .listRow,
+  .itemToolbar {
+    grid-template-columns: 1fr;
   }
 
   .breakdownHeader {

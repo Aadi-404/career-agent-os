@@ -77,20 +77,22 @@ type StructuredResume = {
   certifications: string[];
 };
 
+type ParsedJobDescription = {
+  roleTitle?: string | null;
+  experienceRange: { minYears?: number | null; maxYears?: number | null };
+  requiredSkills: string[];
+  preferredSkills: string[];
+  requiredCertifications: string[];
+  responsibilities: string[];
+  locations: string[];
+  workModes: string[];
+  senioritySignals: string[];
+};
+
 type JdParseResponse = {
   normalizedJobDescriptionText: string;
   warnings: string[];
-  parsedJobDescription: {
-    roleTitle?: string | null;
-    experienceRange: { minYears?: number | null; maxYears?: number | null };
-    requiredSkills: string[];
-    preferredSkills: string[];
-    requiredCertifications: string[];
-    responsibilities: string[];
-    locations: string[];
-    workModes: string[];
-    senioritySignals: string[];
-  };
+  parsedJobDescription: ParsedJobDescription;
 };
 
 const modelOptions: Record<LlmProvider, string[]> = {
@@ -343,7 +345,7 @@ function App() {
             </label>
             <label>
               Experience years
-              <input type="number" min={0} max={50} value={experienceYears} onChange={(event) => setExperienceYears(Number(event.target.value))} />
+              <input type="number" min={0} max={50} step="0.1" value={experienceYears} onChange={(event) => setExperienceYears(Number(event.target.value))} />
             </label>
           </div>
           <label>
@@ -413,9 +415,18 @@ function App() {
             {normalizing ? "Normalizing..." : "Normalize Resume for Review"}
           </button>
           {normalizeInfo && <p className="hint">{normalizeInfo}</p>}
+          {(structuredResume || parsedJd) && (
+            <ReviewWorkspaceSummary
+              resume={structuredResume}
+              jd={parsedJd}
+              resumeText={resumeText}
+              jdText={jobDescriptionText}
+            />
+          )}
           {structuredResume && (
             <StructuredResumeEditor
               resume={structuredResume}
+              finalText={resumeText}
               onChange={(nextResume) => {
                 setStructuredResume(nextResume);
                 setResumeText(formatStructuredResume(nextResume));
@@ -430,7 +441,16 @@ function App() {
             {parsingJd ? "Parsing JD..." : "Parse JD for Review"}
           </button>
           {jdParseInfo && <p className="hint">{jdParseInfo}</p>}
-          {parsedJd && <ParsedJdPanel parsedJd={parsedJd} />}
+          {parsedJd && (
+            <ParsedJdEditor
+              parsedJd={parsedJd}
+              finalText={jobDescriptionText}
+              onChange={(nextJd) => {
+                setParsedJd(nextJd);
+                setJobDescriptionText(formatParsedJd(nextJd));
+              }}
+            />
+          )}
           <button disabled={loading}>{loading ? "Analyzing..." : "Analyze Technical Fit"}</button>
           {error && <p className="error">{error}</p>}
         </form>
@@ -484,7 +504,44 @@ function Results({ result }: { result: AnalysisResponse }) {
   );
 }
 
-function StructuredResumeEditor({ resume, onChange }: { resume: StructuredResume; onChange: (resume: StructuredResume) => void }) {
+function ReviewWorkspaceSummary({
+  resume,
+  jd,
+  resumeText,
+  jdText,
+}: {
+  resume: StructuredResume | null;
+  jd: ParsedJobDescription | null;
+  resumeText: string;
+  jdText: string;
+}) {
+  return (
+    <div className="reviewStatus">
+      <div>
+        <span>Resume review</span>
+        <strong>{resume ? `${resume.experience.length} exp, ${resume.projects.length} projects, ${resume.certifications.length} certs` : "Not parsed"}</strong>
+      </div>
+      <div>
+        <span>JD review</span>
+        <strong>{jd ? `${jd.requiredSkills.length} required, ${jd.requiredCertifications.length} certs` : "Not parsed"}</strong>
+      </div>
+      <div>
+        <span>Analysis input</span>
+        <strong>{resumeText.length.toLocaleString()} resume chars / {jdText.length.toLocaleString()} JD chars</strong>
+      </div>
+    </div>
+  );
+}
+
+function StructuredResumeEditor({
+  resume,
+  finalText,
+  onChange,
+}: {
+  resume: StructuredResume;
+  finalText: string;
+  onChange: (resume: StructuredResume) => void;
+}) {
   function updateProfile(field: keyof StructuredResume["profile"], value: string) {
     onChange({ ...resume, profile: { ...resume.profile, [field]: value } });
   }
@@ -499,16 +556,19 @@ function StructuredResumeEditor({ resume, onChange }: { resume: StructuredResume
     onChange({ ...resume, projects });
   }
 
-  function updateStringList(field: "skills" | "education" | "achievements" | "certifications", value: string, mode: "comma" | "lines") {
-    const items = mode === "comma"
-      ? value.split(",").map((item) => item.trim()).filter(Boolean)
-      : value.split("\n").map((item) => item.trim()).filter(Boolean);
-    onChange({ ...resume, [field]: items });
+  function updateStringList(field: "skills" | "education" | "achievements" | "certifications", items: string[]) {
+    onChange({ ...resume, [field]: items.map((item) => item.trim()).filter(Boolean) });
   }
 
   return (
     <details className="reviewEditor" open>
       <summary>Structured resume editor</summary>
+      <div className="editorStats">
+        <span>{resume.experience.length} experience</span>
+        <span>{resume.projects.length} projects</span>
+        <span>{resume.skills.length} skills</span>
+        <span>{resume.certifications.length} certifications</span>
+      </div>
       <div className="editorSection">
         <h4>Profile</h4>
         <div className="gridTwo">
@@ -533,6 +593,13 @@ function StructuredResumeEditor({ resume, onChange }: { resume: StructuredResume
         </div>
         {resume.experience.map((item, index) => (
           <div className="editorCard" key={`experience-${index}`}>
+            <div className="itemToolbar">
+              <strong>Experience {index + 1}</strong>
+              <div>
+                <button type="button" className="tinyButton" disabled={index === 0} onClick={() => onChange({ ...resume, experience: moveItem(resume.experience, index, index - 1) })}>Up</button>
+                <button type="button" className="tinyButton" disabled={index === resume.experience.length - 1} onClick={() => onChange({ ...resume, experience: moveItem(resume.experience, index, index + 1) })}>Down</button>
+              </div>
+            </div>
             <div className="gridTwo">
               <label>Title<input value={item.title ?? ""} onChange={(event) => updateExperience(index, { title: event.target.value })} /></label>
               <label>Company<input value={item.company ?? ""} onChange={(event) => updateExperience(index, { company: event.target.value })} /></label>
@@ -554,6 +621,13 @@ function StructuredResumeEditor({ resume, onChange }: { resume: StructuredResume
         </div>
         {resume.projects.map((item, index) => (
           <div className="editorCard" key={`project-${index}`}>
+            <div className="itemToolbar">
+              <strong>Project {index + 1}</strong>
+              <div>
+                <button type="button" className="tinyButton" disabled={index === 0} onClick={() => onChange({ ...resume, projects: moveItem(resume.projects, index, index - 1) })}>Up</button>
+                <button type="button" className="tinyButton" disabled={index === resume.projects.length - 1} onClick={() => onChange({ ...resume, projects: moveItem(resume.projects, index, index + 1) })}>Down</button>
+              </div>
+            </div>
             <div className="gridTwo">
               <label>Name<input value={item.name} onChange={(event) => updateProject(index, { name: event.target.value })} /></label>
               <label>Duration<input value={item.duration ?? ""} onChange={(event) => updateProject(index, { duration: event.target.value })} /></label>
@@ -567,10 +641,113 @@ function StructuredResumeEditor({ resume, onChange }: { resume: StructuredResume
 
       <div className="editorSection">
         <h4>Other Details</h4>
-        <label>Skills<input value={resume.skills.join(", ")} onChange={(event) => updateStringList("skills", event.target.value, "comma")} /></label>
-        <label>Education<textarea rows={3} value={resume.education.join("\n")} onChange={(event) => updateStringList("education", event.target.value, "lines")} /></label>
-        <label>Achievements<textarea rows={3} value={resume.achievements.join("\n")} onChange={(event) => updateStringList("achievements", event.target.value, "lines")} /></label>
-        <label>Certifications<textarea rows={3} value={resume.certifications.join("\n")} onChange={(event) => updateStringList("certifications", event.target.value, "lines")} /></label>
+        <ListEditor title="Skills" items={resume.skills} placeholder="Add skill" onChange={(items) => updateStringList("skills", items)} />
+        <ListEditor title="Education" items={resume.education} placeholder="Add education" onChange={(items) => updateStringList("education", items)} />
+        <ListEditor title="Achievements" items={resume.achievements} placeholder="Add achievement" onChange={(items) => updateStringList("achievements", items)} />
+        <ListEditor title="Certifications" items={resume.certifications} placeholder="Add certification" onChange={(items) => updateStringList("certifications", items)} />
+      </div>
+
+      <div className="editorSection">
+        <h4>Final resume text used for analysis</h4>
+        <pre className="textPreview">{finalText}</pre>
+      </div>
+    </details>
+  );
+}
+
+function ListEditor({
+  title,
+  items,
+  placeholder,
+  onChange,
+}: {
+  title: string;
+  items: string[];
+  placeholder: string;
+  onChange: (items: string[]) => void;
+}) {
+  return (
+    <div className="listEditor">
+      <div className="editorTitle">
+        <h4>{title}</h4>
+        <button type="button" className="tinyButton" onClick={() => onChange([...items, ""])}>Add</button>
+      </div>
+      {items.length === 0 && <p className="hint">No {title.toLowerCase()} detected yet.</p>}
+      {items.map((item, index) => (
+        <div className="listRow" key={`${title}-${index}`}>
+          <input
+            aria-label={`${title} ${index + 1}`}
+            placeholder={placeholder}
+            value={item}
+            onChange={(event) => onChange(items.map((value, itemIndex) => itemIndex === index ? event.target.value : value))}
+          />
+          <button type="button" className="tinyButton" disabled={index === 0} onClick={() => onChange(moveItem(items, index, index - 1))}>Up</button>
+          <button type="button" className="tinyButton" disabled={index === items.length - 1} onClick={() => onChange(moveItem(items, index, index + 1))}>Down</button>
+          <button type="button" className="dangerButton" onClick={() => onChange(items.filter((_item, itemIndex) => itemIndex !== index))}>Remove</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ParsedJdEditor({
+  parsedJd,
+  finalText,
+  onChange,
+}: {
+  parsedJd: ParsedJobDescription;
+  finalText: string;
+  onChange: (jd: ParsedJobDescription) => void;
+}) {
+  function update(field: keyof ParsedJobDescription, value: ParsedJobDescription[keyof ParsedJobDescription]) {
+    onChange({ ...parsedJd, [field]: value });
+  }
+
+  function updateExperience(field: "minYears" | "maxYears", value: string) {
+    const numeric = value === "" ? null : Number(value);
+    onChange({
+      ...parsedJd,
+      experienceRange: {
+        ...parsedJd.experienceRange,
+        [field]: Number.isFinite(numeric) ? numeric : null,
+      },
+    });
+  }
+
+  const experience =
+    parsedJd.experienceRange.minYears === undefined || parsedJd.experienceRange.minYears === null
+      ? "Not detected"
+      : `${parsedJd.experienceRange.minYears}${parsedJd.experienceRange.maxYears ? `-${parsedJd.experienceRange.maxYears}` : "+"} years`;
+
+  return (
+    <details className="reviewEditor" open>
+      <summary>Structured JD editor</summary>
+      <div className="editorStats">
+        <span>{parsedJd.requiredSkills.length} required</span>
+        <span>{parsedJd.preferredSkills.length} preferred</span>
+        <span>{parsedJd.requiredCertifications.length} certifications</span>
+        <span>{experience}</span>
+      </div>
+      <div className="editorSection">
+        <h4>Role and Experience</h4>
+        <label>Role title<input value={parsedJd.roleTitle ?? ""} onChange={(event) => update("roleTitle", event.target.value)} /></label>
+        <div className="gridTwo">
+          <label>Minimum years<input type="number" min={0} max={50} step="0.1" value={parsedJd.experienceRange.minYears ?? ""} onChange={(event) => updateExperience("minYears", event.target.value)} /></label>
+          <label>Maximum years<input type="number" min={0} max={50} step="0.1" value={parsedJd.experienceRange.maxYears ?? ""} onChange={(event) => updateExperience("maxYears", event.target.value)} /></label>
+        </div>
+      </div>
+      <div className="editorSection">
+        <ListEditor title="Required Skills" items={parsedJd.requiredSkills} placeholder="Add required skill" onChange={(items) => update("requiredSkills", items)} />
+        <ListEditor title="Preferred Skills" items={parsedJd.preferredSkills} placeholder="Add preferred skill" onChange={(items) => update("preferredSkills", items)} />
+        <ListEditor title="Required Certifications" items={parsedJd.requiredCertifications} placeholder="Add certification requirement" onChange={(items) => update("requiredCertifications", items)} />
+        <ListEditor title="Responsibilities" items={parsedJd.responsibilities} placeholder="Add responsibility" onChange={(items) => update("responsibilities", items)} />
+        <ListEditor title="Locations" items={parsedJd.locations} placeholder="Add location" onChange={(items) => update("locations", items)} />
+        <ListEditor title="Work Modes" items={parsedJd.workModes} placeholder="Add work mode" onChange={(items) => update("workModes", items)} />
+        <ListEditor title="Seniority Signals" items={parsedJd.senioritySignals} placeholder="Add seniority signal" onChange={(items) => update("senioritySignals", items)} />
+      </div>
+      <div className="editorSection">
+        <h4>Final JD text used for analysis</h4>
+        <pre className="textPreview">{finalText}</pre>
       </div>
     </details>
   );
@@ -603,6 +780,31 @@ function formatStructuredResume(resume: StructuredResume) {
   if (resume.achievements.length) output.push("", "Achievements", ...resume.achievements.map((item) => `- ${item}`));
   if (resume.certifications.length) output.push("", "Certifications", ...resume.certifications.map((item) => `- ${item}`));
   return output.join("\n").trim();
+}
+
+function formatParsedJd(jd: ParsedJobDescription) {
+  const output: string[] = [];
+  if (jd.roleTitle) output.push(`Role: ${jd.roleTitle}`);
+  if (jd.experienceRange.minYears !== null && jd.experienceRange.minYears !== undefined) {
+    const max = jd.experienceRange.maxYears !== null && jd.experienceRange.maxYears !== undefined ? ` to ${jd.experienceRange.maxYears}` : "+";
+    output.push(`Experience: ${jd.experienceRange.minYears}${max} years`);
+  }
+  if (jd.requiredSkills.length) output.push("", "Required Skills", ...jd.requiredSkills.map((item) => `- ${item}`));
+  if (jd.preferredSkills.length) output.push("", "Preferred Skills", ...jd.preferredSkills.map((item) => `- ${item}`));
+  if (jd.requiredCertifications.length) output.push("", "Required Certifications", ...jd.requiredCertifications.map((item) => `- ${item}`));
+  if (jd.responsibilities.length) output.push("", "Responsibilities", ...jd.responsibilities.map((item) => `- ${item}`));
+  if (jd.locations.length) output.push("", "Locations", jd.locations.join(", "));
+  if (jd.workModes.length) output.push("", "Work Modes", jd.workModes.join(", "));
+  if (jd.senioritySignals.length) output.push("", "Seniority Signals", ...jd.senioritySignals.map((item) => `- ${item}`));
+  return output.join("\n").trim();
+}
+
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
+  if (toIndex < 0 || toIndex >= items.length) return items;
+  const copy = [...items];
+  const [item] = copy.splice(fromIndex, 1);
+  copy.splice(toIndex, 0, item);
+  return copy;
 }
 
 function csv(value: string) {
