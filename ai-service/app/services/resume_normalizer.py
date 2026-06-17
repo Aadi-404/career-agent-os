@@ -94,13 +94,22 @@ def _clean_lines(text: str) -> list[str]:
         "\ufb02": "fl",
         "\ufb01": "fi",
         "\u00a0": " ",
+        "♂": " ",
+        "¶": " ",
+        "⌢": " ",
+        "\u2022": "- ",
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
+    text = re.sub(r"(?i)(github)\s*(github\.com)", r"\1 \2", text)
+    text = re.sub(r"(?i)(linkedin)\s*(linkedin\.com)", r"\1 \2", text)
+    text = re.sub(r"(?i)\b(phone|mobile|email|mail|envelope|marker-alt)\b", r" \1 ", text)
+    text = re.sub(r"(?i)(navi\s*mumbai|mumbai|pune|bangalore|bengaluru|hyderabad|delhi|noida|gurgaon|chennai|kolkata)", r" \1", text)
 
     lines = []
     for raw_line in text.splitlines():
         line = re.sub(r"\s+", " ", raw_line).strip(" ,.-")
+        line = re.sub(r"^[-•]\s*", "", line).strip()
         if line:
             lines.append(line)
     return lines
@@ -137,11 +146,13 @@ def _match_section_header(line: str) -> str | None:
 
 def _extract_profile(lines: list[str], sections: dict[str, list[str]]) -> ResumeProfile:
     profile_lines = sections.get("profile", lines[:8])
-    text = "\n".join(lines)
-    email_match = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text)
+    text = _normalize_contact_text("\n".join(lines))
+    email_match = re.search(r"(?<![a-z0-9._%+-])[\w.+-]+@[\w-]+\.[\w.-]+", text, flags=re.IGNORECASE)
+    if not email_match:
+        email_match = re.search(r"[a-z0-9._%+-]{3,}@[a-z0-9.-]+\.[a-z]{2,}", "\n".join(lines), flags=re.IGNORECASE)
     phone_match = re.search(r"(?:\+?\d[\d\s().-]{8,}\d)", text)
-    linkedin_match = re.search(r"(?:https?://)?(?:www\.)?linkedin\.com/[^\s,]+", text, flags=re.IGNORECASE)
-    github_match = re.search(r"(?:https?://)?(?:www\.)?github\.com/[^\s,]+", text, flags=re.IGNORECASE)
+    linkedin_match = re.search(r"(?:https?://)?(?:www\.)?linkedin\.com/(?!github\b)[^\s,|]+", text, flags=re.IGNORECASE)
+    github_match = re.search(r"(?:https?://)?(?:www\.)?github\.com/[^\s,|]+", text, flags=re.IGNORECASE)
 
     likely_name = None
     for line in profile_lines[:4]:
@@ -158,8 +169,9 @@ def _extract_profile(lines: list[str], sections: dict[str, list[str]]) -> Resume
 
     location = None
     for line in profile_lines[:8]:
-        if any(place in line.lower() for place in ["mumbai", "pune", "bangalore", "bengaluru", "hyderabad", "delhi", "india"]):
-            location = line
+        location_value = _extract_location_value(line)
+        if location_value:
+            location = location_value
             break
 
     return ResumeProfile(
@@ -167,8 +179,8 @@ def _extract_profile(lines: list[str], sections: dict[str, list[str]]) -> Resume
         location=location,
         email=email_match.group(0) if email_match else None,
         phone=phone_match.group(0).strip() if phone_match else None,
-        linkedin=linkedin_match.group(0) if linkedin_match else None,
-        github=github_match.group(0) if github_match else None,
+        linkedin=_clean_profile_url(linkedin_match.group(0)) if linkedin_match else None,
+        github=_clean_profile_url(github_match.group(0)) if github_match else None,
         summary=summary,
     )
 
@@ -203,7 +215,7 @@ def _extract_projects(lines: list[str]) -> list[ResumeProject]:
     for index, line in enumerate(lines):
         next_line = lines[index + 1] if index + 1 < len(lines) else ""
         duration = _find_duration([line])
-        if duration and current_name and not current_duration:
+        if duration and current_name and not current_duration and not _looks_like_project_title(line, next_line):
             current_duration = duration
             continue
 
@@ -211,8 +223,8 @@ def _extract_projects(lines: list[str]) -> list[ResumeProject]:
         if looks_like_project:
             if current_name:
                 projects.append(_build_project(current_name, current_duration, current_lines))
-            current_name = re.sub(r"\s*\([^)]*\)\s*$", "", line).strip()
-            current_duration = _find_duration([line])
+            current_name = _clean_project_title(line)
+            current_duration = duration
             current_lines = []
         elif current_name:
             current_lines.append(line)
@@ -269,7 +281,7 @@ def _extract_certifications(section_lines: list[str], all_lines: list[str]) -> l
                 break
     evidence_text = "\n".join([*candidates, *all_lines])
     candidates.extend(item.raw_text for item in extract_certificate_evidence(evidence_text))
-    return _dedupe_preserve_order(candidates)
+    return _dedupe_preserve_order([item for item in candidates if not _looks_like_contact_line(item)])
 
 
 def _extract_project_tech_stack(lines: list[str]) -> list[str]:
@@ -306,6 +318,10 @@ def _extract_highlights(lines: list[str]) -> list[str]:
         "resolved",
         "created",
         "developed",
+        "helps",
+        "enabled",
+        "enables",
+        "web app",
     )
 
     for line in lines:
@@ -327,6 +343,13 @@ def _find_duration(lines: list[str]) -> str | None:
     match = re.search(r"\(?\d{2}/\d{4}\s*-\s*(?:\d{2}/\d{4}|present|current)\)?", text, flags=re.IGNORECASE)
     if match:
         return match.group(0).strip("() ")
+    month_match = re.search(
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[-\s]+(?:19|20)\d{2}\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if month_match:
+        return re.sub(r"\s+", "-", month_match.group(0).strip())
     year_match = re.search(r"\b(?:19|20)\d{2}\s*-\s*(?:(?:19|20)\d{2}|present)\b", text, flags=re.IGNORECASE)
     return year_match.group(0) if year_match else None
 
@@ -345,15 +368,19 @@ def _looks_like_title(line: str) -> bool:
 
 
 def _looks_like_project_title(line: str, next_line: str) -> bool:
-    if _looks_like_detail(line) or _find_duration([line]):
+    duration = _find_duration([line])
+    title_without_duration = _clean_project_title(line) if duration else line
+    if _looks_like_detail(line):
         return False
-    if not _looks_like_title(line):
+    if not _looks_like_title(title_without_duration):
         return False
-    lowered = line.lower()
+    lowered = title_without_duration.lower()
     project_tokens = ["system", "application", "app", "project", "platform", "tool", "analyzer", "reservation"]
-    if _line_has_skill(line) and not any(token in lowered for token in project_tokens):
+    if _line_has_skill(title_without_duration) and not any(token in lowered for token in project_tokens):
         return False
     if any(token in lowered for token in project_tokens):
+        return True
+    if duration and len(title_without_duration.split()) >= 2:
         return True
     if _find_duration([next_line]):
         return True
@@ -362,7 +389,21 @@ def _looks_like_project_title(line: str, next_line: str) -> bool:
 
 def _looks_like_detail(line: str) -> bool:
     lowered = line.lower()
-    return lowered.startswith(("used ", "implemented ", "designed ", "tech ", "with ", "and "))
+    return lowered.startswith((
+        "used ",
+        "implemented ",
+        "designed ",
+        "tech ",
+        "with ",
+        "and ",
+        "built ",
+        "created ",
+        "developed ",
+        "helps ",
+        "enabled ",
+        "enables ",
+        "web app ",
+    ))
 
 
 def _line_has_skill(line: str) -> bool:
@@ -377,6 +418,50 @@ def _line_has_skill(line: str) -> bool:
 def _sentence(text: str) -> str:
     text = text.strip(" .")
     return f"{text}."
+
+
+def _normalize_contact_text(text: str) -> str:
+    text = re.sub(r"(?i)(linkedin\.com/[^\s,|]+?)/(github)(?=github\.com|[\s,|])", r"\1 \2", text)
+    text = re.sub(r"(?i)(github)\s*(github\.com)", r"\1 \2", text)
+    text = re.sub(r"(?i)\b(phone|mobile|email|mail|envelope|marker-alt)\b", " ", text)
+    return re.sub(r"\s+", " ", text)
+
+
+def _extract_location_value(line: str) -> str | None:
+    match = re.search(
+        r"\b((?:navi\s+)?mumbai|pune|bangalore|bengaluru|hyderabad|delhi|noida|gurgaon|chennai|kolkata)(?:\s*,?\s*india)?\b",
+        line,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    city = re.sub(r"\s+", " ", match.group(1)).title()
+    return f"{city}, India" if "india" in match.group(0).lower() else city
+
+
+def _clean_profile_url(url: str) -> str:
+    if "linkedin.com" in url.lower():
+        url = re.sub(r"(?i)/github.*$", "", url)
+    return url.strip(" /,|")
+
+
+def _looks_like_contact_line(line: str) -> bool:
+    lowered = line.lower()
+    return ("linkedin.com" in lowered or "github.com" in lowered or "@" in lowered) and not any(
+        token in lowered for token in ["cert", "certificate", "certification", "az-", "aws certified", "microsoft certified"]
+    )
+
+
+def _clean_project_title(line: str) -> str:
+    line = re.sub(
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[-\s]+(?:19|20)\d{2}\b",
+        "",
+        line,
+        flags=re.IGNORECASE,
+    )
+    line = re.sub(r"\(?\d{2}/\d{4}\s*-\s*(?:\d{2}/\d{4}|present|current)\)?", "", line, flags=re.IGNORECASE)
+    line = re.sub(r"\b(?:19|20)\d{2}\s*-\s*(?:(?:19|20)\d{2}|present)\b", "", line, flags=re.IGNORECASE)
+    return line.strip(" -")
 
 
 def _skill_label(skill: str) -> str:
