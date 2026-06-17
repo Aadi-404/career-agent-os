@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+
 type AnalysisResponse = {
   technicalMatchScore: number;
   shortlistingScore?: number | null;
@@ -140,7 +142,7 @@ function App() {
     setResult(null);
 
     try {
-      const response = await fetch("http://localhost:8000/ai/resume-jd/analyze", {
+      const response = await fetch(`${API_BASE_URL}/ai/resume-jd/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -190,7 +192,7 @@ function App() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const response = await fetch("http://localhost:8000/ai/resume/extract", {
+      const response = await fetch(`${API_BASE_URL}/ai/resume/extract`, {
         method: "POST",
         body: formData,
       });
@@ -228,7 +230,7 @@ function App() {
     setNormalizeInfo("");
 
     try {
-      const response = await fetch("http://localhost:8000/ai/resume/normalize", {
+      const response = await fetch(`${API_BASE_URL}/ai/resume/normalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rawResumeText: resumeText }),
@@ -265,7 +267,7 @@ function App() {
     setParsedJd(null);
 
     try {
-      const response = await fetch("http://localhost:8000/ai/jd/parse", {
+      const response = await fetch(`${API_BASE_URL}/ai/jd/parse`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rawJobDescriptionText: jobDescriptionText }),

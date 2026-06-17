@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     google_api_key: str = ""
     llm_timeout_seconds: int = Field(default=45, ge=5, le=120)
+    embedding_provider: Literal["auto", "gemini", "openai", "local"] = "auto"
+    embedding_model: str = ""
+    embedding_timeout_seconds: int = Field(default=20, ge=3, le=60)
+    embedding_fallback_local: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

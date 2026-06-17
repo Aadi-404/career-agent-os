@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.models.analysis import AnalyzeRequest, RequirementMatch
-from app.services.embedding_service import cosine_similarity
+from app.services.embedding_service import local_cosine_similarity, semantic_similarity
 
 
 EvidenceSource = Literal["experience", "project", "skills", "certification", "achievement", "candidate_context", "other", "missing"]
@@ -208,10 +208,7 @@ def _score_evidence(requirement: AtomicRequirement, evidence: ResumeEvidence) ->
     alias_hits = sum(1 for alias in requirement.aliases if _contains(text, alias))
     category_match = requirement.category in evidence.categories
     semantic_hits = _semantic_hits(requirement.category, text)
-    embedding_similarity = max(
-        cosine_similarity(requirement.semanticAnchor, evidence.text),
-        cosine_similarity(requirement.text, evidence.text),
-    )
+    embedding_provider = None
 
     base = 0
     match_type = "missing"
@@ -227,12 +224,24 @@ def _score_evidence(requirement: AtomicRequirement, evidence: ResumeEvidence) ->
     elif category_match:
         base = 62
         match_type = "category_match"
-    elif embedding_similarity >= 0.22:
-        base = round(58 + min((embedding_similarity - 0.22) * 100, 22))
-        match_type = "embedding_semantic_match"
-    elif semantic_hits:
-        base = 46
-        match_type = "weak_semantic_signal"
+    else:
+        anchor_similarity = semantic_similarity(requirement.semanticAnchor, evidence.text)
+        text_similarity = semantic_similarity(requirement.text, evidence.text)
+        embedding_similarity = max(
+            anchor_similarity.score,
+            text_similarity.score,
+        )
+        embedding_provider = (
+            anchor_similarity
+            if anchor_similarity.score >= text_similarity.score
+            else text_similarity
+        )
+        if embedding_similarity >= 0.22:
+            base = round(58 + min((embedding_similarity - 0.22) * 100, 22))
+            match_type = "embedding_semantic_match"
+        elif semantic_hits:
+            base = 46
+            match_type = "weak_semantic_signal"
 
     score = round(base * evidence.strength)
     if evidence.source in {"experience", "project"} and score >= 55:
@@ -245,8 +254,14 @@ def _score_evidence(requirement: AtomicRequirement, evidence: ResumeEvidence) ->
         reason = "The candidate context mentions this area, but the resume should show stronger evidence."
     else:
         reason = "Evidence is weak or indirect for this JD requirement."
-    if match_type == "embedding_semantic_match":
-        reason = "Embedding similarity found meaningful phrasing overlap even without exact keyword matching."
+    if match_type == "embedding_semantic_match" and embedding_provider:
+        provider_label = f"{embedding_provider.provider}/{embedding_provider.model}"
+        reason = (
+            "Embedding similarity found meaningful phrasing overlap even without exact keyword matching "
+            f"using {provider_label}."
+        )
+        if not embedding_provider.live and embedding_provider.fallbackReason:
+            reason += f" Fallback reason: {embedding_provider.fallbackReason}"
     return max(0, min(score, 100)), match_type, reason
 
 
@@ -325,7 +340,7 @@ def _first_semantic_text(sentences: list[str], anchor: str) -> str | None:
     best_sentence = None
     best_score = 0.0
     for sentence in sentences:
-        score = cosine_similarity(anchor, sentence)
+        score = local_cosine_similarity(anchor, sentence)
         if score > best_score:
             best_score = score
             best_sentence = sentence

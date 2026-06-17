@@ -121,6 +121,42 @@ The service still returns the same Pydantic response contract in both `mock` and
 
 The frontend can override mode, provider, and model per request. API keys stay in the backend `.env`.
 
+The frontend API base URL defaults to `http://localhost:8000`. Override it when needed:
+
+```text
+VITE_API_BASE_URL=http://localhost:8001
+```
+
+## Embedding Providers
+
+Embeddings are used by the requirement matcher when exact aliases and category rules are not enough. This is what lets the app connect meaning, for example `cloud basics` in a JD with `AZ-900`, `AWS Cloud Practitioner`, or `Google Cloud Digital Leader` in a resume.
+
+Set these in `ai-service/.env`:
+
+```text
+EMBEDDING_PROVIDER=auto
+EMBEDDING_MODEL=
+EMBEDDING_TIMEOUT_SECONDS=20
+EMBEDDING_FALLBACK_LOCAL=true
+```
+
+Provider options:
+
+```text
+auto
+gemini
+openai
+local
+```
+
+`auto` prefers the configured live provider when a key is available:
+
+- Gemini default embedding model: `gemini-embedding-2`
+- OpenAI default embedding model: `text-embedding-3-small`
+- Local fallback model: `hashing-256`
+
+The local fallback is intentionally kept so mock/offline analysis still works. If the live embedding API fails once during a run, the scorer falls back to the local vectorizer for the rest of that run instead of retrying every requirement.
+
 ## Resume Upload
 
 The upload endpoint is:
@@ -200,7 +236,7 @@ The score is calculated by the explainable scoring engine. LLM mode still genera
 
 `requirementMatches` is the requirement-level evidence matrix. It maps extracted JD requirements to the strongest resume evidence, evidence source, match type, and score.
 
-Requirement matching uses exact aliases, category evidence, evidence-source strength, and a local deterministic embedding similarity fallback for meaning-based phrase matches.
+Requirement matching uses exact aliases, category evidence, evidence-source strength, and provider-backed embedding similarity for meaning-based phrase matches. If no embedding provider is configured, it falls back to the local deterministic vectorizer.
 
 After resume normalization, the frontend also exposes a structured resume editor for profile, experience, projects, skills, education, achievements, and certifications. Edits regenerate the resume text used for analysis.
 

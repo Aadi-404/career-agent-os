@@ -219,7 +219,8 @@ This slice adds:
 - Experience-wise technical scoring weights
 - Score breakdown response fields
 - Requirement match matrix for JD requirement to resume evidence mapping
-- Local embedding similarity fallback for meaning-based JD/resume evidence matching
+- Provider-backed embedding similarity for meaning-based JD/resume evidence matching
+- Local embedding fallback for mock/offline mode and live provider failures
 - Structured resume editor after normalization for correcting parsed sections before analysis
 - Shortlisting score response fields
 - Opportunity score response fields
@@ -293,6 +294,14 @@ PDF and DOCX extraction can break layout. Normalization creates structured secti
 ### Why combine lexical, semantic, and structured scoring?
 
 Lexical matching catches hard requirements. Semantic matching catches meaning and synonyms. Structured rules handle years, location, notice period, and CTC better than free-form LLM reasoning.
+
+### Why use a real embedding model?
+
+Rules can say `AZ-900` is related to cloud, but a trained embedding model is better at comparing phrases that use different wording. For example, it can compare a JD requirement like `cloud fundamentals and deployment awareness` with resume evidence like `completed Azure Fundamentals certification and supported release validation`. This gives the scorer a semantic signal before deciding whether the evidence is strong, weak, or missing.
+
+### Why keep a local fallback?
+
+Embedding APIs can fail because of missing keys, network issues, limits, or provider outages. The app should still produce an explainable result in mock/offline mode. The local fallback is weaker than a trained model, but it keeps the workflow usable and makes provider failures visible in the match reason.
 
 ### Why exclude gender from scoring?
 
