@@ -219,6 +219,8 @@ This slice adds:
 - Experience-wise technical scoring weights
 - Score breakdown response fields
 - Requirement match matrix for JD requirement to resume evidence mapping
+- Local embedding similarity fallback for meaning-based JD/resume evidence matching
+- Structured resume editor after normalization for correcting parsed sections before analysis
 - Shortlisting score response fields
 - Opportunity score response fields
 - Frontend shortlisting inputs

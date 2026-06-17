@@ -244,6 +244,64 @@ button {
   font-weight: 800;
 }
 
+.reviewEditor {
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.reviewEditor summary {
+  cursor: pointer;
+  color: #162033;
+  font-weight: 900;
+}
+
+.editorSection {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border-top: 1px solid #d7e0ea;
+  padding-top: 14px;
+}
+
+.editorSection h4 {
+  margin: 0;
+  color: #162033;
+}
+
+.editorTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.editorCard {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.tinyButton,
+.dangerButton {
+  min-height: 34px;
+  width: fit-content;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: #1d4ed8;
+  font-size: 13px;
+}
+
+.dangerButton {
+  color: #b42318;
+}
+
 button:disabled {
   background: #94a3b8;
   cursor: wait;

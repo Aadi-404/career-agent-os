@@ -200,6 +200,10 @@ The score is calculated by the explainable scoring engine. LLM mode still genera
 
 `requirementMatches` is the requirement-level evidence matrix. It maps extracted JD requirements to the strongest resume evidence, evidence source, match type, and score.
 
+Requirement matching uses exact aliases, category evidence, evidence-source strength, and a local deterministic embedding similarity fallback for meaning-based phrase matches.
+
+After resume normalization, the frontend also exposes a structured resume editor for profile, experience, projects, skills, education, achievements, and certifications. Edits regenerate the resume text used for analysis.
+
 The request also accepts:
 
 ```text

@@ -46,6 +46,35 @@ type LlmMode = "mock" | "live";
 type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 
+type StructuredResume = {
+  profile: {
+    name?: string | null;
+    location?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    linkedin?: string | null;
+    github?: string | null;
+    summary?: string | null;
+  };
+  experience: Array<{
+    title?: string | null;
+    company?: string | null;
+    duration?: string | null;
+    location?: string | null;
+    highlights: string[];
+  }>;
+  projects: Array<{
+    name: string;
+    duration?: string | null;
+    techStack: string[];
+    highlights: string[];
+  }>;
+  skills: string[];
+  education: string[];
+  achievements: string[];
+  certifications: string[];
+};
+
 type JdParseResponse = {
   normalizedJobDescriptionText: string;
   warnings: string[];
@@ -99,6 +128,7 @@ function App() {
   const [uploadInfo, setUploadInfo] = useState("");
   const [normalizeInfo, setNormalizeInfo] = useState("");
   const [jdParseInfo, setJdParseInfo] = useState("");
+  const [structuredResume, setStructuredResume] = useState<StructuredResume | null>(null);
   const [parsedJd, setParsedJd] = useState<JdParseResponse["parsedJobDescription"] | null>(null);
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -212,14 +242,11 @@ function App() {
       const normalized = await response.json() as {
         normalizedResumeText: string;
         warnings: string[];
-        structuredResume: {
-          skills: string[];
-          experience: unknown[];
-          projects: unknown[];
-        };
+        structuredResume: StructuredResume;
       };
 
       setResumeText(normalized.normalizedResumeText);
+      setStructuredResume(normalized.structuredResume);
       const warnings = normalized.warnings.length ? ` Warnings: ${normalized.warnings.join(" ")}` : "";
       setNormalizeInfo(
         `Normalized ${normalized.structuredResume.experience.length} experience item(s), ${normalized.structuredResume.projects.length} project(s), ${normalized.structuredResume.skills.length} skill(s).${warnings}`
@@ -384,6 +411,15 @@ function App() {
             {normalizing ? "Normalizing..." : "Normalize Resume for Review"}
           </button>
           {normalizeInfo && <p className="hint">{normalizeInfo}</p>}
+          {structuredResume && (
+            <StructuredResumeEditor
+              resume={structuredResume}
+              onChange={(nextResume) => {
+                setStructuredResume(nextResume);
+                setResumeText(formatStructuredResume(nextResume));
+              }}
+            />
+          )}
           <label>
             JD review window
             <textarea value={jobDescriptionText} onChange={(event) => setJobDescriptionText(event.target.value)} rows={8} />
@@ -444,6 +480,135 @@ function Results({ result }: { result: AnalysisResponse }) {
       <Card title={`${result.sevenDayPlan.length}-Day Plan`} items={result.sevenDayPlan.map((item) => `Day ${item.day} - ${item.focus}: ${item.tasks.join(" ")}`)} />
     </>
   );
+}
+
+function StructuredResumeEditor({ resume, onChange }: { resume: StructuredResume; onChange: (resume: StructuredResume) => void }) {
+  function updateProfile(field: keyof StructuredResume["profile"], value: string) {
+    onChange({ ...resume, profile: { ...resume.profile, [field]: value } });
+  }
+
+  function updateExperience(index: number, patch: Partial<StructuredResume["experience"][number]>) {
+    const experience = resume.experience.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item);
+    onChange({ ...resume, experience });
+  }
+
+  function updateProject(index: number, patch: Partial<StructuredResume["projects"][number]>) {
+    const projects = resume.projects.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item);
+    onChange({ ...resume, projects });
+  }
+
+  function updateStringList(field: "skills" | "education" | "achievements" | "certifications", value: string, mode: "comma" | "lines") {
+    const items = mode === "comma"
+      ? value.split(",").map((item) => item.trim()).filter(Boolean)
+      : value.split("\n").map((item) => item.trim()).filter(Boolean);
+    onChange({ ...resume, [field]: items });
+  }
+
+  return (
+    <details className="reviewEditor" open>
+      <summary>Structured resume editor</summary>
+      <div className="editorSection">
+        <h4>Profile</h4>
+        <div className="gridTwo">
+          <label>Name<input value={resume.profile.name ?? ""} onChange={(event) => updateProfile("name", event.target.value)} /></label>
+          <label>Location<input value={resume.profile.location ?? ""} onChange={(event) => updateProfile("location", event.target.value)} /></label>
+        </div>
+        <label>Summary<textarea rows={3} value={resume.profile.summary ?? ""} onChange={(event) => updateProfile("summary", event.target.value)} /></label>
+        <div className="gridTwo">
+          <label>Email<input value={resume.profile.email ?? ""} onChange={(event) => updateProfile("email", event.target.value)} /></label>
+          <label>Phone<input value={resume.profile.phone ?? ""} onChange={(event) => updateProfile("phone", event.target.value)} /></label>
+        </div>
+        <div className="gridTwo">
+          <label>LinkedIn<input value={resume.profile.linkedin ?? ""} onChange={(event) => updateProfile("linkedin", event.target.value)} /></label>
+          <label>GitHub<input value={resume.profile.github ?? ""} onChange={(event) => updateProfile("github", event.target.value)} /></label>
+        </div>
+      </div>
+
+      <div className="editorSection">
+        <div className="editorTitle">
+          <h4>Experience</h4>
+          <button type="button" className="tinyButton" onClick={() => onChange({ ...resume, experience: [...resume.experience, { title: "", company: "", duration: "", location: "", highlights: [] }] })}>Add</button>
+        </div>
+        {resume.experience.map((item, index) => (
+          <div className="editorCard" key={`experience-${index}`}>
+            <div className="gridTwo">
+              <label>Title<input value={item.title ?? ""} onChange={(event) => updateExperience(index, { title: event.target.value })} /></label>
+              <label>Company<input value={item.company ?? ""} onChange={(event) => updateExperience(index, { company: event.target.value })} /></label>
+            </div>
+            <div className="gridTwo">
+              <label>Duration<input value={item.duration ?? ""} onChange={(event) => updateExperience(index, { duration: event.target.value })} /></label>
+              <label>Location<input value={item.location ?? ""} onChange={(event) => updateExperience(index, { location: event.target.value })} /></label>
+            </div>
+            <label>Highlights<textarea rows={4} value={item.highlights.join("\n")} onChange={(event) => updateExperience(index, { highlights: lines(event.target.value) })} /></label>
+            <button type="button" className="dangerButton" onClick={() => onChange({ ...resume, experience: resume.experience.filter((_item, itemIndex) => itemIndex !== index) })}>Remove experience</button>
+          </div>
+        ))}
+      </div>
+
+      <div className="editorSection">
+        <div className="editorTitle">
+          <h4>Projects</h4>
+          <button type="button" className="tinyButton" onClick={() => onChange({ ...resume, projects: [...resume.projects, { name: "New Project", duration: "", techStack: [], highlights: [] }] })}>Add</button>
+        </div>
+        {resume.projects.map((item, index) => (
+          <div className="editorCard" key={`project-${index}`}>
+            <div className="gridTwo">
+              <label>Name<input value={item.name} onChange={(event) => updateProject(index, { name: event.target.value })} /></label>
+              <label>Duration<input value={item.duration ?? ""} onChange={(event) => updateProject(index, { duration: event.target.value })} /></label>
+            </div>
+            <label>Tech stack<input value={item.techStack.join(", ")} onChange={(event) => updateProject(index, { techStack: csv(event.target.value) })} /></label>
+            <label>Highlights<textarea rows={4} value={item.highlights.join("\n")} onChange={(event) => updateProject(index, { highlights: lines(event.target.value) })} /></label>
+            <button type="button" className="dangerButton" onClick={() => onChange({ ...resume, projects: resume.projects.filter((_item, itemIndex) => itemIndex !== index) })}>Remove project</button>
+          </div>
+        ))}
+      </div>
+
+      <div className="editorSection">
+        <h4>Other Details</h4>
+        <label>Skills<input value={resume.skills.join(", ")} onChange={(event) => updateStringList("skills", event.target.value, "comma")} /></label>
+        <label>Education<textarea rows={3} value={resume.education.join("\n")} onChange={(event) => updateStringList("education", event.target.value, "lines")} /></label>
+        <label>Achievements<textarea rows={3} value={resume.achievements.join("\n")} onChange={(event) => updateStringList("achievements", event.target.value, "lines")} /></label>
+        <label>Certifications<textarea rows={3} value={resume.certifications.join("\n")} onChange={(event) => updateStringList("certifications", event.target.value, "lines")} /></label>
+      </div>
+    </details>
+  );
+}
+
+function formatStructuredResume(resume: StructuredResume) {
+  const output: string[] = [];
+  if (resume.profile.name) output.push(resume.profile.name);
+  if (resume.profile.location) output.push(`Location: ${resume.profile.location}`);
+  const contacts = [resume.profile.email, resume.profile.phone, resume.profile.linkedin, resume.profile.github].filter(Boolean);
+  if (contacts.length) output.push(`Contact: ${contacts.join(" | ")}`);
+  if (resume.profile.summary) output.push("", "Summary", resume.profile.summary);
+  if (resume.experience.length) {
+    output.push("", "Experience");
+    resume.experience.forEach((item) => {
+      output.push([item.title, item.company, item.duration].filter(Boolean).join(" - "));
+      item.highlights.forEach((highlight) => output.push(`- ${highlight}`));
+    });
+  }
+  if (resume.projects.length) {
+    output.push("", "Projects");
+    resume.projects.forEach((item) => {
+      output.push(item.duration ? `${item.name} (${item.duration})` : item.name);
+      if (item.techStack.length) output.push(`Tech: ${item.techStack.join(", ")}`);
+      item.highlights.forEach((highlight) => output.push(`- ${highlight}`));
+    });
+  }
+  if (resume.skills.length) output.push("", "Skills", resume.skills.join(", "));
+  if (resume.education.length) output.push("", "Education", ...resume.education);
+  if (resume.achievements.length) output.push("", "Achievements", ...resume.achievements.map((item) => `- ${item}`));
+  if (resume.certifications.length) output.push("", "Certifications", ...resume.certifications.map((item) => `- ${item}`));
+  return output.join("\n").trim();
+}
+
+function csv(value: string) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function lines(value: string) {
+  return value.split("\n").map((item) => item.trim()).filter(Boolean);
 }
 
 function ParsedJdPanel({ parsedJd }: { parsedJd: JdParseResponse["parsedJobDescription"] }) {

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.models.analysis import AnalyzeRequest, RequirementMatch
+from app.services.embedding_service import cosine_similarity
 
 
 EvidenceSource = Literal["experience", "project", "skills", "certification", "achievement", "candidate_context", "other", "missing"]
@@ -14,6 +15,7 @@ class AtomicRequirement:
     category: str
     importance: Literal["high", "medium", "low"]
     aliases: list[str]
+    semanticAnchor: str
 
 
 @dataclass
@@ -32,7 +34,7 @@ CONCEPTS: dict[str, dict[str, object]] = {
     "C#": {"category": "backend", "aliases": ["c#", "c sharp"]},
     "Web API / REST API": {
         "category": "backend",
-        "aliases": ["web api", "rest api", "restapi", "rest services", "apis", "api integration", "endpoint"],
+        "aliases": ["web api", "rest api", "restapi", "rest services", "apis", "api integration", "endpoint", "endpoints"],
     },
     "Entity Framework / ORM": {
         "category": "database",
@@ -75,7 +77,7 @@ CONCEPTS: dict[str, dict[str, object]] = {
     },
     "Production debugging": {
         "category": "debugging_reliability",
-        "aliases": ["production", "debugging", "debug", "logs", "monitoring", "incident", "root cause", "support"],
+        "aliases": ["production", "debugging", "debug", "logs", "monitoring", "incident", "root cause", "support", "live issues", "traces"],
     },
     "System design basics": {
         "category": "system_design",
@@ -128,7 +130,8 @@ def _extract_requirements(jd_text: str) -> list[AtomicRequirement]:
     for concept, config in CONCEPTS.items():
         aliases = list(config["aliases"])
         category = str(config["category"])
-        matching_sentence = _first_matching_text(sentences, aliases)
+        semantic_anchor = _semantic_anchor(concept, aliases)
+        matching_sentence = _first_matching_text(sentences, aliases) or _first_semantic_text(sentences, semantic_anchor)
         if not matching_sentence:
             continue
         importance = _importance(matching_sentence)
@@ -138,6 +141,7 @@ def _extract_requirements(jd_text: str) -> list[AtomicRequirement]:
                 category=category,
                 importance=importance,
                 aliases=aliases,
+                semanticAnchor=semantic_anchor,
             )
         )
     return _dedupe_requirements(requirements)
@@ -155,15 +159,16 @@ def _extract_resume_evidence(resume_text: str, current_stack: list[str]) -> list
             current_section = section
             continue
         source = SECTION_TO_SOURCE.get(current_section, "other")
-        categories = _categories_for_text(line)
-        evidence.append(
-            ResumeEvidence(
-                text=line,
-                source=source,
-                categories=categories,
-                strength=SOURCE_STRENGTH[source],
+        for evidence_text in _evidence_units(line):
+            categories = _categories_for_text(evidence_text)
+            evidence.append(
+                ResumeEvidence(
+                    text=evidence_text,
+                    source=source,
+                    categories=categories,
+                    strength=SOURCE_STRENGTH[source],
+                )
             )
-        )
 
     if current_stack:
         stack_line = "Candidate context stack: " + ", ".join(current_stack)
@@ -203,6 +208,10 @@ def _score_evidence(requirement: AtomicRequirement, evidence: ResumeEvidence) ->
     alias_hits = sum(1 for alias in requirement.aliases if _contains(text, alias))
     category_match = requirement.category in evidence.categories
     semantic_hits = _semantic_hits(requirement.category, text)
+    embedding_similarity = max(
+        cosine_similarity(requirement.semanticAnchor, evidence.text),
+        cosine_similarity(requirement.text, evidence.text),
+    )
 
     base = 0
     match_type = "missing"
@@ -218,6 +227,9 @@ def _score_evidence(requirement: AtomicRequirement, evidence: ResumeEvidence) ->
     elif category_match:
         base = 62
         match_type = "category_match"
+    elif embedding_similarity >= 0.22:
+        base = round(58 + min((embedding_similarity - 0.22) * 100, 22))
+        match_type = "embedding_semantic_match"
     elif semantic_hits:
         base = 46
         match_type = "weak_semantic_signal"
@@ -233,6 +245,8 @@ def _score_evidence(requirement: AtomicRequirement, evidence: ResumeEvidence) ->
         reason = "The candidate context mentions this area, but the resume should show stronger evidence."
     else:
         reason = "Evidence is weak or indirect for this JD requirement."
+    if match_type == "embedding_semantic_match":
+        reason = "Embedding similarity found meaningful phrasing overlap even without exact keyword matching."
     return max(0, min(score, 100)), match_type, reason
 
 
@@ -291,7 +305,7 @@ def _semantic_hits(category: str, text: str) -> int:
         "frontend": ["screen", "form", "validation", "ui", "client", "component"],
         "cloud_devops": ["deploy", "deployment", "environment", "pipeline", "release", "cloud", "devops"],
         "security": ["token", "role", "permission", "secure", "login"],
-        "debugging_reliability": ["issue", "bug", "logs", "monitor", "production", "support"],
+        "debugging_reliability": ["issue", "issues", "bug", "logs", "trace", "traces", "monitor", "production", "live", "support"],
         "system_design": ["scale", "cache", "queue", "architecture", "pagination", "reliable"],
         "problem_solving": ["problems", "coding", "algorithm", "data structure"],
         "ownership": ["delivered", "owned", "requirement", "feature", "end-to-end"],
@@ -307,9 +321,31 @@ def _first_matching_text(sentences: list[str], aliases: list[str]) -> str | None
     return None
 
 
+def _first_semantic_text(sentences: list[str], anchor: str) -> str | None:
+    best_sentence = None
+    best_score = 0.0
+    for sentence in sentences:
+        score = cosine_similarity(anchor, sentence)
+        if score > best_score:
+            best_score = score
+            best_sentence = sentence
+    return best_sentence if best_score >= 0.34 else None
+
+
+def _semantic_anchor(concept: str, aliases: list[str]) -> str:
+    return " ".join([concept, *aliases])
+
+
 def _sentences(text: str) -> list[str]:
     normalized = re.sub(r"\s+", " ", text).strip()
     return [part.strip() for part in re.split(r"(?:[.!?]\s+|[\n;])", normalized) if part.strip()]
+
+
+def _evidence_units(text: str) -> list[str]:
+    sentences = _sentences(text)
+    if len(sentences) <= 1:
+        return [text]
+    return sentences
 
 
 def _contains(text: str, phrase: str) -> bool:
