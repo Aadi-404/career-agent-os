@@ -1,8 +1,9 @@
 import re
 from dataclasses import dataclass
 
-from app.models.analysis import AnalyzeRequest, ScoreBreakdownItem, ShortlistingFactor
+from app.models.analysis import AnalyzeRequest, RequirementMatch, ScoreBreakdownItem, ShortlistingFactor
 from app.services.certificate_matcher import best_certificate_match
+from app.services.requirement_matcher import build_requirement_matches
 
 
 @dataclass
@@ -13,6 +14,7 @@ class ScoringResult:
     overall_opportunity_score: int
     score_breakdown: list[ScoreBreakdownItem]
     shortlisting_factors: list[ShortlistingFactor]
+    requirement_matches: list[RequirementMatch]
     recommended_action: str
 
 
@@ -61,6 +63,7 @@ def score_resume_against_jd(request: AnalyzeRequest) -> ScoringResult:
         resume_skills=resume_skills,
     )
     breakdown = _build_breakdown(weights, category_scores)
+    requirement_matches = build_requirement_matches(request)
     technical_score = round(sum(item.weightedScore for item in breakdown))
     interview_readiness = _calculate_interview_readiness(technical_score, category_scores)
     shortlisting_score, shortlisting_factors = _calculate_shortlisting_score(request, technical_score)
@@ -73,6 +76,7 @@ def score_resume_against_jd(request: AnalyzeRequest) -> ScoringResult:
         overall_opportunity_score=max(0, min(overall_score, 100)),
         score_breakdown=breakdown,
         shortlisting_factors=shortlisting_factors,
+        requirement_matches=requirement_matches,
         recommended_action=_recommended_action(technical_score, shortlisting_score, interview_readiness),
     )
 

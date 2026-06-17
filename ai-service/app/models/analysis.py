@@ -110,6 +110,17 @@ class ShortlistingFactor(BaseModel):
     reason: str
 
 
+class RequirementMatch(BaseModel):
+    requirement: str
+    category: str
+    importance: Literal["high", "medium", "low"]
+    bestEvidence: str | None = None
+    evidenceSource: Literal["experience", "project", "skills", "certification", "achievement", "candidate_context", "other", "missing"]
+    score: int = Field(ge=0, le=100)
+    matchType: str
+    reason: str
+
+
 class AnalysisResponse(BaseModel):
     technicalMatchScore: int = Field(ge=0, le=100)
     shortlistingScore: int | None = Field(default=None, ge=0, le=100)
@@ -119,6 +130,7 @@ class AnalysisResponse(BaseModel):
     fitCategory: Literal["Strong Fit", "Good Fit", "Partial Fit", "Weak Fit"]
     scoreBreakdown: list[ScoreBreakdownItem] = Field(default_factory=list)
     shortlistingFactors: list[ShortlistingFactor] = Field(default_factory=list)
+    requirementMatches: list[RequirementMatch] = Field(default_factory=list)
     recommendedAction: str | None = None
     matchingSkills: list[MatchingSkill]
     weaklyEvidencedSkills: list[WeaklyEvidencedSkill]

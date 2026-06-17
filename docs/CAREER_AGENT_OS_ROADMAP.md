@@ -218,6 +218,7 @@ This slice adds:
 - Structured JD parsing models
 - Experience-wise technical scoring weights
 - Score breakdown response fields
+- Requirement match matrix for JD requirement to resume evidence mapping
 - Shortlisting score response fields
 - Opportunity score response fields
 - Frontend shortlisting inputs

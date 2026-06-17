@@ -11,6 +11,16 @@ type AnalysisResponse = {
   fitCategory: "Strong Fit" | "Good Fit" | "Partial Fit" | "Weak Fit";
   scoreBreakdown: Array<{ category: string; weight: number; score: number; weightedScore: number; reason: string }>;
   shortlistingFactors: Array<{ factor: string; impact: "positive" | "neutral" | "negative"; reason: string }>;
+  requirementMatches: Array<{
+    requirement: string;
+    category: string;
+    importance: "high" | "medium" | "low";
+    bestEvidence?: string | null;
+    evidenceSource: "experience" | "project" | "skills" | "certification" | "achievement" | "candidate_context" | "other" | "missing";
+    score: number;
+    matchType: string;
+    reason: string;
+  }>;
   recommendedAction?: string | null;
   matchingSkills: Array<{ skill: string; evidenceFromResume: string; jdRequirement: string }>;
   weaklyEvidencedSkills: Array<{ skill: string; source: string; whyWeak: string; howToStrengthenResume: string }>;
@@ -417,6 +427,7 @@ function Results({ result }: { result: AnalysisResponse }) {
       </div>
       <OpportunityPanel result={result} />
       {result.scoreBreakdown?.length > 0 && <ScoreBreakdown items={result.scoreBreakdown} />}
+      {result.requirementMatches?.length > 0 && <RequirementMatrix items={result.requirementMatches} />}
       {result.shortlistingFactors?.length > 0 && <ShortlistingFactors items={result.shortlistingFactors} />}
       <Card title="Matching Skills" items={result.matchingSkills.map((item) => `${item.skill}: ${item.evidenceFromResume}`)} />
       <Card title="Weakly Evidenced Skills" items={result.weaklyEvidencedSkills.map((item) => `${item.skill}: ${item.whyWeak}`)} />
@@ -508,6 +519,32 @@ function ScoreBreakdown({ items }: { items: AnalysisResponse["scoreBreakdown"] }
             </div>
             <div className="meter"><span style={{ width: `${item.score}%` }} /></div>
             <p>{item.reason}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RequirementMatrix({ items }: { items: AnalysisResponse["requirementMatches"] }) {
+  return (
+    <div className="panel">
+      <h3>Requirement Match Matrix</h3>
+      <div className="matrixList">
+        {items.map((item, index) => (
+          <div className="matrixItem" key={`${item.requirement}-${index}`}>
+            <div className="matrixTop">
+              <strong>{item.requirement}</strong>
+              <span className={`importance ${item.importance}`}>{item.importance}</span>
+              <b>{item.score}%</b>
+            </div>
+            <div className="matrixMeta">
+              <span>{formatCategory(item.category)}</span>
+              <span>{formatCategory(item.evidenceSource)}</span>
+              <span>{formatCategory(item.matchType)}</span>
+            </div>
+            <p>{item.bestEvidence || "No matching resume evidence found."}</p>
+            <small>{item.reason}</small>
           </div>
         ))}
       </div>

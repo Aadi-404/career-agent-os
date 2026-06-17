@@ -191,11 +191,14 @@ shortlistingScore
 interviewReadinessScore
 overallOpportunityScore
 scoreBreakdown
+requirementMatches
 shortlistingFactors
 recommendedAction
 ```
 
 The score is calculated by the explainable scoring engine. LLM mode still generates coaching content, but the numeric score is attached by the backend scoring layer.
+
+`requirementMatches` is the requirement-level evidence matrix. It maps extracted JD requirements to the strongest resume evidence, evidence source, match type, and score.
 
 The request also accepts:
 

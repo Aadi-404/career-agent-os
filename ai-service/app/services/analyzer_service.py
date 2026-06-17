@@ -170,6 +170,7 @@ def _analyze_with_mock(request: AnalyzeRequest) -> AnalysisResponse:
         interviewReadinessScore=scoring.interview_readiness_score,
         overallOpportunityScore=scoring.overall_opportunity_score,
         shortlistingFactors=scoring.shortlisting_factors,
+        requirementMatches=scoring.requirement_matches,
         recommendedAction=scoring.recommended_action,
     )
 
@@ -183,6 +184,7 @@ def _attach_algorithmic_scoring(response: AnalysisResponse, request: AnalyzeRequ
     response.interviewReadinessScore = scoring.interview_readiness_score
     response.overallOpportunityScore = scoring.overall_opportunity_score
     response.shortlistingFactors = scoring.shortlisting_factors
+    response.requirementMatches = scoring.requirement_matches
     response.recommendedAction = scoring.recommended_action
 
 

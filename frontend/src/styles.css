@@ -334,7 +334,8 @@ li {
 }
 
 .breakdownList,
-.factorList {
+.factorList,
+.matrixList {
   display: grid;
   gap: 14px;
 }
@@ -415,6 +416,76 @@ li {
 .factor.negative span {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.matrixItem {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.matrixTop {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.matrixTop b {
+  color: #0f766e;
+  font-size: 18px;
+}
+
+.importance {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.importance.high {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.importance.medium {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.importance.low {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.matrixMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.matrixMeta span {
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #075985;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.matrixItem p {
+  margin: 0;
+  color: #344054;
+  line-height: 1.5;
+}
+
+.matrixItem small {
+  color: #526070;
+  line-height: 1.5;
 }
 
 .debugPanel {
@@ -500,5 +571,9 @@ pre {
 
   .breakdownHeader {
     display: grid;
+  }
+
+  .matrixTop {
+    grid-template-columns: 1fr;
   }
 }
