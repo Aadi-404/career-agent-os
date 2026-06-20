@@ -44,15 +44,19 @@ KNOWN_SKILLS = [
     "sqlite",
     "sqlite3",
     "ssms",
+    "snowflake",
     "entity framework",
     "ef",
     "linq",
     "jwt",
     "azure",
     "azure devops",
+    "azure data factory",
     "azure fundamentals",
+    "adls",
     "az-900",
     "ci/cd",
+    "control-m",
     "docker",
     "aws",
     "aws certified",
@@ -72,8 +76,12 @@ def normalize_resume(request: ResumeNormalizeRequest) -> ResumeNormalizeResponse
     cleaned_lines = _clean_lines(request.rawResumeText)
     sections = _split_sections(cleaned_lines)
     profile = _extract_profile(cleaned_lines, sections)
-    experience = _extract_experience(sections.get("experience", []))
+    inline_projects = _extract_inline_project_blocks(cleaned_lines)
+    experience_lines = _strip_inline_project_blocks(sections.get("experience", [])) if inline_projects else sections.get("experience", [])
+    experience = _extract_experience(experience_lines)
     projects = _extract_projects(sections.get("projects", []))
+    if inline_projects:
+        projects = inline_projects
     if not projects:
         projects = _extract_project_fallback(cleaned_lines, experience)
     structured = StructuredResume(
@@ -245,6 +253,54 @@ def _extract_projects(lines: list[str]) -> list[ResumeProject]:
         projects.append(_build_project(current_name, current_duration, current_lines))
 
     return projects
+
+
+def _extract_inline_project_blocks(lines: list[str]) -> list[ResumeProject]:
+    projects: list[ResumeProject] = []
+    current_name: str | None = None
+    current_lines: list[str] = []
+
+    for line in lines:
+        if _looks_like_explicit_project_heading(line):
+            if current_name:
+                projects.append(_build_project(current_name, None, current_lines))
+            current_name = line
+            current_lines = []
+            continue
+
+        if current_name:
+            if _match_section_header(line) and _match_section_header(line) != "projects":
+                projects.append(_build_project(current_name, None, current_lines))
+                current_name = None
+                current_lines = []
+                continue
+            if _looks_like_resume_boundary(line):
+                projects.append(_build_project(current_name, None, current_lines))
+                current_name = None
+                current_lines = []
+                continue
+            current_lines.append(line)
+
+    if current_name:
+        projects.append(_build_project(current_name, None, current_lines))
+
+    return [project for project in projects if project.highlights][:4]
+
+
+def _strip_inline_project_blocks(lines: list[str]) -> list[str]:
+    kept = []
+    in_project_block = False
+    for line in lines:
+        if _looks_like_explicit_project_heading(line):
+            in_project_block = True
+            continue
+        if in_project_block:
+            if _match_section_header(line) or _looks_like_resume_boundary(line):
+                in_project_block = False
+                kept.append(line)
+            continue
+        kept.append(line)
+    return kept
 
 
 def _extract_project_fallback(all_lines: list[str], experience: list[ResumeExperience]) -> list[ResumeProject]:
@@ -500,6 +556,12 @@ def _experience_detail_lines(lines: list[str]) -> list[str]:
     return details or lines[2:]
 
 
+def _looks_like_resume_boundary(line: str) -> bool:
+    lowered = re.sub(r"[^a-z0-9 ]+", " ", line.lower()).strip()
+    lowered = re.sub(r"\s+", " ", lowered)
+    return lowered in {"skills", "education", "certifications", "certification", "achievements", "experience", "summary"}
+
+
 def _expand_experience_lines(lines: list[str]) -> list[str]:
     expanded = []
     for line in lines:
@@ -689,6 +751,14 @@ def _looks_like_detail(line: str) -> bool:
         "built ",
         "created ",
         "developed ",
+        "delivered ",
+        "reduced ",
+        "cut ",
+        "cutting ",
+        "eliminated ",
+        "eliminating ",
+        "improved ",
+        "improving ",
         "helps ",
         "enabled ",
         "enables ",
@@ -781,13 +851,17 @@ def _skill_label(skill: str) -> str:
         "sqlite": "SQLite",
         "sqlite3": "SQLite",
         "ssms": "SSMS",
+        "snowflake": "Snowflake",
         "entity framework": "Entity Framework",
         "ef": "EF",
         "linq": "LINQ",
+        "azure data factory": "Azure Data Factory",
         "azure fundamentals": "Azure Fundamentals",
+        "adls": "ADLS",
         "az-900": "AZ-900",
         "jwt": "JWT",
         "ci/cd": "CI/CD",
+        "control-m": "Control-M",
         "aws": "AWS",
         "aws certified": "AWS Certified",
         "microsoft certified": "Microsoft Certified",
