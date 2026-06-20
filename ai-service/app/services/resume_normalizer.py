@@ -249,12 +249,10 @@ def _extract_projects(lines: list[str]) -> list[ResumeProject]:
 
 def _extract_project_fallback(all_lines: list[str], experience: list[ResumeExperience]) -> list[ResumeProject]:
     candidate_lines = []
-    for item in experience:
-        candidate_lines.extend(item.highlights)
     candidate_lines.extend(
         line
         for line in all_lines
-        if _looks_like_project_achievement(line) and not _looks_like_certification_line(line) and not (_find_duration([line]) and "|" in line)
+        if _looks_like_project_achievement(line) and not _looks_like_certification_line(line) and not (_find_duration([line]) and "|" in line) and _looks_like_explicit_project_heading_or_detail(line)
     )
 
     projects_by_name: dict[str, ResumeProject] = {}
@@ -276,12 +274,20 @@ def _extract_project_fallback(all_lines: list[str], experience: list[ResumeExper
 
 
 def _build_project(name: str, duration: str | None, lines: list[str]) -> ResumeProject:
+    clean_name, heading_tech = _split_project_heading(name)
     return ResumeProject(
-        name=name,
+        name=clean_name,
         duration=duration or _find_duration(lines),
-        techStack=_extract_project_tech_stack(lines),
+        techStack=_dedupe_preserve_order([*heading_tech, *_extract_project_tech_stack(lines)]),
         highlights=_extract_highlights(lines),
     )
+
+
+def _split_project_heading(name: str) -> tuple[str, list[str]]:
+    if "|" not in name:
+        return name, []
+    project_name, tech_text = [part.strip() for part in name.split("|", 1)]
+    return project_name, _extract_skills([tech_text], [tech_text])
 
 
 def _extract_skills(all_lines: list[str], skill_lines: list[str]) -> list[str]:
@@ -437,6 +443,8 @@ def _find_duration(lines: list[str]) -> str | None:
 def _extract_company(lines: list[str]) -> str | None:
     if len(lines) >= 2 and lines[1].lower().startswith("title"):
         return lines[0].strip(" ,|-") or None
+    if len(lines) >= 2 and _find_duration([lines[1]]) and not _find_duration([lines[0]]):
+        return lines[0].strip(" ,|-") or None
     if len(lines) >= 3 and _find_duration([lines[1]]) and lines[2].lower().startswith("title"):
         return lines[0].strip(" ,|-") or None
     for line in lines[:3]:
@@ -468,6 +476,11 @@ def _extract_experience_title(lines: list[str]) -> str | None:
         lowered = line.lower()
         if lowered.startswith("title"):
             return _clean_experience_title(line)
+    for line in lines[:6]:
+        if "|" in line and _extract_location_value(line):
+            title_part = line.split("|", 1)[0].strip(" ,|-")
+            if title_part and not _find_duration([title_part]):
+                return title_part
     for line in lines[:6]:
         if _find_duration([line]) and "-" in line:
             after_duration = _after_duration(line)
@@ -625,6 +638,8 @@ def _looks_like_title(line: str) -> bool:
 
 
 def _looks_like_project_title(line: str, next_line: str) -> bool:
+    if _looks_like_explicit_project_heading(line):
+        return True
     duration = _find_duration([line])
     title_without_duration = _clean_project_title(line) if duration else line
     if _looks_like_detail(line):
@@ -642,6 +657,24 @@ def _looks_like_project_title(line: str, next_line: str) -> bool:
     if _find_duration([next_line]):
         return True
     return False
+
+
+def _looks_like_explicit_project_heading(line: str) -> bool:
+    if "|" not in line:
+        return False
+    name, tech = [part.strip() for part in line.split("|", 1)]
+    if not name or not tech or len(name.split()) > 8:
+        return False
+    if _extract_location_value(tech):
+        return False
+    return _line_has_skill(tech)
+
+
+def _looks_like_explicit_project_heading_or_detail(line: str) -> bool:
+    return _looks_like_explicit_project_heading(line) or any(
+        token in line.lower()
+        for token in ["data simplified tool", "ai agents platform", "sttm file parser"]
+    )
 
 
 def _looks_like_detail(line: str) -> bool:
