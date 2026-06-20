@@ -102,6 +102,7 @@ def normalize_resume(request: ResumeNormalizeRequest) -> ResumeNormalizeResponse
 
 
 def _clean_lines(text: str) -> list[str]:
+    text = _normalize_dash_artifacts(text)
     replacements = {
         "\ufb02": "fl",
         "\ufb01": "fi",
@@ -132,6 +133,16 @@ def _clean_lines(text: str) -> list[str]:
         if line:
             lines.append(line)
     return lines
+
+
+def _normalize_dash_artifacts(text: str) -> str:
+    for dash in ["\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2212"]:
+        text = text.replace(dash, "-")
+    return re.sub(
+        r"(?i)\b((?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2})\s*\?\s*((?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2})|present|current)\b",
+        r"\1 - \2",
+        text,
+    )
 
 
 def _split_sections(lines: list[str]) -> dict[str, list[str]]:
@@ -409,7 +420,7 @@ def _extract_certifications(section_lines: list[str], all_lines: list[str]) -> l
                 break
     evidence_text = "\n".join([*candidates, *all_lines])
     candidates.extend(item.raw_text for item in extract_certificate_evidence(evidence_text))
-    return _dedupe_preserve_order([item for item in candidates if _looks_like_certification_line(item) and not _looks_like_contact_line(item)])
+    return _dedupe_certifications([item for item in candidates if _looks_like_certification_line(item) and not _looks_like_contact_line(item)])
 
 
 def _extract_project_tech_stack(lines: list[str]) -> list[str]:
@@ -474,6 +485,7 @@ def _extract_highlights(lines: list[str]) -> list[str]:
 
 def _find_duration(lines: list[str]) -> str | None:
     text = " ".join(lines)
+    text = _normalize_dash_artifacts(text)
     text = text.replace("–", "-").replace("—", "-")
     match = re.search(r"\(?\d{2}/\d{4}\s*-\s*(?:\d{2}/\d{4}|present|current)\)?", text, flags=re.IGNORECASE)
     if match:
@@ -882,6 +894,21 @@ def _dedupe_preserve_order(items: list[str]) -> list[str]:
     for item in items:
         normalized = item.strip()
         key = normalized.lower()
+        if normalized and key not in seen:
+            seen.add(key)
+            result.append(normalized)
+    return result
+
+
+def _dedupe_certifications(items: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for item in items:
+        normalized = item.strip()
+        key = re.sub(r"\s+", " ", normalized.lower())
+        key = re.sub(r"\s+[?-]\s+microsoft$", "", key)
+        key = re.sub(r"\s+[?-]\s+amazon web services$", "", key)
+        key = re.sub(r"\s+[?-]\s+aws$", "", key)
         if normalized and key not in seen:
             seen.add(key)
             result.append(normalized)
