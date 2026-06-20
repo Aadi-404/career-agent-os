@@ -431,6 +431,57 @@ h1 {
   font-size: 16px;
 }
 
+.preScoreChecklist {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 14px;
+}
+
+.checkItem {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid #fee2e2;
+  border-radius: 8px;
+  background: #fff7f7;
+  padding: 12px;
+}
+
+.checkItem.done {
+  border-color: #bbf7d0;
+  background: #f4fff8;
+}
+
+.checkItem > strong {
+  width: fit-content;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 5px 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.checkItem.done > strong {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.checkItem b {
+  color: var(--ink);
+}
+
+.checkItem p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .compactReview {
   gap: 14px;
 }
@@ -1317,6 +1368,7 @@ pre {
   .scoreStepper,
   .uploadGrid,
   .readyGrid,
+  .checkItem,
   .placeholderGrid,
   .historyGrid {
     grid-template-columns: 1fr;

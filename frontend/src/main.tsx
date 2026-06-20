@@ -265,8 +265,8 @@ function App() {
 
   function buildAnalyzeRequest(): AnalyzeRequestPayload {
     return {
-      resumeText,
-      jobDescriptionText,
+      resumeText: structuredResume ? formatStructuredResume(structuredResume) : resumeText,
+      jobDescriptionText: parsedJd ? formatParsedJd(parsedJd) : jobDescriptionText,
       candidateContext: {
         targetRole,
         experienceYears,
@@ -430,6 +430,9 @@ function App() {
     setResult(null);
 
     try {
+      if (!structuredResume || !parsedJd) {
+        throw new Error("Parse and review the resume and JD before calculating the score.");
+      }
       const payload = buildAnalyzeRequest();
       const response = await fetch(`${API_BASE_URL}/ai/resume-jd/match`, {
         method: "POST",
@@ -709,6 +712,7 @@ function App() {
   }
 
   const preparation = result?.preparationIntelligence ?? null;
+  const canCalculateScore = Boolean(structuredResume && parsedJd && resumeText.trim().length >= 20 && jobDescriptionText.trim().length >= 20);
 
   return (
     <main className="shell appShell">
@@ -929,9 +933,10 @@ function App() {
                       <div><span>Plan days</span><strong>{preparationPlanDays}</strong></div>
                       <div><span>Model mode</span><strong>{llmMode === "live" ? llmProvider : "mock"}</strong></div>
                     </div>
+                    <PreScoreChecklist resume={structuredResume} jd={parsedJd} resumeText={resumeText} jdText={jobDescriptionText} />
                     <div className="actionBar">
                       <button type="button" className="secondaryButton" onClick={() => setScoreStep("review")}>Back to Review</button>
-                      <button disabled={loading || resumeText.trim().length < 20 || jobDescriptionText.trim().length < 20}>
+                      <button disabled={loading || !canCalculateScore}>
                         {loading ? "Matching..." : "Run Resume Match"}
                       </button>
                     </div>
@@ -967,11 +972,11 @@ function App() {
                 <div className="editorSplit">
                   <label>
                     Resume text
-                    <textarea value={resumeText} onChange={(event) => setResumeText(event.target.value)} rows={12} />
+                    <textarea value={resumeText} onChange={(event) => updateResumeDraft(event.target.value)} rows={12} />
                   </label>
                   <label>
                     Job description text
-                    <textarea value={jobDescriptionText} onChange={(event) => setJobDescriptionText(event.target.value)} rows={12} />
+                    <textarea value={jobDescriptionText} onChange={(event) => updateJdDraft(event.target.value)} rows={12} />
                   </label>
                 </div>
                 {structuredResume ? (
@@ -1495,6 +1500,64 @@ function ReviewWorkspaceSummary({
         <span>Analysis input</span>
         <strong>{resumeText.length.toLocaleString()} resume chars / {jdText.length.toLocaleString()} JD chars</strong>
       </div>
+    </div>
+  );
+}
+
+function PreScoreChecklist({
+  resume,
+  jd,
+  resumeText,
+  jdText,
+}: {
+  resume: StructuredResume | null;
+  jd: ParsedJobDescription | null;
+  resumeText: string;
+  jdText: string;
+}) {
+  const checks = [
+    {
+      label: "Resume parsed and reviewed",
+      done: Boolean(resume),
+      detail: resume ? `${resume.experience.length} experience, ${resume.projects.length} projects, ${resume.certifications.length} certifications` : "Run Parse Resume first.",
+    },
+    {
+      label: "JD parsed and reviewed",
+      done: Boolean(jd),
+      detail: jd ? `${jd.requiredSkills.length} required skills, ${(jd.emphasizedRequirements ?? []).length} emphasized requirements` : "Run Parse JD first.",
+    },
+    {
+      label: "Contact, education, company, and dates checked",
+      done: Boolean(resume?.profile.email && resume?.education.length && resume?.experience.length),
+      detail: "These fields affect profile quality, experience fit, and saved history.",
+    },
+    {
+      label: "JD priority signals checked",
+      done: Boolean(jd && ((jd.emphasizedRequirements ?? []).length || jd.requiredSkills.length)),
+      detail: "Must-have and strongly worded requirements carry more scoring weight.",
+    },
+    {
+      label: "Enough text for scoring",
+      done: resumeText.trim().length >= 20 && jdText.trim().length >= 20,
+      detail: `${resumeText.length.toLocaleString()} resume chars / ${jdText.length.toLocaleString()} JD chars`,
+    },
+  ];
+
+  return (
+    <div className="preScoreChecklist">
+      <div className="sectionHeading">
+        <h3>Pre-score checklist</h3>
+        <span>{checks.filter((check) => check.done).length}/{checks.length} ready</span>
+      </div>
+      {checks.map((check) => (
+        <div className={check.done ? "checkItem done" : "checkItem"} key={check.label}>
+          <strong>{check.done ? "Ready" : "Needs review"}</strong>
+          <div>
+            <b>{check.label}</b>
+            <p>{check.detail}</p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
