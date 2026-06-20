@@ -14,8 +14,13 @@ from app.models.analysis import (
     ResumeImprovement,
 )
 from app.models.history import (
+    AnonymousSessionCreateRequest,
+    AnonymousSessionRecord,
     AnalysisRecord,
     AnalysisSaveRequest,
+    JobOpportunityRecord,
+    JobOpportunitySaveRequest,
+    JobOpportunityStatusUpdateRequest,
     JobDescriptionRecord,
     JobDescriptionSaveRequest,
     PreparationSessionRecord,
@@ -31,16 +36,21 @@ from app.models.resume_extract import ResumeExtractResponse
 from app.models.resume_normalize import ResumeNormalizeRequest, ResumeNormalizeResponse
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.history_store import (
+    create_or_touch_anonymous_session,
     create_or_update_user,
     get_workspace_summary,
     list_analyses,
     list_job_descriptions,
+    list_job_opportunities_for_anonymous_session,
+    list_job_opportunities_for_user,
     list_preparation_sessions,
     list_resumes,
     save_analysis,
     save_job_description,
+    save_job_opportunity,
     save_preparation_session,
     save_resume,
+    update_job_opportunity_status,
 )
 from app.services.jd_parser import parse_jd
 from app.services.optional_artifact_service import (
@@ -128,6 +138,11 @@ def upsert_user(request: UserCreateRequest) -> UserRecord:
     return create_or_update_user(request)
 
 
+@app.post("/auth/anonymous", response_model=AnonymousSessionRecord)
+def create_anonymous_session(request: AnonymousSessionCreateRequest | None = None) -> AnonymousSessionRecord:
+    return create_or_touch_anonymous_session(request or AnonymousSessionCreateRequest())
+
+
 @app.get("/history/users/{user_id}/workspace", response_model=WorkspaceSummary)
 def workspace_summary(user_id: str) -> WorkspaceSummary:
     return get_workspace_summary(user_id)
@@ -171,3 +186,26 @@ def create_preparation_session_record(request: PreparationSessionSaveRequest) ->
 @app.get("/history/users/{user_id}/preparation-sessions", response_model=list[PreparationSessionRecord])
 def get_preparation_session_records(user_id: str) -> list[PreparationSessionRecord]:
     return list_preparation_sessions(user_id)
+
+
+@app.post("/history/job-opportunities", response_model=JobOpportunityRecord)
+def create_job_opportunity_record(request: JobOpportunitySaveRequest) -> JobOpportunityRecord:
+    return save_job_opportunity(request)
+
+
+@app.get("/history/users/{user_id}/job-opportunities", response_model=list[JobOpportunityRecord])
+def get_user_job_opportunities(user_id: str) -> list[JobOpportunityRecord]:
+    return list_job_opportunities_for_user(user_id)
+
+
+@app.get("/history/anonymous-sessions/{anonymous_session_id}/job-opportunities", response_model=list[JobOpportunityRecord])
+def get_anonymous_job_opportunities(anonymous_session_id: str) -> list[JobOpportunityRecord]:
+    return list_job_opportunities_for_anonymous_session(anonymous_session_id)
+
+
+@app.patch("/history/job-opportunities/{job_opportunity_id}/status", response_model=JobOpportunityRecord)
+def update_job_opportunity_status_record(
+    job_opportunity_id: str,
+    request: JobOpportunityStatusUpdateRequest,
+) -> JobOpportunityRecord:
+    return update_job_opportunity_status(job_opportunity_id, request)

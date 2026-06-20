@@ -82,6 +82,16 @@ def _postgres_schema() -> str:
             ON users(email)
             WHERE email IS NOT NULL AND email != '';
 
+            CREATE TABLE IF NOT EXISTS anonymous_sessions (
+                id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                converted_user_id TEXT REFERENCES users(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_anonymous_sessions_last_seen
+            ON anonymous_sessions(last_seen_at DESC);
+
             CREATE TABLE IF NOT EXISTS resumes (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -141,4 +151,30 @@ def _postgres_schema() -> str:
 
             CREATE INDEX IF NOT EXISTS idx_preparation_sessions_user_created
             ON preparation_sessions(user_id, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS job_opportunities (
+                id TEXT PRIMARY KEY,
+                user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+                anonymous_session_id TEXT REFERENCES anonymous_sessions(id) ON DELETE CASCADE,
+                resume_id TEXT REFERENCES resumes(id) ON DELETE SET NULL,
+                analysis_id TEXT REFERENCES analyses(id) ON DELETE SET NULL,
+                title TEXT NOT NULL,
+                company TEXT,
+                location TEXT,
+                url TEXT,
+                description TEXT NOT NULL,
+                status TEXT NOT NULL,
+                technical_match_score INTEGER,
+                fit_category TEXT,
+                analysis_response_json TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                CHECK (user_id IS NOT NULL OR anonymous_session_id IS NOT NULL)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_job_opportunities_user_created
+            ON job_opportunities(user_id, created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_job_opportunities_anonymous_created
+            ON job_opportunities(anonymous_session_id, created_at DESC);
             """

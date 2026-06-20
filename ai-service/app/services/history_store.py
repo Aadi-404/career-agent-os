@@ -11,8 +11,13 @@ from pydantic_core import from_json
 from app.db import get_connection
 from app.models.analysis import AnalysisResponse, AnalyzeRequest, PreparationIntelligence
 from app.models.history import (
+    AnonymousSessionCreateRequest,
+    AnonymousSessionRecord,
     AnalysisRecord,
     AnalysisSaveRequest,
+    JobOpportunityRecord,
+    JobOpportunitySaveRequest,
+    JobOpportunityStatusUpdateRequest,
     JobDescriptionRecord,
     JobDescriptionSaveRequest,
     PreparationSessionRecord,
@@ -51,6 +56,28 @@ def create_or_update_user(request: UserCreateRequest) -> UserRecord:
     return UserRecord(id=request.userId, displayName=request.displayName, email=request.email, createdAt=now)
 
 
+def create_or_touch_anonymous_session(request: AnonymousSessionCreateRequest) -> AnonymousSessionRecord:
+    now = _now()
+    session_id = request.anonymousSessionId or f"anon_{_id()}"
+    with get_connection() as connection:
+        existing = connection.execute("SELECT * FROM anonymous_sessions WHERE id = ?", (session_id,)).fetchone()
+        if existing:
+            connection.execute(
+                "UPDATE anonymous_sessions SET last_seen_at = ? WHERE id = ?",
+                (now, session_id),
+            )
+            row = connection.execute("SELECT * FROM anonymous_sessions WHERE id = ?", (session_id,)).fetchone()
+            return _anonymous_session_from_row(_require_row(row, "Anonymous session not found after update"))
+        connection.execute(
+            """
+            INSERT INTO anonymous_sessions (id, created_at, last_seen_at, converted_user_id)
+            VALUES (?, ?, ?, NULL)
+            """,
+            (session_id, now, now),
+        )
+    return AnonymousSessionRecord(id=session_id, createdAt=now, lastSeenAt=now)
+
+
 def get_workspace_summary(user_id: str) -> WorkspaceSummary:
     with get_connection() as connection:
         user = _get_user(connection, user_id)
@@ -58,6 +85,7 @@ def get_workspace_summary(user_id: str) -> WorkspaceSummary:
         jd_count = _count(connection, "job_descriptions", user_id)
         analysis_count = _count(connection, "analyses", user_id)
         preparation_count = _count(connection, "preparation_sessions", user_id)
+        opportunity_count = _count(connection, "job_opportunities", user_id)
         latest_analysis_row = connection.execute(
             "SELECT * FROM analyses WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
             (user_id,),
@@ -69,6 +97,7 @@ def get_workspace_summary(user_id: str) -> WorkspaceSummary:
         jobDescriptionCount=jd_count,
         analysisCount=analysis_count,
         preparationSessionCount=preparation_count,
+        jobOpportunityCount=opportunity_count,
         latestAnalysis=latest_analysis,
     )
 
@@ -268,11 +297,101 @@ def list_preparation_sessions(user_id: str) -> list[PreparationSessionRecord]:
     return [_preparation_session_from_row(row) for row in rows]
 
 
+def save_job_opportunity(request: JobOpportunitySaveRequest) -> JobOpportunityRecord:
+    now = _now()
+    record_id = _id()
+    with get_connection() as connection:
+        _validate_opportunity_owner(connection, request.userId, request.anonymousSessionId)
+        if request.userId and request.resumeId:
+            _ensure_owned_record(connection, "resumes", request.resumeId, request.userId)
+        if request.userId and request.analysisId:
+            _ensure_owned_record(connection, "analyses", request.analysisId, request.userId)
+        connection.execute(
+            """
+            INSERT INTO job_opportunities (
+                id, user_id, anonymous_session_id, resume_id, analysis_id, title, company, location,
+                url, description, status, technical_match_score, fit_category, analysis_response_json,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record_id,
+                request.userId,
+                request.anonymousSessionId,
+                request.resumeId,
+                request.analysisId,
+                request.title,
+                request.company,
+                request.location,
+                request.url,
+                request.description,
+                request.status,
+                request.technicalMatchScore,
+                request.fitCategory,
+                _json_dump(request.analysisResponse),
+                now,
+                now,
+            ),
+        )
+        row = connection.execute("SELECT * FROM job_opportunities WHERE id = ?", (record_id,)).fetchone()
+    return _job_opportunity_from_row(_require_row(row, "Job opportunity not found after save"))
+
+
+def list_job_opportunities_for_user(user_id: str) -> list[JobOpportunityRecord]:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        rows = connection.execute(
+            "SELECT * FROM job_opportunities WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+    return [_job_opportunity_from_row(row) for row in rows]
+
+
+def list_job_opportunities_for_anonymous_session(anonymous_session_id: str) -> list[JobOpportunityRecord]:
+    with get_connection() as connection:
+        _get_anonymous_session(connection, anonymous_session_id)
+        rows = connection.execute(
+            "SELECT * FROM job_opportunities WHERE anonymous_session_id = ? ORDER BY created_at DESC",
+            (anonymous_session_id,),
+        ).fetchall()
+    return [_job_opportunity_from_row(row) for row in rows]
+
+
+def update_job_opportunity_status(record_id: str, request: JobOpportunityStatusUpdateRequest) -> JobOpportunityRecord:
+    now = _now()
+    with get_connection() as connection:
+        existing = connection.execute("SELECT * FROM job_opportunities WHERE id = ?", (record_id,)).fetchone()
+        _require_row(existing, "Job opportunity not found")
+        connection.execute(
+            "UPDATE job_opportunities SET status = ?, updated_at = ? WHERE id = ?",
+            (request.status, now, record_id),
+        )
+        row = connection.execute("SELECT * FROM job_opportunities WHERE id = ?", (record_id,)).fetchone()
+    return _job_opportunity_from_row(_require_row(row, "Job opportunity not found after update"))
+
+
 def _get_user(connection, user_id: str) -> UserRecord:
     row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="User not found")
     return _user_from_row(row)
+
+
+def _get_anonymous_session(connection, anonymous_session_id: str) -> AnonymousSessionRecord:
+    row = connection.execute("SELECT * FROM anonymous_sessions WHERE id = ?", (anonymous_session_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Anonymous session not found")
+    return _anonymous_session_from_row(row)
+
+
+def _validate_opportunity_owner(connection, user_id: str | None, anonymous_session_id: str | None) -> None:
+    if user_id:
+        _get_user(connection, user_id)
+    if anonymous_session_id:
+        _get_anonymous_session(connection, anonymous_session_id)
+    if not user_id and not anonymous_session_id:
+        raise HTTPException(status_code=400, detail="Either userId or anonymousSessionId is required")
 
 
 def _ensure_owned_record(connection, table: str, record_id: str, user_id: str) -> None:
@@ -295,6 +414,15 @@ def _user_from_row(row: Any) -> UserRecord:
         displayName=row["display_name"],
         email=row["email"],
         createdAt=row["created_at"],
+    )
+
+
+def _anonymous_session_from_row(row: Any) -> AnonymousSessionRecord:
+    return AnonymousSessionRecord(
+        id=row["id"],
+        createdAt=row["created_at"],
+        lastSeenAt=row["last_seen_at"],
+        convertedUserId=row["converted_user_id"],
     )
 
 
@@ -349,6 +477,27 @@ def _preparation_session_from_row(row: Any) -> PreparationSessionRecord:
         title=row["title"],
         status=row["status"],
         plan=_json_model(row["plan_json"], PreparationIntelligence) or _json_load(row["plan_json"]),
+        createdAt=row["created_at"],
+        updatedAt=row["updated_at"],
+    )
+
+
+def _job_opportunity_from_row(row: Any) -> JobOpportunityRecord:
+    return JobOpportunityRecord(
+        id=row["id"],
+        userId=row["user_id"],
+        anonymousSessionId=row["anonymous_session_id"],
+        resumeId=row["resume_id"],
+        analysisId=row["analysis_id"],
+        title=row["title"],
+        company=row["company"],
+        location=row["location"],
+        url=row["url"],
+        description=row["description"],
+        status=row["status"],
+        technicalMatchScore=row["technical_match_score"],
+        fitCategory=row["fit_category"],
+        analysisResponse=_json_model(row["analysis_response_json"], AnalysisResponse),
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
     )

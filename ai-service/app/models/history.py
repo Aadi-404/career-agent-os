@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.analysis import AnalysisResponse, AnalyzeRequest, PreparationIntelligence
 from app.models.jd_parse import ParsedJobDescription
@@ -18,6 +18,17 @@ class UserRecord(BaseModel):
     displayName: str
     email: str | None = None
     createdAt: str
+
+
+class AnonymousSessionCreateRequest(BaseModel):
+    anonymousSessionId: str | None = Field(default=None, min_length=8, max_length=120)
+
+
+class AnonymousSessionRecord(BaseModel):
+    id: str
+    createdAt: str
+    lastSeenAt: str
+    convertedUserId: str | None = None
 
 
 class ResumeSaveRequest(BaseModel):
@@ -103,10 +114,56 @@ class PreparationSessionRecord(BaseModel):
     updatedAt: str
 
 
+class JobOpportunitySaveRequest(BaseModel):
+    userId: str | None = Field(default=None, min_length=2, max_length=80)
+    anonymousSessionId: str | None = Field(default=None, min_length=8, max_length=120)
+    resumeId: str | None = None
+    analysisId: str | None = None
+    title: str = Field(min_length=2, max_length=180)
+    company: str | None = Field(default=None, max_length=180)
+    location: str | None = Field(default=None, max_length=180)
+    url: str | None = Field(default=None, max_length=1000)
+    description: str = Field(min_length=20)
+    status: Literal["viewed", "shortlisted", "applied", "interview", "rejected", "offer", "archived"] = "viewed"
+    technicalMatchScore: int | None = Field(default=None, ge=0, le=100)
+    fitCategory: str | None = Field(default=None, max_length=80)
+    analysisResponse: AnalysisResponse | None = None
+
+    @model_validator(mode="after")
+    def validate_owner(self):
+        if not self.userId and not self.anonymousSessionId:
+            raise ValueError("Either userId or anonymousSessionId is required")
+        return self
+
+
+class JobOpportunityStatusUpdateRequest(BaseModel):
+    status: Literal["viewed", "shortlisted", "applied", "interview", "rejected", "offer", "archived"]
+
+
+class JobOpportunityRecord(BaseModel):
+    id: str
+    userId: str | None = None
+    anonymousSessionId: str | None = None
+    resumeId: str | None = None
+    analysisId: str | None = None
+    title: str
+    company: str | None = None
+    location: str | None = None
+    url: str | None = None
+    description: str
+    status: str
+    technicalMatchScore: int | None = None
+    fitCategory: str | None = None
+    analysisResponse: AnalysisResponse | None = None
+    createdAt: str
+    updatedAt: str
+
+
 class WorkspaceSummary(BaseModel):
     user: UserRecord
     resumeCount: int
     jobDescriptionCount: int
     analysisCount: int
     preparationSessionCount: int
+    jobOpportunityCount: int = 0
     latestAnalysis: AnalysisRecord | None = None
