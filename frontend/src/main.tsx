@@ -189,7 +189,7 @@ type JdParseResponse = {
 const modelOptions: Record<LlmProvider, string[]> = {
   groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
   openai: ["gpt-4.1-mini", "gpt-4o-mini"],
-  gemini: ["gemini-2.0-flash", "gemini-1.5-flash"],
+  gemini: ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest"],
 };
 
 const defaultResume =

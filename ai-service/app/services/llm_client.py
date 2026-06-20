@@ -73,6 +73,14 @@ def _call_openai_compatible(base_url: str, prompt: str, settings: Settings, api_
     except httpx.TimeoutException as exc:
         raise HTTPException(status_code=504, detail="LLM request timed out") from exc
     except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"Gemini model not found: {model}. Select a current Gemini API model "
+                    "such as gemini-3.5-flash, gemini-2.5-flash, or gemini-2.5-flash-lite."
+                ),
+            ) from exc
         raise HTTPException(status_code=502, detail=f"LLM provider error: {exc.response.text}") from exc
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"LLM request failed: {exc}") from exc
