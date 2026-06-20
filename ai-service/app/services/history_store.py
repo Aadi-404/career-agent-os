@@ -1,10 +1,12 @@
 import json
 from datetime import UTC, datetime
-from sqlite3 import IntegrityError, Row
+from sqlite3 import IntegrityError
+from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException
 from pydantic import BaseModel
+from pydantic_core import from_json
 
 from app.db import get_connection
 from app.models.analysis import AnalysisResponse, AnalyzeRequest, PreparationIntelligence
@@ -42,7 +44,9 @@ def create_or_update_user(request: UserCreateRequest) -> UserRecord:
                 "INSERT INTO users (id, display_name, email, created_at) VALUES (?, ?, ?, ?)",
                 (request.userId, request.displayName, request.email, now),
             )
-        except IntegrityError as exc:
+        except Exception as exc:
+            if not isinstance(exc, IntegrityError) and exc.__class__.__name__ != "UniqueViolation":
+                raise
             raise HTTPException(status_code=409, detail="A user with this email already exists") from exc
     return UserRecord(id=request.userId, displayName=request.displayName, email=request.email, createdAt=now)
 
@@ -285,7 +289,7 @@ def _count(connection, table: str, user_id: str) -> int:
     return int(row["count"])
 
 
-def _user_from_row(row: Row) -> UserRecord:
+def _user_from_row(row: Any) -> UserRecord:
     return UserRecord(
         id=row["id"],
         displayName=row["display_name"],
@@ -294,7 +298,7 @@ def _user_from_row(row: Row) -> UserRecord:
     )
 
 
-def _resume_from_row(row: Row) -> ResumeRecord:
+def _resume_from_row(row: Any) -> ResumeRecord:
     return ResumeRecord(
         id=row["id"],
         userId=row["user_id"],
@@ -308,7 +312,7 @@ def _resume_from_row(row: Row) -> ResumeRecord:
     )
 
 
-def _job_description_from_row(row: Row) -> JobDescriptionRecord:
+def _job_description_from_row(row: Any) -> JobDescriptionRecord:
     return JobDescriptionRecord(
         id=row["id"],
         userId=row["user_id"],
@@ -322,7 +326,7 @@ def _job_description_from_row(row: Row) -> JobDescriptionRecord:
     )
 
 
-def _analysis_from_row(row: Row) -> AnalysisRecord:
+def _analysis_from_row(row: Any) -> AnalysisRecord:
     return AnalysisRecord(
         id=row["id"],
         userId=row["user_id"],
@@ -337,14 +341,14 @@ def _analysis_from_row(row: Row) -> AnalysisRecord:
     )
 
 
-def _preparation_session_from_row(row: Row) -> PreparationSessionRecord:
+def _preparation_session_from_row(row: Any) -> PreparationSessionRecord:
     return PreparationSessionRecord(
         id=row["id"],
         userId=row["user_id"],
         analysisId=row["analysis_id"],
         title=row["title"],
         status=row["status"],
-        plan=_json_model(row["plan_json"], PreparationIntelligence) or json.loads(row["plan_json"]),
+        plan=_json_model(row["plan_json"], PreparationIntelligence) or _json_load(row["plan_json"]),
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
     )
@@ -361,10 +365,20 @@ def _json_dump(value) -> str | None:
 def _json_model(value: str | None, model_type):
     if not value:
         return None
+    if isinstance(value, dict):
+        return model_type.model_validate(value)
     return model_type.model_validate_json(value)
 
 
-def _require_row(row: Row | None, detail: str) -> Row:
+def _json_load(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        return from_json(value)
+    return json.loads(value)
+
+
+def _require_row(row: Any | None, detail: str) -> Any:
     if not row:
         raise HTTPException(status_code=404, detail=detail)
     return row

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -101,6 +101,18 @@ type AnalyzeRequestPayload = {
   preparationPlanDays: number;
 };
 
+type HistoryAnalysisRecord = {
+  id: string;
+};
+
+type HistoryResumeRecord = {
+  id: string;
+};
+
+type HistoryJobDescriptionRecord = {
+  id: string;
+};
+
 type StructuredResume = {
   profile: {
     name?: string | null;
@@ -160,6 +172,8 @@ const defaultResume =
 const defaultJd =
   "Looking for a skilled .NET Developer with 2 to 5 years of experience in ASP.NET, .NET Core, C#, Web API, MVC and Azure Cloud Services. Strong knowledge of LINQ, Entity Framework, HTML, CSS, JavaScript, jQuery, Azure DevOps CI/CD pipelines, code compliance and enterprise application development.";
 
+const defaultUserId = "local-aditya";
+
 function App() {
   const [activeTask, setActiveTask] = useState<ActiveTask>("matching");
   const [resumeText, setResumeText] = useState(defaultResume);
@@ -190,10 +204,18 @@ function App() {
   const [parsedJd, setParsedJd] = useState<JdParseResponse["parsedJobDescription"] | null>(null);
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [lastAnalysisRequest, setLastAnalysisRequest] = useState<AnalyzeRequestPayload | null>(null);
+  const [lastSavedAnalysisId, setLastSavedAnalysisId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
   const [preparationInfo, setPreparationInfo] = useState("");
+  const [historyInfo, setHistoryInfo] = useState("");
+
+  useEffect(() => {
+    ensureLocalUser().catch(() => {
+      setHistoryInfo("History is offline until the backend database is available.");
+    });
+  }, []);
 
   function buildAnalyzeRequest(): AnalyzeRequestPayload {
     return {
@@ -221,6 +243,83 @@ function App() {
     };
   }
 
+  async function ensureLocalUser() {
+    await fetch(`${API_BASE_URL}/history/users`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: defaultUserId,
+        displayName: "Aditya Local Workspace",
+        email: "aditya.local@career-agent-os",
+      }),
+    });
+  }
+
+  async function saveHistorySnapshot(payload: AnalyzeRequestPayload, analysis: AnalysisResponse) {
+    await ensureLocalUser();
+
+    const resumeResponse = await fetch(`${API_BASE_URL}/history/resumes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: defaultUserId,
+        title: `${payload.candidateContext.targetRole} resume snapshot`,
+        source: resumeSource,
+        rawText: payload.resumeText,
+        normalizedText: structuredResume ? formatStructuredResume(structuredResume) : payload.resumeText,
+        structuredResume,
+      }),
+    });
+    if (!resumeResponse.ok) throw new Error("Resume history save failed");
+    const resumeRecord = await resumeResponse.json() as HistoryResumeRecord;
+
+    const jdResponse = await fetch(`${API_BASE_URL}/history/job-descriptions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: defaultUserId,
+        title: parsedJd?.roleTitle || payload.candidateContext.targetRole,
+        company: null,
+        rawText: payload.jobDescriptionText,
+        normalizedText: parsedJd ? formatParsedJd(parsedJd) : payload.jobDescriptionText,
+        parsedJobDescription: parsedJd,
+      }),
+    });
+    if (!jdResponse.ok) throw new Error("JD history save failed");
+    const jdRecord = await jdResponse.json() as HistoryJobDescriptionRecord;
+
+    const analysisResponse = await fetch(`${API_BASE_URL}/history/analyses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: defaultUserId,
+        title: `${payload.candidateContext.targetRole} - ${analysis.technicalMatchScore}%`,
+        resumeId: resumeRecord.id,
+        jobDescriptionId: jdRecord.id,
+        request: payload,
+        response: analysis,
+      }),
+    });
+    if (!analysisResponse.ok) throw new Error("Analysis history save failed");
+    return await analysisResponse.json() as HistoryAnalysisRecord;
+  }
+
+  async function savePreparationSession(preparation: PreparationIntelligence) {
+    await ensureLocalUser();
+    const response = await fetch(`${API_BASE_URL}/history/preparation-sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: defaultUserId,
+        analysisId: lastSavedAnalysisId,
+        title: `${preparation.dailyPlan.length}-day preparation plan`,
+        status: "planned",
+        plan: preparation,
+      }),
+    });
+    if (!response.ok) throw new Error("Preparation history save failed");
+  }
+
   async function analyze() {
     setLoading(true);
     setError("");
@@ -240,8 +339,16 @@ function App() {
         throw new Error(details || "Analysis failed");
       }
 
+      const analysis = await response.json() as AnalysisResponse;
       setLastAnalysisRequest(payload);
-      setResult((await response.json()) as AnalysisResponse);
+      setResult(analysis);
+      try {
+        const saved = await saveHistorySnapshot(payload, analysis);
+        setLastSavedAnalysisId(saved.id);
+        setHistoryInfo("Saved latest resume, JD, and match report to history.");
+      } catch (historyError) {
+        setHistoryInfo(historyError instanceof Error ? historyError.message : "History save failed.");
+      }
       setActiveTask("report");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -278,7 +385,12 @@ function App() {
 
       const preparation = await response.json() as PreparationIntelligence;
       setResult({ ...result, preparationIntelligence: preparation });
-      setPreparationInfo(`Built a ${preparation.dailyPlan.length}-day preparation plan from the latest match result.`);
+      try {
+        await savePreparationSession(preparation);
+        setPreparationInfo(`Built and saved a ${preparation.dailyPlan.length}-day preparation plan from the latest match result.`);
+      } catch (historyError) {
+        setPreparationInfo(`Built a ${preparation.dailyPlan.length}-day preparation plan, but history save failed.`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preparation build failed");
     } finally {
@@ -539,6 +651,7 @@ function App() {
                 </div>
                 {normalizeInfo && <p className="hint">{normalizeInfo}</p>}
                 {jdParseInfo && <p className="hint">{jdParseInfo}</p>}
+                {historyInfo && <p className="hint">{historyInfo}</p>}
                 {error && <p className="error">{error}</p>}
               </form>
             </TaskPanel>
@@ -607,6 +720,7 @@ function App() {
               title="Analysis Report"
               description="This is the saved-report shape we will persist per user in the next backend phase."
             >
+              {historyInfo && <p className="hint">{historyInfo}</p>}
               {!result ? <EmptyState /> : <Results result={result} />}
             </TaskPanel>
           )}
