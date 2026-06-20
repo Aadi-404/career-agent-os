@@ -58,6 +58,9 @@ def _analyze_with_llm(request: AnalyzeRequest, include_preparation: bool) -> Ana
     else:
         response.sevenDayPlan = []
         response.preparationIntelligence = None
+        response.resumeImprovements = []
+        response.interviewQuestions = []
+        response.crossQuestions = []
     response.debug = DebugInfo(
         mode="llm",
         provider=provider,
@@ -110,9 +113,9 @@ def _analyze_with_mock(request: AnalyzeRequest, include_preparation: bool) -> An
         matchingSkills=_mock_matching_skills(scoring.requirement_matches),
         weaklyEvidencedSkills=_mock_weakly_evidenced_skills(scoring.requirement_matches),
         missingSkills=_mock_missing_skills(scoring.requirement_matches),
-        resumeImprovements=_mock_resume_improvements(scoring.requirement_matches),
-        interviewQuestions=_mock_interview_questions(scoring.requirement_matches),
-        crossQuestions=_mock_cross_questions(scoring.requirement_matches),
+        resumeImprovements=_mock_resume_improvements(scoring.requirement_matches) if include_preparation else [],
+        interviewQuestions=_mock_interview_questions(scoring.requirement_matches) if include_preparation else [],
+        crossQuestions=_mock_cross_questions(scoring.requirement_matches) if include_preparation else [],
         systemDesignReadiness=_mock_system_design_readiness(scoring.requirement_matches),
         sevenDayPlan=_build_preparation_plan(request.preparationPlanDays) if include_preparation else [],
         debug=DebugInfo(

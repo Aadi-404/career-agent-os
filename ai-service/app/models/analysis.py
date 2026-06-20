@@ -40,6 +40,12 @@ class PreparationBuildRequest(BaseModel):
     preparationPlanDays: int = Field(default=7, ge=1, le=30)
 
 
+class OptionalArtifactBuildRequest(BaseModel):
+    sourceRequest: AnalyzeRequest
+    analysis: "AnalysisResponse"
+    limit: int = Field(default=8, ge=1, le=20)
+
+
 class MatchingSkill(BaseModel):
     skill: str
     evidenceFromResume: str

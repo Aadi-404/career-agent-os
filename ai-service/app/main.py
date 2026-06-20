@@ -3,7 +3,16 @@ from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import initialize_database
-from app.models.analysis import AnalyzeRequest, AnalysisResponse, PreparationBuildRequest, PreparationIntelligence
+from app.models.analysis import (
+    AnalyzeRequest,
+    AnalysisResponse,
+    CrossQuestion,
+    InterviewQuestion,
+    OptionalArtifactBuildRequest,
+    PreparationBuildRequest,
+    PreparationIntelligence,
+    ResumeImprovement,
+)
 from app.models.history import (
     AnalysisRecord,
     AnalysisSaveRequest,
@@ -34,6 +43,11 @@ from app.services.history_store import (
     save_resume,
 )
 from app.services.jd_parser import parse_jd
+from app.services.optional_artifact_service import (
+    build_cross_questions,
+    build_interview_questions,
+    build_resume_improvements,
+)
 from app.services.preparation_service import build_preparation_intelligence
 from app.services.resume_extractor import extract_resume
 from app.services.resume_normalizer import normalize_resume
@@ -77,6 +91,21 @@ def build_preparation(request: PreparationBuildRequest) -> PreparationIntelligen
         request.analysis.requirementMatches,
         request.analysis.scoreBreakdown,
     )
+
+
+@app.post("/ai/resume-improvements/build", response_model=list[ResumeImprovement])
+def build_resume_improvement_artifacts(request: OptionalArtifactBuildRequest) -> list[ResumeImprovement]:
+    return build_resume_improvements(request.sourceRequest, request.analysis, request.limit)
+
+
+@app.post("/ai/interview-questions/build", response_model=list[InterviewQuestion])
+def build_interview_question_artifacts(request: OptionalArtifactBuildRequest) -> list[InterviewQuestion]:
+    return build_interview_questions(request.sourceRequest, request.analysis, request.limit)
+
+
+@app.post("/ai/cross-questions/build", response_model=list[CrossQuestion])
+def build_cross_question_artifacts(request: OptionalArtifactBuildRequest) -> list[CrossQuestion]:
+    return build_cross_questions(request.sourceRequest, request.analysis, request.limit)
 
 
 @app.post("/ai/resume/extract", response_model=ResumeExtractResponse)

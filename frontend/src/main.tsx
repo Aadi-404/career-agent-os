@@ -233,6 +233,7 @@ function App() {
   const [lastSavedAnalysisId, setLastSavedAnalysisId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
+  const [artifactLoading, setArtifactLoading] = useState("");
   const [error, setError] = useState("");
   const [preparationInfo, setPreparationInfo] = useState("");
   const [historyInfo, setHistoryInfo] = useState("");
@@ -465,6 +466,44 @@ function App() {
       setError(err instanceof Error ? err.message : "Preparation build failed");
     } finally {
       setPreparing(false);
+    }
+  }
+
+  async function buildOptionalArtifact(
+    label: string,
+    endpoint: string,
+    applyResult: (current: AnalysisResponse, payload: unknown) => AnalysisResponse,
+  ) {
+    if (!result || !lastAnalysisRequest) {
+      setError("Run resume matching before generating optional artifacts.");
+      return;
+    }
+
+    setArtifactLoading(label);
+    setError("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceRequest: lastAnalysisRequest,
+          analysis: result,
+          limit: 8,
+        }),
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(details || `${label} generation failed`);
+      }
+
+      const payload = await response.json();
+      setResult(applyResult(result, payload));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `${label} generation failed`);
+    } finally {
+      setArtifactLoading("");
     }
   }
 
@@ -788,9 +827,50 @@ function App() {
             <TaskPanel
               eyebrow="Task 1 output"
               title="Analysis Report"
-              description="This is the saved-report shape we will persist per user in the next backend phase."
+              description="Mandatory match output only. Generate coaching artifacts separately when needed."
             >
               {historyInfo && <p className="hint">{historyInfo}</p>}
+              {result && (
+                <div className="actionBar">
+                  <button
+                    type="button"
+                    className="secondaryButton"
+                    disabled={Boolean(artifactLoading)}
+                    onClick={() => buildOptionalArtifact(
+                      "Resume improvements",
+                      "/ai/resume-improvements/build",
+                      (current, payload) => ({ ...current, resumeImprovements: payload as AnalysisResponse["resumeImprovements"] }),
+                    )}
+                  >
+                    {artifactLoading === "Resume improvements" ? "Generating..." : "Generate Resume Improvements"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondaryButton"
+                    disabled={Boolean(artifactLoading)}
+                    onClick={() => buildOptionalArtifact(
+                      "Interview questions",
+                      "/ai/interview-questions/build",
+                      (current, payload) => ({ ...current, interviewQuestions: payload as AnalysisResponse["interviewQuestions"] }),
+                    )}
+                  >
+                    {artifactLoading === "Interview questions" ? "Generating..." : "Generate Interview Questions"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondaryButton"
+                    disabled={Boolean(artifactLoading)}
+                    onClick={() => buildOptionalArtifact(
+                      "Cross questions",
+                      "/ai/cross-questions/build",
+                      (current, payload) => ({ ...current, crossQuestions: payload as AnalysisResponse["crossQuestions"] }),
+                    )}
+                  >
+                    {artifactLoading === "Cross questions" ? "Generating..." : "Generate Cross Questions"}
+                  </button>
+                </div>
+              )}
+              {error && <p className="error">{error}</p>}
               {!result ? <EmptyState /> : <Results result={result} />}
             </TaskPanel>
           )}
@@ -1193,9 +1273,9 @@ function Results({ result }: { result: AnalysisResponse }) {
       <Card title="Matching Skills" items={result.matchingSkills.map((item) => `${item.skill}: ${item.evidenceFromResume}`)} />
       <Card title="Weakly Evidenced Skills" items={result.weaklyEvidencedSkills.map((item) => `${item.skill}: ${item.whyWeak}`)} />
       <Card title="Missing Skills" items={result.missingSkills.map((item) => `${item.skill} (${item.importance}): ${item.howToPrepare}`)} />
-      <Card title="Resume Improvements" items={result.resumeImprovements.map((item) => `${item.suggestedBullet} Reason: ${item.reason}`)} />
-      <Card title="Interview Questions" items={result.interviewQuestions.map((item) => `${item.topic}: ${item.question}`)} />
-      <Card title="Cross-Questions" items={result.crossQuestions.map((item) => `${item.question} Hint: ${item.expectedAnswerHint}`)} />
+      {result.resumeImprovements.length > 0 && <Card title="Resume Improvements" items={result.resumeImprovements.map((item) => `${item.suggestedBullet} Reason: ${item.reason}`)} />}
+      {result.interviewQuestions.length > 0 && <Card title="Interview Questions" items={result.interviewQuestions.map((item) => `${item.topic}: ${item.question}`)} />}
+      {result.crossQuestions.length > 0 && <Card title="Cross-Questions" items={result.crossQuestions.map((item) => `${item.question} Hint: ${item.expectedAnswerHint}`)} />}
       {result.debug && <DebugPanel debug={result.debug} />}
       <div className="panel">
         <h3>System Design Readiness: {result.systemDesignReadiness.level}</h3>
