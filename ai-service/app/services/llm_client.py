@@ -77,8 +77,8 @@ def _call_openai_compatible(base_url: str, prompt: str, settings: Settings, api_
             raise HTTPException(
                 status_code=502,
                 detail=(
-                    f"Gemini model not found: {model}. Select a current Gemini API model "
-                    "such as gemini-3.5-flash, gemini-2.5-flash, or gemini-2.5-flash-lite."
+                    f"{provider_name(base_url)} model not found: {model}. "
+                    "Select a model that is available for this provider and API key."
                 ),
             ) from exc
         raise HTTPException(status_code=502, detail=f"LLM provider error: {exc.response.text}") from exc
@@ -87,6 +87,14 @@ def _call_openai_compatible(base_url: str, prompt: str, settings: Settings, api_
 
     data = response.json()
     return data["choices"][0]["message"]["content"]
+
+
+def provider_name(base_url: str) -> str:
+    if "groq.com" in base_url:
+        return "Groq"
+    if "openai.com" in base_url:
+        return "OpenAI"
+    return "LLM provider"
 
 
 def _call_gemini(prompt: str, settings: Settings, api_key: str, model: str) -> str:
