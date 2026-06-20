@@ -72,10 +72,14 @@ def normalize_resume(request: ResumeNormalizeRequest) -> ResumeNormalizeResponse
     cleaned_lines = _clean_lines(request.rawResumeText)
     sections = _split_sections(cleaned_lines)
     profile = _extract_profile(cleaned_lines, sections)
+    experience = _extract_experience(sections.get("experience", []))
+    projects = _extract_projects(sections.get("projects", []))
+    if not projects:
+        projects = _extract_project_fallback(cleaned_lines, experience)
     structured = StructuredResume(
         profile=profile,
-        experience=_extract_experience(sections.get("experience", [])),
-        projects=_extract_projects(sections.get("projects", [])),
+        experience=experience,
+        projects=projects,
         skills=_extract_skills(cleaned_lines, sections.get("skills", [])),
         education=_extract_education(sections.get("education", [])),
         achievements=_extract_simple_items(sections.get("achievements", [])),
@@ -101,6 +105,7 @@ def _clean_lines(text: str) -> list[str]:
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
+    text = text.replace("–", "-").replace("—", "-").replace("â€“", "-").replace("â€”", "-")
     text = re.sub(r"(?i)(github)\s*(github\.com)", r"\1 \2", text)
     text = re.sub(r"(?i)(linkedin)\s*(linkedin\.com)", r"\1 \2", text)
     text = re.sub(r"(?i)\b(phone|mobile|email|mail|envelope|marker-alt)\b", r" \1 ", text)
@@ -114,6 +119,7 @@ def _clean_lines(text: str) -> list[str]:
             r"\1 \2",
             line,
         )
+        line = re.sub(r"(?i)\bnavi\s*-\s*mumbai\b", "Navi Mumbai", line)
         line = re.sub(r"^[-•]\s*", "", line).strip()
         if line:
             lines.append(line)
@@ -194,11 +200,12 @@ def _extract_experience(lines: list[str]) -> list[ResumeExperience]:
     if not lines:
         return []
 
-    title = _clean_experience_title(lines[0]) if lines else None
-    company = _extract_company(lines)
-    duration = _find_duration(lines)
-    location = _find_location(lines, company)
-    highlights = _extract_highlights(lines[2:])
+    expanded_lines = _expand_experience_lines(lines)
+    title = _extract_experience_title(expanded_lines)
+    company = _extract_company(expanded_lines)
+    duration = _find_duration(expanded_lines)
+    location = _find_location(expanded_lines, company)
+    highlights = _extract_highlights(_experience_detail_lines(expanded_lines))
 
     return [
         ResumeExperience(
@@ -238,6 +245,34 @@ def _extract_projects(lines: list[str]) -> list[ResumeProject]:
         projects.append(_build_project(current_name, current_duration, current_lines))
 
     return projects
+
+
+def _extract_project_fallback(all_lines: list[str], experience: list[ResumeExperience]) -> list[ResumeProject]:
+    candidate_lines = []
+    for item in experience:
+        candidate_lines.extend(item.highlights)
+    candidate_lines.extend(
+        line
+        for line in all_lines
+        if _looks_like_project_achievement(line) and not _looks_like_certification_line(line) and not (_find_duration([line]) and "|" in line)
+    )
+
+    projects_by_name: dict[str, ResumeProject] = {}
+    for line in _dedupe_preserve_order(candidate_lines):
+        name = _infer_project_name(line)
+        if not name:
+            continue
+        if name in projects_by_name:
+            projects_by_name[name].highlights.append(_sentence(line))
+            projects_by_name[name].techStack = _dedupe_preserve_order([*projects_by_name[name].techStack, *_extract_project_tech_stack([line])])
+            continue
+        projects_by_name[name] = ResumeProject(
+                name=name,
+                duration=None,
+                techStack=_extract_project_tech_stack([line]),
+                highlights=[_sentence(line)],
+        )
+    return list(projects_by_name.values())[:4]
 
 
 def _build_project(name: str, duration: str | None, lines: list[str]) -> ResumeProject:
@@ -290,7 +325,7 @@ def _looks_like_new_education_item(line: str) -> bool:
 
 
 def _extract_certifications(section_lines: list[str], all_lines: list[str]) -> list[str]:
-    candidates = _extract_simple_items(section_lines)
+    candidates = [line for line in _extract_simple_items(section_lines) if _looks_like_certification_line(line)]
     certification_patterns = [
         r"\b(?:az|ai|dp|pl|sc|ms)-\d{3}\b",
         r"\baws certified\b[^,\n]*",
@@ -303,7 +338,7 @@ def _extract_certifications(section_lines: list[str], all_lines: list[str]) -> l
         if _match_section_header(line):
             continue
         lowered = line.lower()
-        if any(keyword in lowered for keyword in ["certified", "certification", "certificate", "az-900", "aws certified"]):
+        if _looks_like_certification_line(line):
             candidates.append(line)
             continue
         for pattern in certification_patterns:
@@ -312,7 +347,7 @@ def _extract_certifications(section_lines: list[str], all_lines: list[str]) -> l
                 break
     evidence_text = "\n".join([*candidates, *all_lines])
     candidates.extend(item.raw_text for item in extract_certificate_evidence(evidence_text))
-    return _dedupe_preserve_order([item for item in candidates if not _looks_like_contact_line(item)])
+    return _dedupe_preserve_order([item for item in candidates if _looks_like_certification_line(item) and not _looks_like_contact_line(item)])
 
 
 def _extract_project_tech_stack(lines: list[str]) -> list[str]:
@@ -353,6 +388,10 @@ def _extract_highlights(lines: list[str]) -> list[str]:
         "enabled",
         "enables",
         "web app",
+        "data validation",
+        "dashboard",
+        "etl",
+        "ai agent",
     )
 
     for line in lines:
@@ -363,8 +402,10 @@ def _extract_highlights(lines: list[str]) -> list[str]:
         if pending_prefix:
             line = f"{pending_prefix} {line}"
             pending_prefix = ""
-        if len(line.split()) >= 3 and (lowered.startswith(action_words) or any(word in lowered for word in action_words)):
-            highlights.append(_sentence(line))
+        for sentence in _split_compound_sentences(line):
+            sentence_lowered = sentence.lower()
+            if len(sentence.split()) >= 3 and (sentence_lowered.startswith(action_words) or any(word in sentence_lowered for word in action_words)):
+                highlights.append(_sentence(sentence))
 
     return highlights[:8]
 
@@ -394,6 +435,16 @@ def _find_duration(lines: list[str]) -> str | None:
 
 
 def _extract_company(lines: list[str]) -> str | None:
+    if len(lines) >= 2 and lines[1].lower().startswith("title"):
+        return lines[0].strip(" ,|-") or None
+    if len(lines) >= 3 and _find_duration([lines[1]]) and lines[2].lower().startswith("title"):
+        return lines[0].strip(" ,|-") or None
+    for line in lines[:3]:
+        if _find_duration([line]):
+            before_duration = _before_duration(line)
+            cleaned = re.sub(r"(?i)^company\s*[-:>]*\s*", "", before_duration).strip(" ,|-")
+            if cleaned:
+                return cleaned
     if len(lines) < 2:
         return None
     company_line = _remove_duration(lines[1])
@@ -410,6 +461,72 @@ def _find_location(lines: list[str], company: str | None = None) -> str | None:
         if location:
             return location
     return None
+
+
+def _extract_experience_title(lines: list[str]) -> str | None:
+    for line in lines[:6]:
+        lowered = line.lower()
+        if lowered.startswith("title"):
+            return _clean_experience_title(line)
+    for line in lines[:6]:
+        if _find_duration([line]) and "-" in line:
+            after_duration = _after_duration(line)
+            title_part = re.split(r"\||\b(?:navi\s+)?mumbai|pune|bangalore|bengaluru|hyderabad|delhi\b", after_duration, flags=re.IGNORECASE)[0]
+            title_part = title_part.strip(" ,|-")
+            if title_part and not _looks_like_detail(title_part):
+                return title_part
+    return _clean_experience_title(lines[0]) if lines else None
+
+
+def _experience_detail_lines(lines: list[str]) -> list[str]:
+    details = []
+    for line in lines:
+        for part in _split_compound_sentences(line):
+            if _looks_like_detail(part) or _looks_like_project_achievement(part):
+                details.append(part)
+    return details or lines[2:]
+
+
+def _expand_experience_lines(lines: list[str]) -> list[str]:
+    expanded = []
+    for line in lines:
+        if _find_duration([line]) and any(token in line.lower() for token in [" - ", "|", " built ", " designed ", " developed "]):
+            expanded.extend(_split_experience_compound_line(line))
+        else:
+            expanded.append(line)
+    return [line for line in expanded if line.strip()]
+
+
+def _split_experience_compound_line(line: str) -> list[str]:
+    duration = _find_duration([line])
+    if not duration:
+        return [line]
+
+    before = _before_duration(line).strip(" ,|-")
+    after = _after_duration(line).strip(" ,|-")
+    parts = [before] if before else []
+    parts.append(duration)
+
+    title_part = after
+    location_part = ""
+    if "|" in after:
+        title_part, location_part = [part.strip(" ,|-") for part in after.split("|", 1)]
+    else:
+        location_match = re.search(r"\b(?:navi\s+)?mumbai|pune|bangalore|bengaluru|hyderabad|delhi\b(?:\s*,?\s*india)?", after, flags=re.IGNORECASE)
+        if location_match:
+            title_part = after[: location_match.start()].strip(" ,|-")
+            location_part = after[location_match.start() :].strip(" ,|-")
+
+    if title_part:
+        parts.append(f"Title: {title_part}")
+    if location_part:
+        location_only = re.split(r"\s+-\s+", location_part, maxsplit=1)[0].strip(" ,|-")
+        parts.append(location_only)
+
+    details_source = re.split(r"\s+-\s+", after, maxsplit=2)
+    for detail in (details_source[2:] if len(details_source) > 2 else []):
+        parts.extend(_split_compound_sentences(detail))
+    return parts
 
 
 def _clean_experience_title(line: str) -> str:
@@ -429,6 +546,76 @@ def _remove_duration(line: str) -> str:
         flags=re.IGNORECASE,
     )
     return line.strip(" ,|-")
+
+
+def _before_duration(line: str) -> str:
+    duration = _find_duration([line])
+    if not duration:
+        return line
+    match = re.search(re.escape(duration).replace("\\ \\-\\ ", r"\s*-\s*"), line, flags=re.IGNORECASE)
+    return line[: match.start()] if match else line.split(duration, 1)[0]
+
+
+def _after_duration(line: str) -> str:
+    duration = _find_duration([line])
+    if not duration:
+        return line
+    pattern = re.escape(duration).replace("\\ \\-\\ ", r"\s*-\s*")
+    match = re.search(pattern, line, flags=re.IGNORECASE)
+    return line[match.end() :] if match else line.split(duration, 1)[-1]
+
+
+def _split_compound_sentences(line: str) -> list[str]:
+    cleaned = re.sub(r"\s+-\s+(?=(?:built|designed|developed|delivered|created|reduced|cutting|eliminating|improving|and data validation)\b)", "\n", line, flags=re.IGNORECASE)
+    parts = re.split(r"\n|(?<=[.])\s+", cleaned)
+    return [part.strip(" -") for part in parts if part.strip(" -")]
+
+
+def _looks_like_certification_line(line: str) -> bool:
+    lowered = line.lower()
+    if lowered.strip(" :-") in {"certification", "certifications", "certificate", "certificates"}:
+        return False
+    if lowered.startswith(("holds multiple", "validating deep expertise")):
+        return False
+    return bool(
+        re.search(r"\b(?:az|ai|dp|pl|sc|ms)-\d{3}\b", lowered)
+        or "certified" in lowered
+        or "certification" in lowered
+        or "certificate" in lowered
+    )
+
+
+def _looks_like_project_achievement(line: str) -> bool:
+    lowered = line.lower()
+    project_terms = [
+        "web application",
+        "web applications",
+        "etl",
+        "dashboard",
+        "dashboards",
+        "ai agent",
+        "ai agents",
+        "automation workflow",
+        "data validation",
+        "unified interface",
+        "api",
+        "apis",
+    ]
+    action_terms = ["built", "designed", "developed", "deployed", "reduced", "cutting", "eliminating", "processing"]
+    return any(term in lowered for term in project_terms) and any(term in lowered for term in action_terms)
+
+
+def _infer_project_name(line: str) -> str | None:
+    lowered = line.lower()
+    if "etl" in lowered or "dashboard" in lowered or "power bi" in lowered:
+        return "ETL and Power BI Reporting"
+    if "ai agent" in lowered or "automation workflow" in lowered:
+        return "AI Agents and Automation Workflows"
+    if "data validation" in lowered or "unified interface" in lowered or "cross-database" in lowered:
+        return "Data Validation Interface"
+    if "web application" in lowered or "web applications" in lowered or "api" in lowered:
+        return "Enterprise Web Applications"
+    return None
 
 
 def _looks_like_title(line: str) -> bool:
