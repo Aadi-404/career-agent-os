@@ -612,6 +612,23 @@ h1 {
   white-space: nowrap;
 }
 
+.opportunityHistoryItem {
+  grid-template-columns: minmax(0, 1fr) auto auto minmax(130px, 160px);
+}
+
+.opportunityHistoryItem p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.opportunityHistoryItem select {
+  min-height: 38px;
+  padding: 8px 10px;
+  text-transform: capitalize;
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1457,6 +1474,10 @@ pre {
   }
 
   .historyItem {
+    grid-template-columns: 1fr;
+  }
+
+  .opportunityHistoryItem {
     grid-template-columns: 1fr;
   }
 }

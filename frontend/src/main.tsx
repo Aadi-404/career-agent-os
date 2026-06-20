@@ -133,11 +133,28 @@ type HistoryPreparationRecord = {
   plan: PreparationIntelligence;
 };
 
+type JobOpportunityStatus = "viewed" | "shortlisted" | "applied" | "interview" | "rejected" | "offer" | "archived";
+
+type HistoryJobOpportunityRecord = {
+  id: string;
+  title: string;
+  company?: string | null;
+  location?: string | null;
+  url?: string | null;
+  description: string;
+  status: JobOpportunityStatus;
+  technicalMatchScore?: number | null;
+  fitCategory?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type WorkspaceSummary = {
   resumeCount: number;
   jobDescriptionCount: number;
   analysisCount: number;
   preparationSessionCount: number;
+  jobOpportunityCount: number;
   latestAnalysis?: HistoryAnalysisRecord | null;
 };
 
@@ -195,6 +212,8 @@ const modelOptions: Record<LlmProvider, string[]> = {
   gemini: ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest"],
 };
 
+const jobOpportunityStatuses: JobOpportunityStatus[] = ["viewed", "shortlisted", "applied", "interview", "rejected", "offer", "archived"];
+
 const defaultResume =
   "3 years .NET fullstack developer at Capgemini. Worked on ASP.NET Core APIs, SQL Server, React UI changes, bug fixes, production support, API integration, and Agile delivery. Familiar with Java, Python, C++, and basic cloud concepts.";
 
@@ -251,6 +270,7 @@ function App() {
   const [resumeHistory, setResumeHistory] = useState<HistoryResumeRecord[]>([]);
   const [jdHistory, setJdHistory] = useState<HistoryJobDescriptionRecord[]>([]);
   const [preparationHistory, setPreparationHistory] = useState<HistoryPreparationRecord[]>([]);
+  const [jobOpportunityHistory, setJobOpportunityHistory] = useState<HistoryJobOpportunityRecord[]>([]);
 
   useEffect(() => {
     ensureLocalUser().catch(() => {
@@ -400,15 +420,16 @@ function App() {
     setHistoryInfo("");
     try {
       await ensureLocalUser();
-      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse] = await Promise.all([
+      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/history/users/${defaultUserId}/workspace`),
         fetch(`${API_BASE_URL}/history/users/${defaultUserId}/analyses`),
         fetch(`${API_BASE_URL}/history/users/${defaultUserId}/resumes`),
         fetch(`${API_BASE_URL}/history/users/${defaultUserId}/job-descriptions`),
         fetch(`${API_BASE_URL}/history/users/${defaultUserId}/preparation-sessions`),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/job-opportunities`),
       ]);
 
-      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok) {
+      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok) {
         throw new Error("History load failed");
       }
 
@@ -417,11 +438,29 @@ function App() {
       setResumeHistory(await resumesResponse.json() as HistoryResumeRecord[]);
       setJdHistory(await jdsResponse.json() as HistoryJobDescriptionRecord[]);
       setPreparationHistory(await preparationsResponse.json() as HistoryPreparationRecord[]);
+      setJobOpportunityHistory(await opportunitiesResponse.json() as HistoryJobOpportunityRecord[]);
       setHistoryInfo("Loaded saved PostgreSQL history.");
     } catch (err) {
       setHistoryInfo(err instanceof Error ? err.message : "History load failed");
     } finally {
       setHistoryLoading(false);
+    }
+  }
+
+  async function updateJobOpportunityStatus(jobOpportunityId: string, status: JobOpportunityStatus) {
+    setHistoryInfo("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/history/job-opportunities/${jobOpportunityId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) throw new Error("Opportunity status update failed");
+      const updated = await response.json() as HistoryJobOpportunityRecord;
+      setJobOpportunityHistory((items) => items.map((item) => item.id === updated.id ? updated : item));
+      setHistoryInfo(`Updated ${updated.title} to ${updated.status}.`);
+    } catch (err) {
+      setHistoryInfo(err instanceof Error ? err.message : "Opportunity status update failed");
     }
   }
 
@@ -1126,7 +1165,9 @@ function App() {
                 resumes={resumeHistory}
                 jobDescriptions={jdHistory}
                 preparations={preparationHistory}
+                opportunities={jobOpportunityHistory}
                 currentResult={result}
+                onOpportunityStatusChange={updateJobOpportunityStatus}
               />
             </TaskPanel>
           )}
@@ -1353,14 +1394,18 @@ function HistoryPanel({
   resumes,
   jobDescriptions,
   preparations,
+  opportunities,
   currentResult,
+  onOpportunityStatusChange,
 }: {
   summary: WorkspaceSummary | null;
   analyses: HistoryAnalysisRecord[];
   resumes: HistoryResumeRecord[];
   jobDescriptions: HistoryJobDescriptionRecord[];
   preparations: HistoryPreparationRecord[];
+  opportunities: HistoryJobOpportunityRecord[];
   currentResult: AnalysisResponse | null;
+  onOpportunityStatusChange: (jobOpportunityId: string, status: JobOpportunityStatus) => void;
 }) {
   return (
     <div className="historyGrid">
@@ -1371,6 +1416,7 @@ function HistoryPanel({
           <div className="scoreTile"><span>JDs</span><strong>{summary?.jobDescriptionCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Reports</span><strong>{summary?.analysisCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Plans</span><strong>{summary?.preparationSessionCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Jobs</span><strong>{summary?.jobOpportunityCount ?? 0}</strong></div>
         </div>
       </div>
 
@@ -1403,6 +1449,36 @@ function HistoryPanel({
           </div>
         ) : (
           <p className="hint">No saved match reports yet.</p>
+        )}
+      </div>
+
+      <div className="panel historyWide">
+        <h3>Job Opportunities</h3>
+        {opportunities.length ? (
+          <div className="historyList">
+            {opportunities.slice(0, 10).map((opportunity) => (
+              <div className="historyItem opportunityHistoryItem" key={opportunity.id}>
+                <div>
+                  <strong>{opportunity.title}</strong>
+                  <small>
+                    {[opportunity.company, opportunity.location, formatDate(opportunity.createdAt)].filter(Boolean).join(" - ")}
+                  </small>
+                  <p>{opportunity.description.slice(0, 180)}{opportunity.description.length > 180 ? "..." : ""}</p>
+                </div>
+                <span>{opportunity.technicalMatchScore ?? "--"}%</span>
+                <em>{opportunity.fitCategory ?? "Not scored"}</em>
+                <select
+                  aria-label={`Status for ${opportunity.title}`}
+                  value={opportunity.status}
+                  onChange={(event) => onOpportunityStatusChange(opportunity.id, event.target.value as JobOpportunityStatus)}
+                >
+                  {jobOpportunityStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="hint">No saved job opportunities yet. Extension matches will appear here.</p>
         )}
       </div>
 

@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -6,6 +6,7 @@ from app.db import initialize_database
 from app.models.analysis import (
     AnalyzeRequest,
     AnalysisResponse,
+    CandidateContext,
     CrossQuestion,
     InterviewQuestion,
     OptionalArtifactBuildRequest,
@@ -13,6 +14,7 @@ from app.models.analysis import (
     PreparationIntelligence,
     ResumeImprovement,
 )
+from app.models.extension import ExtensionMatchRequest, ExtensionMatchResponse
 from app.models.history import (
     AnonymousSessionCreateRequest,
     AnonymousSessionRecord,
@@ -38,6 +40,7 @@ from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.history_store import (
     create_or_touch_anonymous_session,
     create_or_update_user,
+    get_resume,
     get_workspace_summary,
     list_analyses,
     list_job_descriptions,
@@ -91,6 +94,50 @@ def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 @app.post("/ai/resume-jd/match", response_model=AnalysisResponse)
 def match(request: AnalyzeRequest) -> AnalysisResponse:
     return match_resume_jd(request)
+
+
+@app.post("/extension/jobs/match", response_model=ExtensionMatchResponse)
+def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchResponse:
+    if request.anonymousSessionId:
+        create_or_touch_anonymous_session(AnonymousSessionCreateRequest(anonymousSessionId=request.anonymousSessionId))
+
+    resume_text = request.resumeText
+    if request.resumeId:
+        if not request.userId:
+            raise HTTPException(status_code=400, detail="userId is required when resumeId is provided")
+        resume = get_resume(request.userId, request.resumeId)
+        resume_text = resume.normalizedText or resume.rawText
+
+    if not resume_text:
+        raise HTTPException(status_code=400, detail="Either resumeId or resumeText is required")
+
+    analysis_request = AnalyzeRequest(
+        resumeText=resume_text,
+        jobDescriptionText=request.job.description,
+        candidateContext=request.candidateContext or _default_extension_candidate_context(request),
+        llmOptions=request.llmOptions,
+        preparationPlanDays=request.preparationPlanDays,
+    )
+    analysis = match_resume_jd(analysis_request)
+    opportunity = None
+    if request.saveOpportunity:
+        opportunity = save_job_opportunity(
+            JobOpportunitySaveRequest(
+                userId=request.userId,
+                anonymousSessionId=request.anonymousSessionId,
+                resumeId=request.resumeId,
+                title=request.job.title,
+                company=request.job.company,
+                location=request.job.location,
+                url=request.job.url,
+                description=request.job.description,
+                status=request.status,
+                technicalMatchScore=analysis.technicalMatchScore,
+                fitCategory=analysis.fitCategory,
+                analysisResponse=analysis,
+            )
+        )
+    return ExtensionMatchResponse(analysis=analysis, jobOpportunity=opportunity)
 
 
 @app.post("/ai/preparation/build", response_model=PreparationIntelligence)
@@ -209,3 +256,42 @@ def update_job_opportunity_status_record(
     request: JobOpportunityStatusUpdateRequest,
 ) -> JobOpportunityRecord:
     return update_job_opportunity_status(job_opportunity_id, request)
+
+
+def _default_extension_candidate_context(request: ExtensionMatchRequest) -> CandidateContext:
+    inferred_stack = _infer_stack_from_text(request.job.description)
+    return CandidateContext(
+        targetRole=request.job.title,
+        experienceYears=0,
+        currentStack=inferred_stack or ["general software engineering"],
+        targetMarket="Browser extension job matching",
+        currentLocation=request.job.location,
+        preferredLocations=[request.job.location] if request.job.location else [],
+        relocationOpen=False,
+    )
+
+
+def _infer_stack_from_text(text: str) -> list[str]:
+    known_terms = [
+        ".NET",
+        "AI",
+        "Angular",
+        "AWS",
+        "Azure",
+        "Django",
+        "Docker",
+        "FastAPI",
+        "GCP",
+        "Java",
+        "JavaScript",
+        "Kubernetes",
+        "Node",
+        "PostgreSQL",
+        "Python",
+        "React",
+        "SQL",
+        "Spring",
+        "TypeScript",
+    ]
+    lowered = text.lower()
+    return [term for term in known_terms if term.lower() in lowered][:12]

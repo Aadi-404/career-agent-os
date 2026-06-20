@@ -149,6 +149,16 @@ def list_resumes(user_id: str) -> list[ResumeRecord]:
     return [_resume_from_row(row) for row in rows]
 
 
+def get_resume(user_id: str, resume_id: str) -> ResumeRecord:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        row = connection.execute(
+            "SELECT * FROM resumes WHERE id = ? AND user_id = ?",
+            (resume_id, user_id),
+        ).fetchone()
+    return _resume_from_row(_require_row(row, "Resume record not found for this user"))
+
+
 def save_job_description(request: JobDescriptionSaveRequest) -> JobDescriptionRecord:
     now = _now()
     record_id = _id()
