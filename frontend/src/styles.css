@@ -22,12 +22,21 @@ textarea {
   padding: 32px;
 }
 
+.appShell {
+  width: min(1500px, 100%);
+}
+
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
   padding: 8px 0 28px;
+}
+
+.appHeader {
+  border-bottom: 1px solid #d7e0ea;
+  margin-bottom: 24px;
 }
 
 .eyebrow {
@@ -73,6 +82,199 @@ h1 {
   grid-template-columns: minmax(420px, 0.9fr) minmax(0, 1.1fr);
   gap: 24px;
   align-items: start;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.taskNav {
+  position: sticky;
+  top: 24px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+  box-shadow: 0 10px 28px rgba(22, 32, 51, 0.06);
+}
+
+.taskNavHeader {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid #d7e0ea;
+  padding: 4px 4px 14px;
+}
+
+.taskNavHeader span,
+.sectionHeading span {
+  color: #526070;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.taskNavHeader strong {
+  color: #162033;
+  font-size: 18px;
+}
+
+.taskButton {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  min-height: 74px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #162033;
+  padding: 12px;
+  text-align: left;
+}
+
+.taskButton:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.taskButton.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.taskButton span {
+  font-weight: 900;
+}
+
+.taskButton small {
+  grid-column: 1 / -1;
+  color: #526070;
+  line-height: 1.35;
+}
+
+.taskButton em {
+  grid-row: 1;
+  grid-column: 2;
+  align-self: start;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.taskButton.active em {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.taskSurface,
+.taskPanel,
+.taskForm,
+.reviewWorkspace {
+  display: grid;
+  gap: 18px;
+}
+
+.taskPanel {
+  min-width: 0;
+}
+
+.taskPanelHeader {
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 22px;
+  box-shadow: 0 10px 28px rgba(22, 32, 51, 0.06);
+}
+
+.taskPanelHeader h2 {
+  margin-bottom: 8px;
+}
+
+.taskPanelHeader p:last-child {
+  margin-bottom: 0;
+  color: #526070;
+  line-height: 1.5;
+}
+
+.formSection,
+.aiSpendPanel,
+.prepControls {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 18px;
+  box-shadow: 0 10px 28px rgba(22, 32, 51, 0.06);
+}
+
+.aiSpendPanel {
+  background: #f8fafc;
+}
+
+.aiSpendPanel h3,
+.sectionHeading h3 {
+  margin: 0;
+}
+
+.aiSpendPanel p:last-child {
+  margin-bottom: 0;
+  color: #526070;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.editorSplit {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.actionBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.actionBar button {
+  min-width: 170px;
+  padding: 0 16px;
+}
+
+.prepControls {
+  grid-template-columns: minmax(220px, 320px) auto;
+  align-items: end;
+}
+
+.placeholderGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.historyPreview {
+  display: grid;
+  gap: 10px;
+}
+
+.historyPreview strong {
+  color: #0f766e;
+  font-size: 24px;
 }
 
 .panel {
@@ -766,12 +968,30 @@ pre {
   }
 
   .header,
-  .layout {
+  .layout,
+  .workspace {
     grid-template-columns: 1fr;
   }
 
   .layout {
     display: grid;
+  }
+
+  .taskNav {
+    position: static;
+  }
+
+  .taskNav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .taskNavHeader {
+    grid-column: 1 / -1;
+  }
+
+  .editorSplit,
+  .placeholderGrid {
+    grid-template-columns: 1fr;
   }
 
   .inputPanel {
@@ -793,6 +1013,14 @@ pre {
   }
 
   .controlBand {
+    grid-template-columns: 1fr;
+  }
+
+  .taskNav {
+    grid-template-columns: 1fr;
+  }
+
+  .prepControls {
     grid-template-columns: 1fr;
   }
 

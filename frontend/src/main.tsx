@@ -74,6 +74,7 @@ type AnalysisResponse = {
 type LlmMode = "mock" | "live";
 type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
+type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history";
 
 type StructuredResume = {
   profile: {
@@ -135,6 +136,7 @@ const defaultJd =
   "Looking for a skilled .NET Developer with 2 to 5 years of experience in ASP.NET, .NET Core, C#, Web API, MVC and Azure Cloud Services. Strong knowledge of LINQ, Entity Framework, HTML, CSS, JavaScript, jQuery, Azure DevOps CI/CD pipelines, code compliance and enterprise application development.";
 
 function App() {
+  const [activeTask, setActiveTask] = useState<ActiveTask>("matching");
   const [resumeText, setResumeText] = useState(defaultResume);
   const [jobDescriptionText, setJobDescriptionText] = useState(defaultJd);
   const [targetRole, setTargetRole] = useState("Full Stack Developer with AI Integration");
@@ -205,6 +207,7 @@ function App() {
       }
 
       setResult((await response.json()) as AnalysisResponse);
+      setActiveTask("report");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -322,180 +325,497 @@ function App() {
     }
   }
 
+  const preparation = result?.preparationIntelligence ?? null;
+
   return (
-    <main className="shell">
-      <section className="header">
+    <main className="shell appShell">
+      <section className="header appHeader">
         <div>
-          <p className="eyebrow">Level 1</p>
+          <p className="eyebrow">Task-based career workspace</p>
           <h1>Career Agent OS</h1>
-          <p className="subtitle">Resume and JD technical fit analyzer for job switch preparation.</p>
+          <p className="subtitle">Separate resume matching, preparation planning, practice, progress, and history so each AI call has a clear purpose.</p>
         </div>
-        <div className="scorePreview">{result ? `${result.technicalMatchScore}%` : "Mock"}</div>
+        <div className="scorePreview">{result ? `${result.technicalMatchScore}%` : "No run"}</div>
       </section>
 
-      <section className="layout">
-        <form className="panel inputPanel" onSubmit={(event) => { event.preventDefault(); analyze(); }}>
-          <div className="controlBand">
-            <div>
-              <span className="fieldTitle">Analyzer mode</span>
-              <div className="segmented">
-                <button type="button" className={llmMode === "mock" ? "active" : ""} onClick={() => setLlmMode("mock")}>Mock</button>
-                <button type="button" className={llmMode === "live" ? "active" : ""} onClick={() => setLlmMode("live")}>Live LLM</button>
-              </div>
-            </div>
-            <label>
-              Provider
-              <select
-                value={llmProvider}
-                onChange={(event) => {
-                  const provider = event.target.value as LlmProvider;
-                  setLlmProvider(provider);
-                  setLlmModel(modelOptions[provider][0]);
-                }}
-              >
-                <option value="groq">Groq</option>
-                <option value="openai">OpenAI</option>
-                <option value="gemini">Gemini</option>
-              </select>
-            </label>
-            <label>
-              Model
-              <select value={llmModel} onChange={(event) => setLlmModel(event.target.value)}>
-                {modelOptions[llmProvider].map((model) => <option key={model} value={model}>{model}</option>)}
-              </select>
-            </label>
-          </div>
-          <div className="gridTwo">
-            <label>
-              Target role
-              <input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} />
-            </label>
-            <label>
-              Experience years
-              <input type="number" min={0} max={50} step="0.1" value={experienceYears} onChange={(event) => setExperienceYears(Number(event.target.value))} />
-            </label>
-          </div>
-          <label>
-            Preparation plan days
-            <input type="number" min={1} max={30} value={preparationPlanDays} onChange={(event) => setPreparationPlanDays(Math.max(1, Math.min(30, Number(event.target.value) || 7)))} />
-          </label>
-          <label>
-            Current stack
-            <input value={currentStack} onChange={(event) => setCurrentStack(event.target.value)} />
-          </label>
-          <label>
-            Target market
-            <input value={targetMarket} onChange={(event) => setTargetMarket(event.target.value)} />
-          </label>
-          <div className="gridTwo">
-            <label>
-              Current location
-              <input value={currentLocation} onChange={(event) => setCurrentLocation(event.target.value)} />
-            </label>
-            <label>
-              Notice days
-              <input type="number" min={0} max={365} value={noticePeriodDays} onChange={(event) => setNoticePeriodDays(Number(event.target.value))} />
-            </label>
-          </div>
-          <label>
-            Preferred locations
-            <input value={preferredLocations} onChange={(event) => setPreferredLocations(event.target.value)} />
-          </label>
-          <div className="gridTwo">
-            <label>
-              Current CTC LPA
-              <input type="number" min={0} step="0.1" value={currentCtcLpa} onChange={(event) => setCurrentCtcLpa(event.target.value)} />
-            </label>
-            <label>
-              Expected CTC LPA
-              <input type="number" min={0} step="0.1" value={expectedCtcLpa} onChange={(event) => setExpectedCtcLpa(event.target.value)} />
-            </label>
-          </div>
-          <label>
-            Work mode preference
-            <input value={workModePreference} onChange={(event) => setWorkModePreference(event.target.value)} />
-          </label>
-          <label className="checkRow">
-            <input type="checkbox" checked={relocationOpen} onChange={(event) => setRelocationOpen(event.target.checked)} />
-            Open to relocation
-          </label>
-          <div>
-            <span className="fieldTitle">Resume source</span>
-            <div className="segmented">
-              <button type="button" className={resumeSource === "text" ? "active" : ""} onClick={() => setResumeSource("text")}>Text</button>
-              <button type="button" className={resumeSource === "file" ? "active" : ""} onClick={() => setResumeSource("file")}>File upload</button>
-            </div>
-          </div>
-          {resumeSource === "file" && (
-            <label>
-              Upload resume (.txt, .pdf, .docx)
-              <input type="file" accept=".txt,.pdf,.docx" onChange={(event) => uploadResume(event.target.files?.[0] ?? null)} />
-              {uploading && <span className="hint">Extracting resume...</span>}
-              {uploadInfo && <span className="hint">{uploadInfo}</span>}
-            </label>
-          )}
-          <label>
-            Resume review window
-            <textarea value={resumeText} onChange={(event) => setResumeText(event.target.value)} rows={8} />
-          </label>
-          <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
-            {normalizing ? "Normalizing..." : "Normalize Resume for Review"}
-          </button>
-          {normalizeInfo && <p className="hint">{normalizeInfo}</p>}
-          {(structuredResume || parsedJd) && (
-            <ReviewWorkspaceSummary
-              resume={structuredResume}
-              jd={parsedJd}
-              resumeText={resumeText}
-              jdText={jobDescriptionText}
-            />
-          )}
-          {structuredResume && (
-            <StructuredResumeEditor
-              resume={structuredResume}
-              finalText={resumeText}
-              onChange={(nextResume) => {
-                setStructuredResume(nextResume);
-                setResumeText(formatStructuredResume(nextResume));
-              }}
-            />
-          )}
-          <label>
-            JD review window
-            <textarea value={jobDescriptionText} onChange={(event) => setJobDescriptionText(event.target.value)} rows={8} />
-          </label>
-          <button type="button" className="secondaryButton" disabled={parsingJd || jobDescriptionText.trim().length < 20} onClick={parseCurrentJd}>
-            {parsingJd ? "Parsing JD..." : "Parse JD for Review"}
-          </button>
-          {jdParseInfo && <p className="hint">{jdParseInfo}</p>}
-          {parsedJd && (
-            <ParsedJdEditor
-              parsedJd={parsedJd}
-              finalText={jobDescriptionText}
-              onChange={(nextJd) => {
-                setParsedJd(nextJd);
-                setJobDescriptionText(formatParsedJd(nextJd));
-              }}
-            />
-          )}
-          <button disabled={loading}>{loading ? "Analyzing..." : "Analyze Technical Fit"}</button>
-          {error && <p className="error">{error}</p>}
-        </form>
+      <section className="workspace">
+        <TaskNav
+          activeTask={activeTask}
+          onChange={setActiveTask}
+          hasResult={Boolean(result)}
+          hasPreparation={Boolean(preparation)}
+          resumeReady={resumeText.trim().length >= 20}
+          jdReady={jobDescriptionText.trim().length >= 20}
+        />
 
-        <section className="results">
-          {!result && <EmptyState />}
-          {result && <Results result={result} />}
+        <section className="taskSurface">
+          {activeTask === "matching" && (
+            <TaskPanel
+              eyebrow="Task 1"
+              title="Resume Matching"
+              description="Prepare the resume, JD, candidate context, and model selection. The paid or live AI call happens only when you press Analyze Technical Fit."
+            >
+              <form className="taskForm" onSubmit={(event) => { event.preventDefault(); analyze(); }}>
+                <AISpendPanel
+                  llmMode={llmMode}
+                  llmProvider={llmProvider}
+                  llmModel={llmModel}
+                  onModeChange={setLlmMode}
+                  onProviderChange={(provider) => {
+                    setLlmProvider(provider);
+                    setLlmModel(modelOptions[provider][0]);
+                  }}
+                  onModelChange={setLlmModel}
+                />
+
+                <div className="formSection">
+                  <div className="sectionHeading">
+                    <h3>Candidate Context</h3>
+                    <span>Used by scorer</span>
+                  </div>
+                  <div className="gridTwo">
+                    <label>
+                      Target role
+                      <input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} />
+                    </label>
+                    <label>
+                      Experience years
+                      <input type="number" min={0} max={50} step="0.1" value={experienceYears} onChange={(event) => setExperienceYears(Number(event.target.value))} />
+                    </label>
+                  </div>
+                  <label>
+                    Current stack
+                    <input value={currentStack} onChange={(event) => setCurrentStack(event.target.value)} />
+                  </label>
+                  <label>
+                    Target market
+                    <input value={targetMarket} onChange={(event) => setTargetMarket(event.target.value)} />
+                  </label>
+                  <div className="gridTwo">
+                    <label>
+                      Current location
+                      <input value={currentLocation} onChange={(event) => setCurrentLocation(event.target.value)} />
+                    </label>
+                    <label>
+                      Notice days
+                      <input type="number" min={0} max={365} value={noticePeriodDays} onChange={(event) => setNoticePeriodDays(Number(event.target.value))} />
+                    </label>
+                  </div>
+                  <label>
+                    Preferred locations
+                    <input value={preferredLocations} onChange={(event) => setPreferredLocations(event.target.value)} />
+                  </label>
+                  <div className="gridTwo">
+                    <label>
+                      Current CTC LPA
+                      <input type="number" min={0} step="0.1" value={currentCtcLpa} onChange={(event) => setCurrentCtcLpa(event.target.value)} />
+                    </label>
+                    <label>
+                      Expected CTC LPA
+                      <input type="number" min={0} step="0.1" value={expectedCtcLpa} onChange={(event) => setExpectedCtcLpa(event.target.value)} />
+                    </label>
+                  </div>
+                  <label>
+                    Work mode preference
+                    <input value={workModePreference} onChange={(event) => setWorkModePreference(event.target.value)} />
+                  </label>
+                  <label className="checkRow">
+                    <input type="checkbox" checked={relocationOpen} onChange={(event) => setRelocationOpen(event.target.checked)} />
+                    Open to relocation
+                  </label>
+                </div>
+
+                <div className="formSection">
+                  <div className="sectionHeading">
+                    <h3>Inputs</h3>
+                    <button type="button" className="tinyButton" onClick={() => setActiveTask("review")}>Open editors</button>
+                  </div>
+                  <div>
+                    <span className="fieldTitle">Resume source</span>
+                    <div className="segmented">
+                      <button type="button" className={resumeSource === "text" ? "active" : ""} onClick={() => setResumeSource("text")}>Text</button>
+                      <button type="button" className={resumeSource === "file" ? "active" : ""} onClick={() => setResumeSource("file")}>File upload</button>
+                    </div>
+                  </div>
+                  {resumeSource === "file" && (
+                    <label>
+                      Upload resume (.txt, .pdf, .docx)
+                      <input type="file" accept=".txt,.pdf,.docx" onChange={(event) => uploadResume(event.target.files?.[0] ?? null)} />
+                      {uploading && <span className="hint">Extracting resume...</span>}
+                      {uploadInfo && <span className="hint">{uploadInfo}</span>}
+                    </label>
+                  )}
+                  <div className="editorSplit">
+                    <label>
+                      Resume text
+                      <textarea value={resumeText} onChange={(event) => setResumeText(event.target.value)} rows={10} />
+                    </label>
+                    <label>
+                      Job description text
+                      <textarea value={jobDescriptionText} onChange={(event) => setJobDescriptionText(event.target.value)} rows={10} />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="actionBar">
+                  <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
+                    {normalizing ? "Normalizing..." : "Normalize Resume"}
+                  </button>
+                  <button type="button" className="secondaryButton" disabled={parsingJd || jobDescriptionText.trim().length < 20} onClick={parseCurrentJd}>
+                    {parsingJd ? "Parsing JD..." : "Parse JD"}
+                  </button>
+                  <button disabled={loading}>{loading ? "Analyzing..." : "Analyze Technical Fit"}</button>
+                </div>
+                {normalizeInfo && <p className="hint">{normalizeInfo}</p>}
+                {jdParseInfo && <p className="hint">{jdParseInfo}</p>}
+                {error && <p className="error">{error}</p>}
+              </form>
+            </TaskPanel>
+          )}
+
+          {activeTask === "review" && (
+            <TaskPanel
+              eyebrow="Input quality"
+              title="Resume and JD Review"
+              description="Fix parsed projects, certifications, profile data, and JD requirements before running or re-running the matcher."
+            >
+              <div className="reviewWorkspace">
+                <ReviewWorkspaceSummary resume={structuredResume} jd={parsedJd} resumeText={resumeText} jdText={jobDescriptionText} />
+                <div className="actionBar">
+                  <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
+                    {normalizing ? "Normalizing..." : "Normalize Resume"}
+                  </button>
+                  <button type="button" className="secondaryButton" disabled={parsingJd || jobDescriptionText.trim().length < 20} onClick={parseCurrentJd}>
+                    {parsingJd ? "Parsing JD..." : "Parse JD"}
+                  </button>
+                  <button type="button" onClick={() => setActiveTask("matching")}>Back to Matching</button>
+                </div>
+                {normalizeInfo && <p className="hint">{normalizeInfo}</p>}
+                {jdParseInfo && <p className="hint">{jdParseInfo}</p>}
+                <div className="editorSplit">
+                  <label>
+                    Resume text
+                    <textarea value={resumeText} onChange={(event) => setResumeText(event.target.value)} rows={12} />
+                  </label>
+                  <label>
+                    Job description text
+                    <textarea value={jobDescriptionText} onChange={(event) => setJobDescriptionText(event.target.value)} rows={12} />
+                  </label>
+                </div>
+                {structuredResume ? (
+                  <StructuredResumeEditor
+                    resume={structuredResume}
+                    finalText={resumeText}
+                    onChange={(nextResume) => {
+                      setStructuredResume(nextResume);
+                      setResumeText(formatStructuredResume(nextResume));
+                    }}
+                  />
+                ) : (
+                  <EmptyState title="Resume is not normalized yet" body="Normalize the resume to open the structured editor for profile, projects, certifications, and skills." />
+                )}
+                {parsedJd ? (
+                  <ParsedJdEditor
+                    parsedJd={parsedJd}
+                    finalText={jobDescriptionText}
+                    onChange={(nextJd) => {
+                      setParsedJd(nextJd);
+                      setJobDescriptionText(formatParsedJd(nextJd));
+                    }}
+                  />
+                ) : (
+                  <EmptyState title="JD is not parsed yet" body="Parse the JD to review required skills, certifications, seniority signals, and responsibilities." />
+                )}
+              </div>
+            </TaskPanel>
+          )}
+
+          {activeTask === "report" && (
+            <TaskPanel
+              eyebrow="Task 1 output"
+              title="Analysis Report"
+              description="This is the saved-report shape we will persist per user in the next backend phase."
+            >
+              {!result ? <EmptyState /> : <Results result={result} />}
+            </TaskPanel>
+          )}
+
+          {activeTask === "preparation" && (
+            <TaskPanel
+              eyebrow="Task 2"
+              title="Preparation Intelligence"
+              description="This should consume the latest analysis result instead of reparsing the resume or JD, which keeps AI usage scoped."
+            >
+              <div className="prepControls">
+                <label>
+                  Preparation plan days
+                  <input type="number" min={1} max={30} value={preparationPlanDays} onChange={(event) => setPreparationPlanDays(Math.max(1, Math.min(30, Number(event.target.value) || 7)))} />
+                </label>
+                <button type="button" onClick={() => setActiveTask("matching")}>Run Matching Again</button>
+              </div>
+              {preparation ? <PreparationIntelligencePanel preparation={preparation} /> : <PreparationEmpty />}
+            </TaskPanel>
+          )}
+
+          {activeTask === "progress" && (
+            <TaskPanel
+              eyebrow="Task 3"
+              title="Preparation Progress"
+              description="This area will track daily tasks, interview practice answers, confidence, and readiness once persistence is added."
+            >
+              <ProgressPlaceholder result={result} />
+            </TaskPanel>
+          )}
+
+          {activeTask === "history" && (
+            <TaskPanel
+              eyebrow="Task 4"
+              title="User History"
+              description="This is the future multi-user area for resume versions, JD library, analysis reports, and preparation sessions."
+            >
+              <HistoryPlaceholder result={result} />
+            </TaskPanel>
+          )}
         </section>
       </section>
     </main>
   );
 }
 
-function EmptyState() {
+function EmptyState({
+  title = "Ready to test the contract",
+  body = "Submit the sample data to verify the frontend, API endpoint, and response rendering before we plug in a real LLM.",
+}: {
+  title?: string;
+  body?: string;
+}) {
   return (
     <div className="panel empty">
-      <h2>Ready to test the contract</h2>
-      <p>Submit the sample data to verify the frontend, API endpoint, and response rendering before we plug in a real LLM.</p>
+      <h2>{title}</h2>
+      <p>{body}</p>
+    </div>
+  );
+}
+
+function TaskNav({
+  activeTask,
+  onChange,
+  hasResult,
+  hasPreparation,
+  resumeReady,
+  jdReady,
+}: {
+  activeTask: ActiveTask;
+  onChange: (task: ActiveTask) => void;
+  hasResult: boolean;
+  hasPreparation: boolean;
+  resumeReady: boolean;
+  jdReady: boolean;
+}) {
+  const tasks: Array<{
+    id: ActiveTask;
+    label: string;
+    description: string;
+    status: string;
+  }> = [
+    {
+      id: "matching",
+      label: "Resume Matching",
+      description: "Resume + JD fit scoring",
+      status: resumeReady && jdReady ? "Ready" : "Needs input",
+    },
+    {
+      id: "review",
+      label: "Input Review",
+      description: "Fix parsed resume and JD",
+      status: resumeReady || jdReady ? "Available" : "Needs input",
+    },
+    {
+      id: "report",
+      label: "Analysis Report",
+      description: "Matrix, scores, gaps",
+      status: hasResult ? "Generated" : "Run matching",
+    },
+    {
+      id: "preparation",
+      label: "Preparation Plan",
+      description: "Study plan from gaps",
+      status: hasPreparation ? "Generated" : "Needs report",
+    },
+    {
+      id: "progress",
+      label: "Progress Tracker",
+      description: "Daily prep and practice",
+      status: "Next backend",
+    },
+    {
+      id: "history",
+      label: "User History",
+      description: "Saved resumes and reports",
+      status: "Next backend",
+    },
+  ];
+
+  return (
+    <aside className="taskNav" aria-label="Career Agent tasks">
+      <div className="taskNavHeader">
+        <span>Workspace</span>
+        <strong>Purpose first</strong>
+      </div>
+      {tasks.map((task) => (
+        <button
+          key={task.id}
+          type="button"
+          className={activeTask === task.id ? "taskButton active" : "taskButton"}
+          onClick={() => onChange(task.id)}
+        >
+          <span>{task.label}</span>
+          <small>{task.description}</small>
+          <em>{task.status}</em>
+        </button>
+      ))}
+    </aside>
+  );
+}
+
+function TaskPanel({
+  eyebrow,
+  title,
+  description,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="taskPanel">
+      <div className="taskPanelHeader">
+        <div>
+          <p className="eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
+          <p>{description}</p>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function AISpendPanel({
+  llmMode,
+  llmProvider,
+  llmModel,
+  onModeChange,
+  onProviderChange,
+  onModelChange,
+}: {
+  llmMode: LlmMode;
+  llmProvider: LlmProvider;
+  llmModel: string;
+  onModeChange: (mode: LlmMode) => void;
+  onProviderChange: (provider: LlmProvider) => void;
+  onModelChange: (model: string) => void;
+}) {
+  return (
+    <div className="aiSpendPanel">
+      <div>
+        <p className="eyebrow">AI usage control</p>
+        <h3>Call only what this task needs</h3>
+        <p>Mock mode is for UI and parser checks. Live mode should be used only when the input is reviewed enough to spend tokens.</p>
+      </div>
+      <div className="controlBand">
+        <div>
+          <span className="fieldTitle">Analyzer mode</span>
+          <div className="segmented">
+            <button type="button" className={llmMode === "mock" ? "active" : ""} onClick={() => onModeChange("mock")}>Mock</button>
+            <button type="button" className={llmMode === "live" ? "active" : ""} onClick={() => onModeChange("live")}>Live LLM</button>
+          </div>
+        </div>
+        <label>
+          Provider
+          <select
+            value={llmProvider}
+            onChange={(event) => onProviderChange(event.target.value as LlmProvider)}
+          >
+            <option value="groq">Groq</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+          </select>
+        </label>
+        <label>
+          Model
+          <select value={llmModel} onChange={(event) => onModelChange(event.target.value)}>
+            {modelOptions[llmProvider].map((model) => <option key={model} value={model}>{model}</option>)}
+          </select>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function PreparationEmpty() {
+  return (
+    <div className="panel empty">
+      <h2>No preparation plan yet</h2>
+      <p>Run resume matching first. Preparation intelligence should be generated from the latest requirement gaps, not from a separate blind prompt.</p>
+    </div>
+  );
+}
+
+function ProgressPlaceholder({ result }: { result: AnalysisResponse | null }) {
+  const tasks = result?.preparationIntelligence?.dailyPlan.flatMap((day) =>
+    day.tasks.map((task) => ({ day: day.day, task }))
+  ) ?? [];
+
+  return (
+    <div className="placeholderGrid">
+      <div className="panel">
+        <h3>Progress model</h3>
+        <ul>
+          <li>Daily tasks will be saved with pending, in progress, completed, skipped.</li>
+          <li>Each topic can carry confidence before and after practice.</li>
+          <li>Mock interview answers can update weak-area trends.</li>
+        </ul>
+      </div>
+      <div className="panel">
+        <h3>Current plan preview</h3>
+        {tasks.length ? (
+          <ul>
+            {tasks.slice(0, 8).map((item, index) => <li key={`progress-task-${index}`}>Day {item.day}: {item.task}</li>)}
+          </ul>
+        ) : (
+          <p className="hint">Run matching to generate preparation tasks.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HistoryPlaceholder({ result }: { result: AnalysisResponse | null }) {
+  return (
+    <div className="placeholderGrid">
+      <div className="panel">
+        <h3>History objects</h3>
+        <ul>
+          <li>Resume versions with original text and edited normalized JSON.</li>
+          <li>JD records with parsed requirements and seniority signals.</li>
+          <li>Analysis snapshots with score, matrix, gaps, and recommendations.</li>
+          <li>Preparation sessions linked to an analysis snapshot.</li>
+        </ul>
+      </div>
+      <div className="panel">
+        <h3>Latest report preview</h3>
+        {result ? (
+          <div className="historyPreview">
+            <strong>{result.technicalMatchScore}% - {result.fitCategory}</strong>
+            <p>{result.overallSummary}</p>
+          </div>
+        ) : (
+          <p className="hint">No local report generated in this session yet.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -513,7 +833,6 @@ function Results({ result }: { result: AnalysisResponse }) {
       <OpportunityPanel result={result} />
       {result.scoreBreakdown?.length > 0 && <ScoreBreakdown items={result.scoreBreakdown} />}
       {result.requirementMatches?.length > 0 && <RequirementMatrix items={result.requirementMatches} />}
-      {result.preparationIntelligence && <PreparationIntelligencePanel preparation={result.preparationIntelligence} />}
       {result.shortlistingFactors?.length > 0 && <ShortlistingFactors items={result.shortlistingFactors} />}
       <Card title="Matching Skills" items={result.matchingSkills.map((item) => `${item.skill}: ${item.evidenceFromResume}`)} />
       <Card title="Weakly Evidenced Skills" items={result.weaklyEvidencedSkills.map((item) => `${item.skill}: ${item.whyWeak}`)} />
