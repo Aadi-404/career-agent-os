@@ -206,6 +206,7 @@ const defaultUserId = "local-aditya";
 function App() {
   const [activeTask, setActiveTask] = useState<ActiveTask>("matching");
   const [resumeText, setResumeText] = useState(defaultResume);
+  const [resumeParseSourceText, setResumeParseSourceText] = useState(defaultResume);
   const [jobDescriptionText, setJobDescriptionText] = useState(defaultJd);
   const [targetRole, setTargetRole] = useState("Full Stack Developer with AI Integration");
   const [experienceYears, setExperienceYears] = useState(3);
@@ -291,6 +292,7 @@ function App() {
 
   function updateResumeDraft(value: string) {
     setResumeText(value);
+    setResumeParseSourceText(value);
     setStructuredResume(null);
     setNormalizeInfo("");
     setResult(null);
@@ -573,6 +575,7 @@ function App() {
       };
 
       setResumeText(extracted.extractedText);
+      setResumeParseSourceText(extracted.extractedText);
       setStructuredResume(null);
       setNormalizeInfo("");
       setResult(null);
@@ -651,6 +654,7 @@ function App() {
         structuredResume: StructuredResume;
       };
 
+      setResumeParseSourceText(resumeText);
       setResumeText(normalized.normalizedResumeText);
       setStructuredResume(normalized.structuredResume);
       const warnings = normalized.warnings.length ? ` Warnings: ${normalized.warnings.join(" ")}` : "";
@@ -880,6 +884,11 @@ function App() {
                 {scoreStep === "review" && (
                   <div className="reviewWorkspace compactReview">
                     <ReviewWorkspaceSummary resume={structuredResume} jd={parsedJd} resumeText={resumeText} jdText={jobDescriptionText} />
+                    <ResumeParserDebugPanel
+                      rawText={resumeParseSourceText}
+                      normalizedText={resumeText}
+                      resume={structuredResume}
+                    />
                     <div className="reviewToggle">
                       <button type="button" className={reviewPane === "resume" ? "active" : ""} onClick={() => setReviewPane("resume")}>Resume Review</button>
                       <button type="button" className={reviewPane === "jd" ? "active" : ""} onClick={() => setReviewPane("jd")}>JD Review</button>
@@ -958,6 +967,11 @@ function App() {
             >
               <div className="reviewWorkspace">
                 <ReviewWorkspaceSummary resume={structuredResume} jd={parsedJd} resumeText={resumeText} jdText={jobDescriptionText} />
+                <ResumeParserDebugPanel
+                  rawText={resumeParseSourceText}
+                  normalizedText={resumeText}
+                  resume={structuredResume}
+                />
                 <div className="actionBar">
                   <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
                     {normalizing ? "Normalizing..." : "Normalize Resume"}
@@ -1501,6 +1515,40 @@ function ReviewWorkspaceSummary({
         <strong>{resumeText.length.toLocaleString()} resume chars / {jdText.length.toLocaleString()} JD chars</strong>
       </div>
     </div>
+  );
+}
+
+function ResumeParserDebugPanel({
+  rawText,
+  normalizedText,
+  resume,
+}: {
+  rawText: string;
+  normalizedText: string;
+  resume: StructuredResume | null;
+}) {
+  if (!resume && rawText.trim().length < 20) return null;
+
+  return (
+    <details className="parserDebugPanel">
+      <summary>Parser preview</summary>
+      <div className="parserDebugStats">
+        <span>{resume ? `${resume.experience.length} experience` : "No experience parsed"}</span>
+        <span>{resume ? `${resume.projects.length} projects` : "No projects parsed"}</span>
+        <span>{resume ? `${resume.certifications.length} certifications` : "No certifications parsed"}</span>
+        <span>{rawText.length.toLocaleString()} raw chars</span>
+      </div>
+      <div className="debugGrid">
+        <div>
+          <h4>Raw extracted text</h4>
+          <pre>{rawText}</pre>
+        </div>
+        <div>
+          <h4>Normalized parser output</h4>
+          <pre>{normalizedText}</pre>
+        </div>
+      </div>
+    </details>
   );
 }
 

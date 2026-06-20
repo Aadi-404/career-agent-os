@@ -1310,6 +1310,35 @@ li {
   font-weight: 800;
 }
 
+.parserDebugPanel {
+  border: 1px solid #d4e5e2;
+  border-radius: 8px;
+  background: #f7fbfb;
+  padding: 14px;
+}
+
+.parserDebugPanel summary {
+  cursor: pointer;
+  color: var(--brand);
+  font-weight: 900;
+}
+
+.parserDebugStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.parserDebugStats span {
+  border-radius: 999px;
+  background: #e8f6f4;
+  color: #115e59;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .debugGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
