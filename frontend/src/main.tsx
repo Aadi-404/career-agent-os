@@ -75,6 +75,7 @@ type LlmMode = "mock" | "live";
 type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
+type ReviewPane = "resume" | "jd";
 type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
 
@@ -222,6 +223,7 @@ function App() {
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("groq");
   const [llmModel, setLlmModel] = useState("llama-3.3-70b-versatile");
   const [scoreStep, setScoreStep] = useState<ScoreStep>("upload");
+  const [reviewPane, setReviewPane] = useState<ReviewPane>("resume");
   const [resumeSource, setResumeSource] = useState<ResumeSource>("text");
   const [uploading, setUploading] = useState(false);
   const [jdUploading, setJdUploading] = useState(false);
@@ -285,6 +287,33 @@ function App() {
       },
       preparationPlanDays,
     };
+  }
+
+  function updateResumeDraft(value: string) {
+    setResumeText(value);
+    setStructuredResume(null);
+    setNormalizeInfo("");
+    setResult(null);
+  }
+
+  function updateJdDraft(value: string) {
+    setJobDescriptionText(value);
+    setParsedJd(null);
+    setJdParseInfo("");
+    setResult(null);
+  }
+
+  function goToScoreStep(step: ScoreStep) {
+    if (step === "review" && (!structuredResume || !parsedJd)) {
+      setError("Parse the resume and JD before opening review.");
+      return;
+    }
+    if (step === "score" && (!structuredResume || !parsedJd)) {
+      setError("Review the parsed resume and JD before calculating the score.");
+      return;
+    }
+    setError("");
+    setScoreStep(step);
   }
 
   async function ensureLocalUser() {
@@ -541,6 +570,9 @@ function App() {
       };
 
       setResumeText(extracted.extractedText);
+      setStructuredResume(null);
+      setNormalizeInfo("");
+      setResult(null);
       setUploadInfo(
         `${extracted.fileName}: ${extracted.characterCount} chars, sections: ${
           extracted.detectedSections.length ? extracted.detectedSections.join(", ") : "not detected"
@@ -582,6 +614,9 @@ function App() {
       };
 
       setJobDescriptionText(extracted.extractedText);
+      setParsedJd(null);
+      setJdParseInfo("");
+      setResult(null);
       setJdUploadInfo(`${extracted.fileName}: ${extracted.characterCount} chars extracted`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "JD extraction failed");
@@ -619,8 +654,10 @@ function App() {
       setNormalizeInfo(
         `Normalized ${normalized.structuredResume.experience.length} experience item(s), ${normalized.structuredResume.projects.length} project(s), ${normalized.structuredResume.skills.length} skill(s).${warnings}`
       );
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Resume normalization failed");
+      return false;
     } finally {
       setNormalizing(false);
     }
@@ -653,10 +690,21 @@ function App() {
       const certificationCount = parsed.parsedJobDescription.requiredCertifications.length;
       const emphasisCount = (parsed.parsedJobDescription.emphasizedRequirements ?? []).length;
       setJdParseInfo(`Parsed ${requiredCount} required skill(s), ${preferredCount} preferred skill(s), ${certificationCount} certification requirement(s), ${emphasisCount} emphasized requirement(s).${warnings}`);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "JD parsing failed");
+      return false;
     } finally {
       setParsingJd(false);
+    }
+  }
+
+  async function parseInputsForReview() {
+    const resumeOk = await normalizeCurrentResume();
+    const jdOk = await parseCurrentJd();
+    if (resumeOk && jdOk) {
+      setReviewPane("resume");
+      setScoreStep("review");
     }
   }
 
@@ -714,7 +762,7 @@ function App() {
                   onModelChange={setLlmModel}
                 />
 
-                <ScoreStepper currentStep={scoreStep} onChange={setScoreStep} />
+                <ScoreStepper currentStep={scoreStep} onChange={goToScoreStep} />
 
                 {scoreStep === "upload" && (
                   <>
@@ -745,11 +793,11 @@ function App() {
                       <div className="editorSplit">
                         <label>
                           Resume text
-                          <textarea value={resumeText} onChange={(event) => setResumeText(event.target.value)} rows={10} />
+                          <textarea value={resumeText} onChange={(event) => updateResumeDraft(event.target.value)} rows={10} />
                         </label>
                         <label>
                           Job description text
-                          <textarea value={jobDescriptionText} onChange={(event) => setJobDescriptionText(event.target.value)} rows={10} />
+                          <textarea value={jobDescriptionText} onChange={(event) => updateJdDraft(event.target.value)} rows={10} />
                         </label>
                       </div>
                     </div>
@@ -813,12 +861,14 @@ function App() {
 
                     <div className="actionBar">
                       <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
-                        {normalizing ? "Normalizing..." : "Normalize Resume"}
+                        {normalizing ? "Parsing..." : "Parse Resume"}
                       </button>
                       <button type="button" className="secondaryButton" disabled={parsingJd || jobDescriptionText.trim().length < 20} onClick={parseCurrentJd}>
                         {parsingJd ? "Parsing JD..." : "Parse JD"}
                       </button>
-                      <button type="button" onClick={() => setScoreStep("review")}>Next: Review & Edit</button>
+                      <button type="button" disabled={normalizing || parsingJd || resumeText.trim().length < 20 || jobDescriptionText.trim().length < 20} onClick={parseInputsForReview}>
+                        {normalizing || parsingJd ? "Parsing..." : "Parse & Review"}
+                      </button>
                     </div>
                   </>
                 )}
@@ -826,7 +876,11 @@ function App() {
                 {scoreStep === "review" && (
                   <div className="reviewWorkspace compactReview">
                     <ReviewWorkspaceSummary resume={structuredResume} jd={parsedJd} resumeText={resumeText} jdText={jobDescriptionText} />
-                    {structuredResume ? (
+                    <div className="reviewToggle">
+                      <button type="button" className={reviewPane === "resume" ? "active" : ""} onClick={() => setReviewPane("resume")}>Resume Review</button>
+                      <button type="button" className={reviewPane === "jd" ? "active" : ""} onClick={() => setReviewPane("jd")}>JD Review</button>
+                    </div>
+                    {reviewPane === "resume" && (structuredResume ? (
                       <StructuredResumeEditor
                         resume={structuredResume}
                         finalText={resumeText}
@@ -836,9 +890,9 @@ function App() {
                         }}
                       />
                     ) : (
-                      <EmptyState title="Resume needs normalization" body="Normalize the resume to edit profile, education, projects, certifications, and skills before scoring." />
-                    )}
-                    {parsedJd ? (
+                      <EmptyState title="Resume needs parsing" body="Parse the resume to edit profile, education, projects, certifications, and skills before scoring." />
+                    ))}
+                    {reviewPane === "jd" && (parsedJd ? (
                       <ParsedJdEditor
                         parsedJd={parsedJd}
                         finalText={jobDescriptionText}
@@ -849,16 +903,16 @@ function App() {
                       />
                     ) : (
                       <EmptyState title="JD needs parsing" body="Parse the JD to review required, preferred, certification, and emphasized requirements before scoring." />
-                    )}
+                    ))}
                     <div className="actionBar">
                       <button type="button" className="secondaryButton" onClick={() => setScoreStep("upload")}>Back</button>
                       <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
-                        {normalizing ? "Normalizing..." : "Normalize Resume"}
+                        {normalizing ? "Parsing..." : "Parse Resume"}
                       </button>
                       <button type="button" className="secondaryButton" disabled={parsingJd || jobDescriptionText.trim().length < 20} onClick={parseCurrentJd}>
                         {parsingJd ? "Parsing JD..." : "Parse JD"}
                       </button>
-                      <button type="button" onClick={() => setScoreStep("score")}>Next: Calculate Score</button>
+                      <button type="button" onClick={() => goToScoreStep("score")}>Next: Calculate Score</button>
                     </div>
                   </div>
                 )}

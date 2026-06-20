@@ -109,6 +109,11 @@ def _clean_lines(text: str) -> list[str]:
     lines = []
     for raw_line in text.splitlines():
         line = re.sub(r"\s+", " ", raw_line).strip(" ,.-")
+        line = re.sub(
+            r"(?i)([a-z)])((?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2})",
+            r"\1 \2",
+            line,
+        )
         line = re.sub(r"^[-•]\s*", "", line).strip()
         if line:
             lines.append(line)
@@ -189,10 +194,10 @@ def _extract_experience(lines: list[str]) -> list[ResumeExperience]:
     if not lines:
         return []
 
-    title = lines[0] if lines else None
-    company = lines[1] if len(lines) > 1 else None
+    title = _clean_experience_title(lines[0]) if lines else None
+    company = _extract_company(lines)
     duration = _find_duration(lines)
-    location = _find_location(lines)
+    location = _find_location(lines, company)
     highlights = _extract_highlights(lines[2:])
 
     return [
@@ -366,9 +371,17 @@ def _extract_highlights(lines: list[str]) -> list[str]:
 
 def _find_duration(lines: list[str]) -> str | None:
     text = " ".join(lines)
+    text = text.replace("–", "-").replace("—", "-")
     match = re.search(r"\(?\d{2}/\d{4}\s*-\s*(?:\d{2}/\d{4}|present|current)\)?", text, flags=re.IGNORECASE)
     if match:
         return match.group(0).strip("() ")
+    range_month_match = re.search(
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2}\s*-\s*(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2}|present|current)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if range_month_match:
+        return re.sub(r"\s*-\s*", " - ", re.sub(r"\s+", " ", range_month_match.group(0).strip()))
     month_match = re.search(
         r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[-\s]+(?:19|20)\d{2}\b",
         text,
@@ -380,11 +393,42 @@ def _find_duration(lines: list[str]) -> str | None:
     return year_match.group(0) if year_match else None
 
 
-def _find_location(lines: list[str]) -> str | None:
+def _extract_company(lines: list[str]) -> str | None:
+    if len(lines) < 2:
+        return None
+    company_line = _remove_duration(lines[1])
+    location = _extract_location_value(company_line)
+    if location:
+        company_line = re.sub(re.escape(location), "", company_line, flags=re.IGNORECASE)
+        company_line = re.sub(r"\b(?:navi\s+)?mumbai|pune|bangalore|bengaluru|hyderabad|delhi|india\b", "", company_line, flags=re.IGNORECASE)
+    return company_line.strip(" ,|-") or None
+
+
+def _find_location(lines: list[str], company: str | None = None) -> str | None:
     for line in lines:
-        if any(place in line.lower() for place in ["mumbai", "pune", "bangalore", "bengaluru", "hyderabad", "delhi", "india"]):
-            return line
+        location = _extract_location_value(line)
+        if location:
+            return location
     return None
+
+
+def _clean_experience_title(line: str) -> str:
+    line = re.sub(r"(?i)^title\s*[-:>]*\s*", "", line)
+    return _remove_duration(line).strip(" ,|-")
+
+
+def _remove_duration(line: str) -> str:
+    duration = _find_duration([line])
+    if duration:
+        line = line.replace(duration, "")
+        line = line.replace(duration.replace(" - ", "-"), "")
+    line = re.sub(
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2}\s*[-–—]\s*(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2}|present|current)\b",
+        "",
+        line,
+        flags=re.IGNORECASE,
+    )
+    return line.strip(" ,|-")
 
 
 def _looks_like_title(line: str) -> bool:

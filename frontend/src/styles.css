@@ -435,6 +435,29 @@ h1 {
   gap: 14px;
 }
 
+.reviewToggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #e5edf0;
+  padding: 4px;
+}
+
+.reviewToggle button {
+  min-height: 40px;
+  background: transparent;
+  color: #334155;
+  box-shadow: none;
+}
+
+.reviewToggle button.active {
+  background: #ffffff;
+  color: var(--brand-2);
+  box-shadow: 0 1px 4px rgba(22, 32, 51, 0.12);
+}
+
 .editorSplit {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
