@@ -34,6 +34,12 @@ class AnalyzeRequest(BaseModel):
     preparationPlanDays: int = Field(default=7, ge=1, le=30)
 
 
+class PreparationBuildRequest(BaseModel):
+    sourceRequest: AnalyzeRequest
+    analysis: "AnalysisResponse"
+    preparationPlanDays: int = Field(default=7, ge=1, le=30)
+
+
 class MatchingSkill(BaseModel):
     skill: str
     evidenceFromResume: str
@@ -173,6 +179,6 @@ class AnalysisResponse(BaseModel):
     interviewQuestions: list[InterviewQuestion]
     crossQuestions: list[CrossQuestion]
     systemDesignReadiness: SystemDesignReadiness
-    sevenDayPlan: list[DayPlan] = Field(min_length=1, max_length=30)
+    sevenDayPlan: list[DayPlan] = Field(default_factory=list, max_length=30)
     preparationIntelligence: PreparationIntelligence | None = None
     debug: DebugInfo | None = None

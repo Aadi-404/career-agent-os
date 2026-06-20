@@ -3,7 +3,7 @@ from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import initialize_database
-from app.models.analysis import AnalyzeRequest, AnalysisResponse
+from app.models.analysis import AnalyzeRequest, AnalysisResponse, PreparationBuildRequest, PreparationIntelligence
 from app.models.history import (
     AnalysisRecord,
     AnalysisSaveRequest,
@@ -20,7 +20,7 @@ from app.models.history import (
 from app.models.jd_parse import JdParseRequest, JdParseResponse
 from app.models.resume_extract import ResumeExtractResponse
 from app.models.resume_normalize import ResumeNormalizeRequest, ResumeNormalizeResponse
-from app.services.analyzer_service import analyze_resume_jd
+from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.history_store import (
     create_or_update_user,
     get_workspace_summary,
@@ -34,6 +34,7 @@ from app.services.history_store import (
     save_resume,
 )
 from app.services.jd_parser import parse_jd
+from app.services.preparation_service import build_preparation_intelligence
 from app.services.resume_extractor import extract_resume
 from app.services.resume_normalizer import normalize_resume
 
@@ -61,6 +62,21 @@ def health() -> dict[str, str]:
 @app.post("/ai/resume-jd/analyze", response_model=AnalysisResponse)
 def analyze(request: AnalyzeRequest) -> AnalysisResponse:
     return analyze_resume_jd(request)
+
+
+@app.post("/ai/resume-jd/match", response_model=AnalysisResponse)
+def match(request: AnalyzeRequest) -> AnalysisResponse:
+    return match_resume_jd(request)
+
+
+@app.post("/ai/preparation/build", response_model=PreparationIntelligence)
+def build_preparation(request: PreparationBuildRequest) -> PreparationIntelligence:
+    source_request = request.sourceRequest.model_copy(update={"preparationPlanDays": request.preparationPlanDays})
+    return build_preparation_intelligence(
+        source_request,
+        request.analysis.requirementMatches,
+        request.analysis.scoreBreakdown,
+    )
 
 
 @app.post("/ai/resume/extract", response_model=ResumeExtractResponse)

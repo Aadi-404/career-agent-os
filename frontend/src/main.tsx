@@ -75,6 +75,31 @@ type LlmMode = "mock" | "live";
 type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history";
+type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
+
+type AnalyzeRequestPayload = {
+  resumeText: string;
+  jobDescriptionText: string;
+  candidateContext: {
+    targetRole: string;
+    experienceYears: number;
+    currentStack: string[];
+    targetMarket: string;
+    currentLocation: string | null;
+    preferredLocations: string[];
+    noticePeriodDays: number;
+    currentCtcLpa: number | null;
+    expectedCtcLpa: number | null;
+    workModePreference: string[];
+    relocationOpen: boolean;
+  };
+  llmOptions: {
+    mode: LlmMode;
+    provider: LlmProvider;
+    model: string;
+  };
+  preparationPlanDays: number;
+};
 
 type StructuredResume = {
   profile: {
@@ -164,41 +189,50 @@ function App() {
   const [structuredResume, setStructuredResume] = useState<StructuredResume | null>(null);
   const [parsedJd, setParsedJd] = useState<JdParseResponse["parsedJobDescription"] | null>(null);
   const [result, setResult] = useState<AnalysisResponse | null>(null);
+  const [lastAnalysisRequest, setLastAnalysisRequest] = useState<AnalyzeRequestPayload | null>(null);
   const [loading, setLoading] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
+  const [preparationInfo, setPreparationInfo] = useState("");
+
+  function buildAnalyzeRequest(): AnalyzeRequestPayload {
+    return {
+      resumeText,
+      jobDescriptionText,
+      candidateContext: {
+        targetRole,
+        experienceYears,
+        currentStack: currentStack.split(",").map((item) => item.trim()).filter(Boolean),
+        targetMarket,
+        currentLocation,
+        preferredLocations: preferredLocations.split(",").map((item) => item.trim()).filter(Boolean),
+        noticePeriodDays,
+        currentCtcLpa: currentCtcLpa ? Number(currentCtcLpa) : null,
+        expectedCtcLpa: expectedCtcLpa ? Number(expectedCtcLpa) : null,
+        workModePreference: workModePreference.split(",").map((item) => item.trim()).filter(Boolean),
+        relocationOpen,
+      },
+      llmOptions: {
+        mode: llmMode,
+        provider: llmProvider,
+        model: llmModel,
+      },
+      preparationPlanDays,
+    };
+  }
 
   async function analyze() {
     setLoading(true);
     setError("");
+    setPreparationInfo("");
     setResult(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/resume-jd/analyze`, {
+      const payload = buildAnalyzeRequest();
+      const response = await fetch(`${API_BASE_URL}/ai/resume-jd/match`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resumeText,
-          jobDescriptionText,
-          candidateContext: {
-            targetRole,
-            experienceYears,
-            currentStack: currentStack.split(",").map((item) => item.trim()).filter(Boolean),
-            targetMarket,
-            currentLocation,
-            preferredLocations: preferredLocations.split(",").map((item) => item.trim()).filter(Boolean),
-            noticePeriodDays,
-            currentCtcLpa: currentCtcLpa ? Number(currentCtcLpa) : null,
-            expectedCtcLpa: expectedCtcLpa ? Number(expectedCtcLpa) : null,
-            workModePreference: workModePreference.split(",").map((item) => item.trim()).filter(Boolean),
-            relocationOpen,
-          },
-          llmOptions: {
-            mode: llmMode,
-            provider: llmProvider,
-            model: llmModel,
-          },
-          preparationPlanDays,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -206,12 +240,49 @@ function App() {
         throw new Error(details || "Analysis failed");
       }
 
+      setLastAnalysisRequest(payload);
       setResult((await response.json()) as AnalysisResponse);
       setActiveTask("report");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function buildPreparation() {
+    if (!result || !lastAnalysisRequest) {
+      setError("Run resume matching before building the preparation plan.");
+      return;
+    }
+
+    setPreparing(true);
+    setError("");
+    setPreparationInfo("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/ai/preparation/build`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceRequest: lastAnalysisRequest,
+          analysis: result,
+          preparationPlanDays,
+        }),
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(details || "Preparation build failed");
+      }
+
+      const preparation = await response.json() as PreparationIntelligence;
+      setResult({ ...result, preparationIntelligence: preparation });
+      setPreparationInfo(`Built a ${preparation.dailyPlan.length}-day preparation plan from the latest match result.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Preparation build failed");
+    } finally {
+      setPreparing(false);
     }
   }
 
@@ -353,7 +424,7 @@ function App() {
             <TaskPanel
               eyebrow="Task 1"
               title="Resume Matching"
-              description="Prepare the resume, JD, candidate context, and model selection. The paid or live AI call happens only when you press Analyze Technical Fit."
+              description="Prepare the resume, JD, candidate context, and model selection. This call now returns the match report only; preparation is generated separately."
             >
               <form className="taskForm" onSubmit={(event) => { event.preventDefault(); analyze(); }}>
                 <AISpendPanel
@@ -464,7 +535,7 @@ function App() {
                   <button type="button" className="secondaryButton" disabled={parsingJd || jobDescriptionText.trim().length < 20} onClick={parseCurrentJd}>
                     {parsingJd ? "Parsing JD..." : "Parse JD"}
                   </button>
-                  <button disabled={loading}>{loading ? "Analyzing..." : "Analyze Technical Fit"}</button>
+                  <button disabled={loading}>{loading ? "Matching..." : "Run Resume Match"}</button>
                 </div>
                 {normalizeInfo && <p className="hint">{normalizeInfo}</p>}
                 {jdParseInfo && <p className="hint">{jdParseInfo}</p>}
@@ -544,15 +615,19 @@ function App() {
             <TaskPanel
               eyebrow="Task 2"
               title="Preparation Intelligence"
-              description="This should consume the latest analysis result instead of reparsing the resume or JD, which keeps AI usage scoped."
+              description="This consumes the latest match result instead of reparsing the resume or JD, which keeps AI usage scoped."
             >
               <div className="prepControls">
                 <label>
                   Preparation plan days
                   <input type="number" min={1} max={30} value={preparationPlanDays} onChange={(event) => setPreparationPlanDays(Math.max(1, Math.min(30, Number(event.target.value) || 7)))} />
                 </label>
-                <button type="button" onClick={() => setActiveTask("matching")}>Run Matching Again</button>
+                <button type="button" disabled={!result || preparing} onClick={buildPreparation}>
+                  {preparing ? "Building Plan..." : preparation ? "Rebuild Preparation Plan" : "Build Preparation Plan"}
+                </button>
               </div>
+              {preparationInfo && <p className="hint">{preparationInfo}</p>}
+              {error && <p className="error">{error}</p>}
               {preparation ? <PreparationIntelligencePanel preparation={preparation} /> : <PreparationEmpty />}
             </TaskPanel>
           )}
@@ -759,7 +834,7 @@ function PreparationEmpty() {
   return (
     <div className="panel empty">
       <h2>No preparation plan yet</h2>
-      <p>Run resume matching first. Preparation intelligence should be generated from the latest requirement gaps, not from a separate blind prompt.</p>
+      <p>Run resume matching first, then build the plan from the latest requirement gaps. This avoids repeating the resume/JD matching call.</p>
     </div>
   );
 }
@@ -846,7 +921,7 @@ function Results({ result }: { result: AnalysisResponse }) {
         <p>{result.systemDesignReadiness.reason}</p>
         <div className="tags">{result.systemDesignReadiness.topicsToPrepare.map((topic) => <span key={topic}>{topic}</span>)}</div>
       </div>
-      <Card title={`${result.sevenDayPlan.length}-Day Plan`} items={result.sevenDayPlan.map((item) => `Day ${item.day} - ${item.focus}: ${item.tasks.join(" ")}`)} />
+      {result.sevenDayPlan.length > 0 && <Card title={`${result.sevenDayPlan.length}-Day Plan`} items={result.sevenDayPlan.map((item) => `Day ${item.day} - ${item.focus}: ${item.tasks.join(" ")}`)} />}
     </>
   );
 }

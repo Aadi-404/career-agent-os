@@ -25,17 +25,25 @@ from app.services.scoring_service import score_resume_against_jd
 
 
 def analyze_resume_jd(request: AnalyzeRequest) -> AnalysisResponse:
+    return _analyze_resume_jd(request, include_preparation=True)
+
+
+def match_resume_jd(request: AnalyzeRequest) -> AnalysisResponse:
+    return _analyze_resume_jd(request, include_preparation=False)
+
+
+def _analyze_resume_jd(request: AnalyzeRequest, include_preparation: bool) -> AnalysisResponse:
     mode, _provider, _model = _resolve_llm_options(request)
     if mode == "mock":
-        return _analyze_with_mock(request)
+        return _analyze_with_mock(request, include_preparation=include_preparation)
 
-    return _analyze_with_llm(request)
+    return _analyze_with_llm(request, include_preparation=include_preparation)
 
 
-def _analyze_with_llm(request: AnalyzeRequest) -> AnalysisResponse:
+def _analyze_with_llm(request: AnalyzeRequest, include_preparation: bool) -> AnalysisResponse:
     settings = get_settings()
     _mode, provider, model = _resolve_llm_options(request)
-    prompt = build_analysis_prompt(request)
+    prompt = build_analysis_prompt(request, include_preparation=include_preparation)
     raw_response = call_llm(prompt, settings, provider=provider, model=model)
     parsed = _parse_json_response(raw_response)
 
@@ -44,8 +52,12 @@ def _analyze_with_llm(request: AnalyzeRequest) -> AnalysisResponse:
     except ValidationError as exc:
         raise HTTPException(status_code=502, detail=f"AI response schema validation failed: {exc}") from exc
 
-    _attach_algorithmic_scoring(response, request)
-    _ensure_plan_length(response, request.preparationPlanDays)
+    _attach_algorithmic_scoring(response, request, include_preparation=include_preparation)
+    if include_preparation:
+        _ensure_plan_length(response, request.preparationPlanDays)
+    else:
+        response.sevenDayPlan = []
+        response.preparationIntelligence = None
     response.debug = DebugInfo(
         mode="llm",
         provider=provider,
@@ -74,10 +86,10 @@ def _parse_json_response(raw_response: str) -> dict:
         raise HTTPException(status_code=502, detail="AI returned invalid JSON") from exc
 
 
-def _analyze_with_mock(request: AnalyzeRequest) -> AnalysisResponse:
+def _analyze_with_mock(request: AnalyzeRequest, include_preparation: bool) -> AnalysisResponse:
     # Level 1 uses a deterministic mock so API/UI integration can be tested first.
     # The prompt is still built now to keep the real LLM boundary ready.
-    prompt = build_analysis_prompt(request)
+    prompt = build_analysis_prompt(request, include_preparation=include_preparation)
     _mode, provider, model = _resolve_llm_options(request)
     context = request.candidateContext
     scoring = score_resume_against_jd(request)
@@ -102,7 +114,7 @@ def _analyze_with_mock(request: AnalyzeRequest) -> AnalysisResponse:
         interviewQuestions=_mock_interview_questions(scoring.requirement_matches),
         crossQuestions=_mock_cross_questions(scoring.requirement_matches),
         systemDesignReadiness=_mock_system_design_readiness(scoring.requirement_matches),
-        sevenDayPlan=_build_preparation_plan(request.preparationPlanDays),
+        sevenDayPlan=_build_preparation_plan(request.preparationPlanDays) if include_preparation else [],
         debug=DebugInfo(
             mode="mock",
             provider=provider,
@@ -120,10 +132,14 @@ def _analyze_with_mock(request: AnalyzeRequest) -> AnalysisResponse:
         shortlistingFactors=scoring.shortlisting_factors,
         requirementMatches=scoring.requirement_matches,
         recommendedAction=scoring.recommended_action,
-        preparationIntelligence=build_preparation_intelligence(
-            request,
-            scoring.requirement_matches,
-            scoring.score_breakdown,
+        preparationIntelligence=(
+            build_preparation_intelligence(
+                request,
+                scoring.requirement_matches,
+                scoring.score_breakdown,
+            )
+            if include_preparation
+            else None
         ),
     )
 
@@ -255,7 +271,7 @@ def _mock_system_design_readiness(matches) -> SystemDesignReadiness:
     )
 
 
-def _attach_algorithmic_scoring(response: AnalysisResponse, request: AnalyzeRequest) -> None:
+def _attach_algorithmic_scoring(response: AnalysisResponse, request: AnalyzeRequest, include_preparation: bool) -> None:
     scoring = score_resume_against_jd(request)
     response.technicalMatchScore = scoring.technical_match_score
     response.fitCategory = _fit_category(scoring.technical_match_score)
@@ -266,10 +282,14 @@ def _attach_algorithmic_scoring(response: AnalysisResponse, request: AnalyzeRequ
     response.shortlistingFactors = scoring.shortlisting_factors
     response.requirementMatches = scoring.requirement_matches
     response.recommendedAction = scoring.recommended_action
-    response.preparationIntelligence = build_preparation_intelligence(
-        request,
-        scoring.requirement_matches,
-        scoring.score_breakdown,
+    response.preparationIntelligence = (
+        build_preparation_intelligence(
+            request,
+            scoring.requirement_matches,
+            scoring.score_breakdown,
+        )
+        if include_preparation
+        else None
     )
 
 
