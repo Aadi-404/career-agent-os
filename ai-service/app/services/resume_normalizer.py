@@ -77,7 +77,7 @@ def normalize_resume(request: ResumeNormalizeRequest) -> ResumeNormalizeResponse
         experience=_extract_experience(sections.get("experience", [])),
         projects=_extract_projects(sections.get("projects", [])),
         skills=_extract_skills(cleaned_lines, sections.get("skills", [])),
-        education=_extract_simple_items(sections.get("education", [])),
+        education=_extract_education(sections.get("education", [])),
         achievements=_extract_simple_items(sections.get("achievements", [])),
         certifications=_extract_certifications(sections.get("certifications", []), cleaned_lines),
     )
@@ -177,7 +177,7 @@ def _extract_profile(lines: list[str], sections: dict[str, list[str]]) -> Resume
     return ResumeProfile(
         name=likely_name,
         location=location,
-        email=email_match.group(0) if email_match else None,
+        email=_clean_email(email_match.group(0)) if email_match else None,
         phone=phone_match.group(0).strip() if phone_match else None,
         linkedin=_clean_profile_url(linkedin_match.group(0)) if linkedin_match else None,
         github=_clean_profile_url(github_match.group(0)) if github_match else None,
@@ -256,6 +256,32 @@ def _extract_skills(all_lines: list[str], skill_lines: list[str]) -> list[str]:
 
 def _extract_simple_items(lines: list[str]) -> list[str]:
     return [line for line in lines if len(line) > 2 and not _match_section_header(line)]
+
+
+def _extract_education(lines: list[str]) -> list[str]:
+    candidates = _extract_simple_items(lines)
+    if not candidates:
+        return []
+
+    grouped: list[str] = []
+    current: list[str] = []
+    for line in candidates:
+        if current and _looks_like_new_education_item(line):
+            grouped.append(" | ".join(current))
+            current = [line]
+            continue
+        current.append(line)
+
+    if current:
+        grouped.append(" | ".join(current))
+    return grouped
+
+
+def _looks_like_new_education_item(line: str) -> bool:
+    lowered = line.lower()
+    institution_tokens = ["university", "college", "school", "institute", "academy", "vidyalaya"]
+    detail_tokens = ["cgpa", "gpa", "percentage", "bachelor", "b.tech", "btech", "branch", "computer", "engineering", "science", "2020", "2021", "2022", "2023", "2024", "2025", "2026"]
+    return any(token in lowered for token in institution_tokens) and not any(token in lowered for token in detail_tokens)
 
 
 def _extract_certifications(section_lines: list[str], all_lines: list[str]) -> list[str]:
@@ -425,6 +451,20 @@ def _normalize_contact_text(text: str) -> str:
     text = re.sub(r"(?i)(github)\s*(github\.com)", r"\1 \2", text)
     text = re.sub(r"(?i)\b(phone|mobile|email|mail|envelope|marker-alt)\b", " ", text)
     return re.sub(r"\s+", " ", text)
+
+
+def _clean_email(email: str) -> str:
+    cleaned = email.strip(" ,;|")
+    if "@" not in cleaned:
+        return cleaned
+    local, domain = cleaned.split("@", 1)
+    local = re.sub(r"(?i)^(?:email|mail|envelope)", "", local).strip(".-_")
+    for artifact_prefix in ("pe", "p"):
+        candidate = local[len(artifact_prefix):]
+        if local.lower().startswith(artifact_prefix) and candidate.lower().startswith(("aditya", "aadi")):
+            local = candidate
+            break
+    return f"{local}@{domain}"
 
 
 def _extract_location_value(line: str) -> str | None:

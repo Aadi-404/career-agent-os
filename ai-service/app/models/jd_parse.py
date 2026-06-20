@@ -2,8 +2,8 @@ from pydantic import BaseModel, Field
 
 
 class ExperienceRange(BaseModel):
-    minYears: int | None = Field(default=None, ge=0, le=50)
-    maxYears: int | None = Field(default=None, ge=0, le=50)
+    minYears: float | None = Field(default=None, ge=0, le=50)
+    maxYears: float | None = Field(default=None, ge=0, le=50)
 
 
 class ParsedJobDescription(BaseModel):
@@ -12,6 +12,7 @@ class ParsedJobDescription(BaseModel):
     requiredSkills: list[str] = Field(default_factory=list)
     preferredSkills: list[str] = Field(default_factory=list)
     requiredCertifications: list[str] = Field(default_factory=list)
+    emphasizedRequirements: list[str] = Field(default_factory=list)
     responsibilities: list[str] = Field(default_factory=list)
     locations: list[str] = Field(default_factory=list)
     workModes: list[str] = Field(default_factory=list)

@@ -3,99 +3,11 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.models.analysis import AnalyzeRequest, RequirementMatch
-from app.services.embedding_service import local_cosine_similarity, semantic_similarity
+from app.services.embedding_service import SimilarityResult, semantic_similarity
 
 
 EvidenceSource = Literal["experience", "project", "skills", "certification", "achievement", "candidate_context", "other", "missing"]
-
-
-@dataclass
-class AtomicRequirement:
-    text: str
-    category: str
-    importance: Literal["high", "medium", "low"]
-    aliases: list[str]
-    semanticAnchor: str
-
-
-@dataclass
-class ResumeEvidence:
-    text: str
-    source: EvidenceSource
-    categories: set[str]
-    strength: float
-
-
-CONCEPTS: dict[str, dict[str, object]] = {
-    "ASP.NET Core / ASP.NET": {
-        "category": "backend",
-        "aliases": ["asp.net core", "asp net core", "asp.net", "asp net", ".net", "dotnet", "mvc", "razor"],
-    },
-    "C#": {"category": "backend", "aliases": ["c#", "c sharp"]},
-    "Web API / REST API": {
-        "category": "backend",
-        "aliases": ["web api", "rest api", "restapi", "rest services", "apis", "api integration", "endpoint", "endpoints"],
-    },
-    "Entity Framework / ORM": {
-        "category": "database",
-        "aliases": ["entity framework", "ef core", "ef", "orm", "migrations", "repository"],
-    },
-    "LINQ": {"category": "database", "aliases": ["linq", "iqueryable", "ienumerable"]},
-    "SQL / SQL Server": {
-        "category": "database",
-        "aliases": ["sql", "sql server", "ssms", "stored procedure", "query", "database", "dbms"],
-    },
-    "Database performance tuning": {
-        "category": "database",
-        "aliases": ["indexing", "indexes", "query optimization", "execution plan", "performance tuning", "page load", "optimized sql"],
-    },
-    "Angular": {"category": "frontend", "aliases": ["angular"]},
-    "React": {"category": "frontend", "aliases": ["react", "reactjs"]},
-    "Frontend API integration": {
-        "category": "frontend",
-        "aliases": ["frontend integration", "api integration", "forms", "validation", "ui", "screen", "razor ui"],
-    },
-    "JavaScript / HTML / CSS": {
-        "category": "frontend",
-        "aliases": ["javascript", "js", "jquery", "html", "css", "typescript"],
-    },
-    "Azure cloud": {
-        "category": "cloud_devops",
-        "aliases": ["azure", "azure cloud", "app service", "azure sql", "key vault", "cloud basics", "cloud fundamentals"],
-    },
-    "CI/CD / Azure DevOps": {
-        "category": "cloud_devops",
-        "aliases": ["azure devops", "ci/cd", "pipeline", "pipelines", "deployment", "release", "build"],
-    },
-    "Docker / containers": {
-        "category": "cloud_devops",
-        "aliases": ["docker", "container", "containers", "kubernetes"],
-    },
-    "Authentication / Authorization": {
-        "category": "security",
-        "aliases": ["jwt", "authentication", "authorization", "oauth", "role", "policy", "security"],
-    },
-    "Production debugging": {
-        "category": "debugging_reliability",
-        "aliases": ["production", "debugging", "debug", "logs", "monitoring", "incident", "root cause", "support", "live issues", "traces"],
-    },
-    "System design basics": {
-        "category": "system_design",
-        "aliases": ["system design", "architecture", "scalable", "caching", "queue", "distributed", "pagination", "reliability"],
-    },
-    "DSA / problem solving": {
-        "category": "problem_solving",
-        "aliases": ["dsa", "leetcode", "codechef", "geeksforgeeks", "hackerRank", "problem solving", "competitive coding"],
-    },
-    "Project ownership": {
-        "category": "ownership",
-        "aliases": ["end-to-end", "ownership", "owned", "delivered", "requirements", "feature", "critical screens"],
-    },
-    "Cloud certification / basics": {
-        "category": "cloud_devops",
-        "aliases": ["certification", "certified", "certificate", "az-900", "cloud practitioner", "digital leader", "fundamentals"],
-    },
-}
+Importance = Literal["high", "medium", "low"]
 
 SECTION_TO_SOURCE: dict[str, EvidenceSource] = {
     "experience": "experience",
@@ -108,75 +20,138 @@ SECTION_TO_SOURCE: dict[str, EvidenceSource] = {
 SOURCE_STRENGTH: dict[EvidenceSource, float] = {
     "experience": 1.0,
     "project": 0.95,
-    "certification": 0.72,
-    "achievement": 0.62,
-    "skills": 0.48,
-    "candidate_context": 0.38,
-    "other": 0.42,
+    "certification": 0.74,
+    "achievement": 0.64,
+    "skills": 0.56,
+    "candidate_context": 0.42,
+    "other": 0.44,
     "missing": 0,
 }
 
+REQUIREMENT_SECTION_HEADERS = {
+    "required skills",
+    "requirements",
+    "must have",
+    "mandatory skills",
+    "technical skills",
+    "qualifications",
+    "responsibilities",
+    "what you will do",
+    "role and responsibilities",
+    "preferred skills",
+    "good to have",
+    "nice to have",
+}
+
+STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "be",
+    "by",
+    "for",
+    "from",
+    "have",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "our",
+    "the",
+    "this",
+    "to",
+    "with",
+    "you",
+    "your",
+}
+
+
+@dataclass(frozen=True)
+class AtomicRequirement:
+    text: str
+    category: str
+    importance: Importance
+    aliases: list[str]
+    semanticAnchor: str
+    sourceText: str
+
+
+@dataclass(frozen=True)
+class ResumeEvidence:
+    text: str
+    source: EvidenceSource
+    strength: float
+
 
 def build_requirement_matches(request: AnalyzeRequest, limit: int = 12) -> list[RequirementMatch]:
-    requirements = _extract_requirements(request.jobDescriptionText)
+    requirements = _extract_requirements(request.jobDescriptionText, limit=limit)
     evidence = _extract_resume_evidence(request.resumeText, request.candidateContext.currentStack)
-    matches = [_match_requirement(requirement, evidence) for requirement in requirements[:limit]]
-    return matches
+    return [_match_requirement(requirement, evidence) for requirement in requirements]
 
 
-def _extract_requirements(jd_text: str) -> list[AtomicRequirement]:
-    requirements = []
-    sentences = _sentences(jd_text)
-    for concept, config in CONCEPTS.items():
-        aliases = list(config["aliases"])
-        category = str(config["category"])
-        semantic_anchor = _semantic_anchor(concept, aliases)
-        matching_sentence = _first_matching_text(sentences, aliases) or _first_semantic_text(sentences, semantic_anchor)
-        if not matching_sentence:
-            continue
-        importance = _importance(matching_sentence)
-        requirements.append(
-            AtomicRequirement(
-                text=concept if concept.lower() in matching_sentence.lower() else f"{concept}: {matching_sentence}",
-                category=category,
-                importance=importance,
-                aliases=aliases,
-                semanticAnchor=semantic_anchor,
+def _extract_requirements(jd_text: str, limit: int) -> list[AtomicRequirement]:
+    candidates: list[AtomicRequirement] = []
+    active_section = ""
+
+    for line in _clean_lines(jd_text):
+        section = _section_header(line)
+        if section:
+            active_section = section
+            line = _strip_section_prefix(line)
+            if not line:
+                continue
+
+        for unit in _requirement_units(line):
+            cleaned = _clean_requirement(unit)
+            if not _looks_like_requirement(cleaned, active_section):
+                continue
+            category = _category_for_requirement(cleaned, active_section)
+            candidates.append(
+                AtomicRequirement(
+                    text=cleaned,
+                    category=category,
+                    importance=_importance(cleaned, active_section),
+                    aliases=_aliases_for_requirement(cleaned),
+                    semanticAnchor=_semantic_anchor(cleaned, category, active_section),
+                    sourceText=line,
+                )
             )
-        )
-    return _dedupe_requirements(requirements)
+
+    return _dedupe_requirements(candidates)[:limit]
 
 
 def _extract_resume_evidence(resume_text: str, current_stack: list[str]) -> list[ResumeEvidence]:
     evidence = []
     current_section = "other"
+
     for raw_line in resume_text.splitlines():
-        line = re.sub(r"\s+", " ", raw_line).strip(" -")
+        line = re.sub(r"\s+", " ", raw_line).strip(" -•\t")
         if not line:
             continue
-        section = _section_for_line(line)
+        section = _resume_section_for_line(line)
         if section:
             current_section = section
             continue
+
         source = SECTION_TO_SOURCE.get(current_section, "other")
         for evidence_text in _evidence_units(line):
-            categories = _categories_for_text(evidence_text)
             evidence.append(
                 ResumeEvidence(
                     text=evidence_text,
                     source=source,
-                    categories=categories,
                     strength=SOURCE_STRENGTH[source],
                 )
             )
 
     if current_stack:
-        stack_line = "Candidate context stack: " + ", ".join(current_stack)
         evidence.append(
             ResumeEvidence(
-                text=stack_line,
+                text="Candidate context stack: " + ", ".join(current_stack),
                 source="candidate_context",
-                categories=_categories_for_text(stack_line),
                 strength=SOURCE_STRENGTH["candidate_context"],
             )
         )
@@ -189,8 +164,9 @@ def _match_requirement(requirement: AtomicRequirement, evidence_items: list[Resu
         return _missing_match(requirement, "No resume evidence was available.")
 
     (score, match_type, reason), evidence = max(scored, key=lambda item: item[0][0])
-    if score <= 15:
+    if score <= 18:
         return _missing_match(requirement, "No meaningful resume evidence matched this JD requirement.")
+
     return RequirementMatch(
         requirement=requirement.text,
         category=requirement.category,
@@ -204,65 +180,47 @@ def _match_requirement(requirement: AtomicRequirement, evidence_items: list[Resu
 
 
 def _score_evidence(requirement: AtomicRequirement, evidence: ResumeEvidence) -> tuple[int, str, str]:
-    text = evidence.text.lower()
-    alias_hits = sum(1 for alias in requirement.aliases if _contains(text, alias))
-    category_match = requirement.category in evidence.categories
-    semantic_hits = _semantic_hits(requirement.category, text)
-    embedding_provider = None
+    alias_hits = _alias_hits(requirement.aliases, evidence.text)
+    token_overlap = _token_overlap(requirement.text, evidence.text)
+    similarity = semantic_similarity(requirement.semanticAnchor, evidence.text)
 
     base = 0
     match_type = "missing"
-    if alias_hits >= 2:
+    if alias_hits >= 2 or token_overlap >= 0.72:
         base = 92
-        match_type = "strong_alias_match"
-    elif alias_hits == 1:
-        base = 82
-        match_type = "alias_match"
-    elif category_match and semantic_hits >= 2:
-        base = 76
-        match_type = "semantic_category_match"
-    elif category_match:
-        base = 62
-        match_type = "category_match"
-    else:
-        anchor_similarity = semantic_similarity(requirement.semanticAnchor, evidence.text)
-        text_similarity = semantic_similarity(requirement.text, evidence.text)
-        embedding_similarity = max(
-            anchor_similarity.score,
-            text_similarity.score,
-        )
-        embedding_provider = (
-            anchor_similarity
-            if anchor_similarity.score >= text_similarity.score
-            else text_similarity
-        )
-        if embedding_similarity >= 0.22:
-            base = round(58 + min((embedding_similarity - 0.22) * 100, 22))
-            match_type = "embedding_semantic_match"
-        elif semantic_hits:
-            base = 46
-            match_type = "weak_semantic_signal"
+        match_type = "strong_dynamic_phrase_match"
+    elif alias_hits == 1 or token_overlap >= 0.48:
+        base = 78
+        match_type = "dynamic_phrase_match"
+    elif similarity.score >= 0.78:
+        base = 86
+        match_type = "strong_embedding_semantic_match"
+    elif similarity.score >= 0.62:
+        base = 74
+        match_type = "embedding_semantic_match"
+    elif similarity.score >= 0.48:
+        base = 58
+        match_type = "weak_embedding_semantic_match"
 
     score = round(base * evidence.strength)
-    if evidence.source in {"experience", "project"} and score >= 55:
-        reason = "Direct project/experience evidence supports this requirement."
-    elif evidence.source == "skills" and score >= 35:
-        reason = "The skill is listed, but project or experience proof would be stronger."
-    elif evidence.source == "certification" and score >= 35:
-        reason = "Certification evidence is relevant, but hands-on project proof may still be needed."
-    elif evidence.source == "candidate_context" and score >= 25:
-        reason = "The candidate context mentions this area, but the resume should show stronger evidence."
-    else:
-        reason = "Evidence is weak or indirect for this JD requirement."
-    if match_type == "embedding_semantic_match" and embedding_provider:
-        provider_label = f"{embedding_provider.provider}/{embedding_provider.model}"
+    return max(0, min(score, 100)), match_type, _reason(match_type, evidence, similarity)
+
+
+def _reason(match_type: str, evidence: ResumeEvidence, similarity: SimilarityResult) -> str:
+    if match_type in {"strong_dynamic_phrase_match", "dynamic_phrase_match"}:
+        return "Resume evidence repeats or closely overlaps the JD requirement wording."
+    if "embedding" in match_type:
+        provider_label = f"{similarity.provider}/{similarity.model}"
         reason = (
-            "Embedding similarity found meaningful phrasing overlap even without exact keyword matching "
+            "Embedding similarity matched the JD requirement to resume evidence by meaning, "
             f"using {provider_label}."
         )
-        if not embedding_provider.live and embedding_provider.fallbackReason:
-            reason += f" Fallback reason: {embedding_provider.fallbackReason}"
-    return max(0, min(score, 100)), match_type, reason
+        if not similarity.live and similarity.fallbackReason:
+            reason += f" Fallback reason: {similarity.fallbackReason}"
+        return reason
+    if evidence.source == "skills":
+        return "The evidence is only listed as a skill; project or experience proof would be stronger."
+    return "Evidence is weak or indirect for this JD requirement."
 
 
 def _missing_match(requirement: AtomicRequirement, reason: str) -> RequirementMatch:
@@ -278,16 +236,147 @@ def _missing_match(requirement: AtomicRequirement, reason: str) -> RequirementMa
     )
 
 
-def _importance(text: str) -> Literal["high", "medium", "low"]:
+def _clean_lines(text: str) -> list[str]:
+    lines = []
+    for raw_line in text.replace("\u00a0", " ").splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip(" -•\t")
+        if line:
+            lines.append(line)
+    if lines:
+        return lines
+    compact = re.sub(r"\s+", " ", text).strip()
+    return [compact] if compact else []
+
+
+def _section_header(line: str) -> str | None:
+    normalized = re.sub(r"[^a-z0-9 ]+", " ", line.lower()).strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+    for header in REQUIREMENT_SECTION_HEADERS:
+        if normalized == header or normalized.startswith(f"{header} "):
+            return header
+    return None
+
+
+def _strip_section_prefix(line: str) -> str:
+    return re.sub(
+        r"^\s*(required skills|requirements|must have|mandatory skills|technical skills|qualifications|responsibilities|what you will do|role and responsibilities|preferred skills|good to have|nice to have)\s*[:\-]?\s*",
+        "",
+        line,
+        flags=re.IGNORECASE,
+    ).strip()
+
+
+def _requirement_units(line: str) -> list[str]:
+    units = []
+    for sentence in _sentences(line):
+        parts = re.split(r"\s*[;,]\s+|\s+\|\s+|\s+/\s+(?=[A-Z0-9])", sentence)
+        units.extend(part for part in parts if part.strip())
+    return units
+
+
+def _clean_requirement(text: str) -> str:
+    text = re.sub(r"^(?:\(?\d+\)\s*|\d+\.\s+)", "", text)
+    text = re.sub(r"^[•*-]\s*", "", text)
+    text = re.sub(r"\s+", " ", text).strip(" .:-")
+    text = re.sub(
+        r"^(candidate should|you should|must have|should have|required|mandatory|responsibilities|responsibility|experience with|knowledge of|strong knowledge of|hands-on experience with)\s*[:\-]?\s+",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text.strip(" .:-")
+
+
+def _looks_like_requirement(text: str, active_section: str) -> bool:
+    if len(text) < 2 or len(text) > 180:
+        return False
     lowered = text.lower()
-    if any(token in lowered for token in ["must", "required", "strong", "mandatory", "hands-on"]):
-        return "high"
+    if re.search(r"\b\d+(?:\.\d+)?\s*(?:to|-|\+)?\s*\d*(?:\.\d+)?\s*(?:years?|yrs?)\b", lowered):
+        return False
+    if any(label in lowered for label in ["work mode", "working mode", "location:", "job location", "office location"]):
+        return False
+    if active_section:
+        return True
+    if _token_count(text) == 1:
+        return _has_technical_shape(text)
+    requirement_signals = [
+        "experience",
+        "knowledge",
+        "skill",
+        "proficient",
+        "familiar",
+        "understand",
+        "build",
+        "develop",
+        "design",
+        "implement",
+        "manage",
+        "deploy",
+        "debug",
+        "test",
+        "integrate",
+        "certification",
+        "degree",
+    ]
+    return bool(active_section or _has_technical_shape(text) or any(signal in lowered for signal in requirement_signals))
+
+
+def _category_for_requirement(text: str, active_section: str) -> str:
+    lowered = f"{active_section} {text}".lower()
+    if any(term in lowered for term in ["certification", "certified", "certificate"]):
+        return "certification"
+    if any(term in lowered for term in ["responsibilities", "build", "develop", "design", "implement", "maintain", "debug", "deliver"]):
+        return "responsibility"
+    if any(term in lowered for term in ["years", "experience"]):
+        return "experience"
+    if any(term in lowered for term in ["degree", "qualification", "education"]):
+        return "qualification"
+    if any(term in lowered for term in ["preferred", "good to have", "nice to have"]):
+        return "preferred_requirement"
+    return "technical_requirement"
+
+
+def _importance(text: str, active_section: str) -> Importance:
+    lowered = f"{active_section} {text}".lower()
     if any(token in lowered for token in ["preferred", "good to have", "nice to have"]):
         return "low"
+    high_markers = [
+        "must",
+        "required",
+        "mandatory",
+        "strong",
+        "hands-on",
+        "deep",
+        "advanced",
+        "expertise",
+        "proven",
+        "solid",
+        "critical",
+        "core",
+        "primary",
+        "essential",
+        "requirements",
+        "technical skills",
+    ]
+    if any(token in lowered for token in high_markers):
+        return "high"
     return "medium"
 
 
-def _section_for_line(line: str) -> str | None:
+def _aliases_for_requirement(text: str) -> list[str]:
+    aliases = [text]
+    tokens = _meaningful_tokens(text)
+    aliases.extend(tokens)
+    aliases.extend(" ".join(tokens[index : index + 2]) for index in range(max(0, len(tokens) - 1)))
+    return _unique(alias for alias in aliases if len(alias) >= 2)
+
+
+def _semantic_anchor(text: str, category: str, active_section: str) -> str:
+    context = " ".join(part for part in [active_section, category, text] if part)
+    return context.strip()
+
+
+def _resume_section_for_line(line: str) -> str | None:
     normalized = re.sub(r"[^a-z0-9 ]+", " ", line.lower()).strip()
     normalized = re.sub(r"\s+", " ", normalized)
     if normalized in {"experience", "work experience", "professional experience"}:
@@ -303,77 +392,68 @@ def _section_for_line(line: str) -> str | None:
     return None
 
 
-def _categories_for_text(text: str) -> set[str]:
-    lowered = text.lower()
-    categories = set()
-    for config in CONCEPTS.values():
-        aliases = list(config["aliases"])
-        if any(_contains(lowered, alias) for alias in aliases):
-            categories.add(str(config["category"]))
-    return categories
-
-
-def _semantic_hits(category: str, text: str) -> int:
-    category_terms = {
-        "backend": ["endpoint", "controller", "service", "api", "business logic", "integration"],
-        "database": ["query", "table", "index", "data", "schema", "performance"],
-        "frontend": ["screen", "form", "validation", "ui", "client", "component"],
-        "cloud_devops": ["deploy", "deployment", "environment", "pipeline", "release", "cloud", "devops"],
-        "security": ["token", "role", "permission", "secure", "login"],
-        "debugging_reliability": ["issue", "issues", "bug", "logs", "trace", "traces", "monitor", "production", "live", "support"],
-        "system_design": ["scale", "cache", "queue", "architecture", "pagination", "reliable"],
-        "problem_solving": ["problems", "coding", "algorithm", "data structure"],
-        "ownership": ["delivered", "owned", "requirement", "feature", "end-to-end"],
-    }
-    return sum(1 for term in category_terms.get(category, []) if term in text)
-
-
-def _first_matching_text(sentences: list[str], aliases: list[str]) -> str | None:
-    for sentence in sentences:
-        lowered = sentence.lower()
-        if any(_contains(lowered, alias) for alias in aliases):
-            return sentence
-    return None
-
-
-def _first_semantic_text(sentences: list[str], anchor: str) -> str | None:
-    best_sentence = None
-    best_score = 0.0
-    for sentence in sentences:
-        score = local_cosine_similarity(anchor, sentence)
-        if score > best_score:
-            best_score = score
-            best_sentence = sentence
-    return best_sentence if best_score >= 0.34 else None
-
-
-def _semantic_anchor(concept: str, aliases: list[str]) -> str:
-    return " ".join([concept, *aliases])
+def _evidence_units(text: str) -> list[str]:
+    sentences = _sentences(text)
+    return sentences if len(sentences) > 1 else [text]
 
 
 def _sentences(text: str) -> list[str]:
     normalized = re.sub(r"\s+", " ", text).strip()
-    return [part.strip() for part in re.split(r"(?:[.!?]\s+|[\n;])", normalized) if part.strip()]
+    return [part.strip() for part in re.split(r"(?:[!?]\s+|(?<!\d)\.\s+|[\n])", normalized) if part.strip()]
 
 
-def _evidence_units(text: str) -> list[str]:
-    sentences = _sentences(text)
-    if len(sentences) <= 1:
-        return [text]
-    return sentences
+def _alias_hits(aliases: list[str], text: str) -> int:
+    lowered = text.lower()
+    return sum(1 for alias in aliases if _contains_phrase(lowered, alias.lower()))
 
 
-def _contains(text: str, phrase: str) -> bool:
-    escaped = re.escape(phrase.lower()).replace("\\ ", r"\s+")
-    return bool(re.search(rf"(?<![a-z0-9+#]){escaped}(?![a-z0-9+#])", text))
+def _token_overlap(left: str, right: str) -> float:
+    left_tokens = set(_meaningful_tokens(left))
+    right_tokens = set(_meaningful_tokens(right))
+    if not left_tokens:
+        return 0
+    return len(left_tokens & right_tokens) / len(left_tokens)
+
+
+def _meaningful_tokens(text: str) -> list[str]:
+    tokens = re.findall(r"[a-zA-Z0-9][a-zA-Z0-9+#.\-]{1,}", text.lower())
+    return [token for token in tokens if token not in STOPWORDS]
+
+
+def _token_count(text: str) -> int:
+    return len(re.findall(r"[a-zA-Z0-9][a-zA-Z0-9+#.\-]*", text))
+
+
+def _has_technical_shape(text: str) -> bool:
+    return bool(
+        re.search(r"[A-Z]{2,}|\w+[+#.]|\d|[-/]", text)
+        or re.search(r"\b(api|sdk|framework|database|cloud|pipeline|model|server|frontend|backend|testing)\b", text, flags=re.IGNORECASE)
+    )
+
+
+def _contains_phrase(text: str, phrase: str) -> bool:
+    escaped = re.escape(phrase).replace("\\ ", r"\s+")
+    return bool(re.search(rf"(?<![a-z0-9+#.\-]){escaped}(?![a-z0-9+#.\-])", text))
+
+
+def _unique(values: list[str] | tuple[str, ...] | set[str] | object) -> list[str]:
+    seen = set()
+    result = []
+    for value in values:
+        key = str(value).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(str(value))
+    return result
 
 
 def _dedupe_requirements(requirements: list[AtomicRequirement]) -> list[AtomicRequirement]:
     seen = set()
     result = []
     for requirement in requirements:
-        key = (requirement.category, requirement.text.lower())
-        if key in seen:
+        key = " ".join(_meaningful_tokens(requirement.text))
+        if not key or key in seen:
             continue
         seen.add(key)
         result.append(requirement)

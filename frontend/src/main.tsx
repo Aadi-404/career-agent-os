@@ -74,6 +74,7 @@ type AnalysisResponse = {
 type LlmMode = "mock" | "live";
 type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
+type ScoreStep = "upload" | "review" | "score";
 type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
 
@@ -174,6 +175,7 @@ type ParsedJobDescription = {
   requiredSkills: string[];
   preferredSkills: string[];
   requiredCertifications: string[];
+  emphasizedRequirements: string[];
   responsibilities: string[];
   locations: string[];
   workModes: string[];
@@ -219,11 +221,14 @@ function App() {
   const [llmMode, setLlmMode] = useState<LlmMode>("mock");
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("groq");
   const [llmModel, setLlmModel] = useState("llama-3.3-70b-versatile");
+  const [scoreStep, setScoreStep] = useState<ScoreStep>("upload");
   const [resumeSource, setResumeSource] = useState<ResumeSource>("text");
   const [uploading, setUploading] = useState(false);
+  const [jdUploading, setJdUploading] = useState(false);
   const [normalizing, setNormalizing] = useState(false);
   const [parsingJd, setParsingJd] = useState(false);
   const [uploadInfo, setUploadInfo] = useState("");
+  const [jdUploadInfo, setJdUploadInfo] = useState("");
   const [normalizeInfo, setNormalizeInfo] = useState("");
   const [jdParseInfo, setJdParseInfo] = useState("");
   const [structuredResume, setStructuredResume] = useState<StructuredResume | null>(null);
@@ -548,6 +553,43 @@ function App() {
     }
   }
 
+  async function uploadJobDescription(file: File | null) {
+    if (!file) return;
+    setJdUploading(true);
+    setError("");
+    setJdUploadInfo("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(`${API_BASE_URL}/ai/resume/extract`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(details || "JD extraction failed");
+      }
+
+      const extracted = await response.json() as {
+        fileName: string;
+        extractedText: string;
+        characterCount: number;
+        detectedEmails: string[];
+        detectedPhones: string[];
+        detectedSections: string[];
+      };
+
+      setJobDescriptionText(extracted.extractedText);
+      setJdUploadInfo(`${extracted.fileName}: ${extracted.characterCount} chars extracted`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "JD extraction failed");
+    } finally {
+      setJdUploading(false);
+    }
+  }
+
   async function normalizeCurrentResume() {
     setNormalizing(true);
     setError("");
@@ -609,7 +651,8 @@ function App() {
       const requiredCount = parsed.parsedJobDescription.requiredSkills.length;
       const preferredCount = parsed.parsedJobDescription.preferredSkills.length;
       const certificationCount = parsed.parsedJobDescription.requiredCertifications.length;
-      setJdParseInfo(`Parsed ${requiredCount} required skill(s), ${preferredCount} preferred skill(s), ${certificationCount} certification requirement(s).${warnings}`);
+      const emphasisCount = (parsed.parsedJobDescription.emphasizedRequirements ?? []).length;
+      setJdParseInfo(`Parsed ${requiredCount} required skill(s), ${preferredCount} preferred skill(s), ${certificationCount} certification requirement(s), ${emphasisCount} emphasized requirement(s).${warnings}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "JD parsing failed");
     } finally {
@@ -623,11 +666,22 @@ function App() {
     <main className="shell appShell">
       <section className="header appHeader">
         <div>
-          <p className="eyebrow">Task-based career workspace</p>
+          <div className="brandLockup">
+            <span className="brandMark">CA</span>
+            <p className="eyebrow">Career Agent OS</p>
+          </div>
           <h1>Career Agent OS</h1>
-          <p className="subtitle">Separate resume matching, preparation planning, practice, progress, and history so each AI call has a clear purpose.</p>
+          <p className="subtitle">A premium career intelligence workspace for resume fit scoring, interview preparation, and progress tracking.</p>
+          <div className="headerBadges">
+            <span>Free match score</span>
+            <span>Premium insight modules</span>
+            <span>PostgreSQL history</span>
+          </div>
         </div>
-        <div className="scorePreview">{result ? `${result.technicalMatchScore}%` : "No run"}</div>
+        <div className="scorePreview">
+          <span>Free score</span>
+          <strong>{result ? `${result.technicalMatchScore}%` : "No run"}</strong>
+        </div>
       </section>
 
       <section className="workspace">
@@ -660,104 +714,175 @@ function App() {
                   onModelChange={setLlmModel}
                 />
 
-                <div className="formSection">
-                  <div className="sectionHeading">
-                    <h3>Candidate Context</h3>
-                    <span>Used by scorer</span>
-                  </div>
-                  <div className="gridTwo">
-                    <label>
-                      Target role
-                      <input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} />
-                    </label>
-                    <label>
-                      Experience years
-                      <input type="number" min={0} max={50} step="0.1" value={experienceYears} onChange={(event) => setExperienceYears(Number(event.target.value))} />
-                    </label>
-                  </div>
-                  <label>
-                    Current stack
-                    <input value={currentStack} onChange={(event) => setCurrentStack(event.target.value)} />
-                  </label>
-                  <label>
-                    Target market
-                    <input value={targetMarket} onChange={(event) => setTargetMarket(event.target.value)} />
-                  </label>
-                  <div className="gridTwo">
-                    <label>
-                      Current location
-                      <input value={currentLocation} onChange={(event) => setCurrentLocation(event.target.value)} />
-                    </label>
-                    <label>
-                      Notice days
-                      <input type="number" min={0} max={365} value={noticePeriodDays} onChange={(event) => setNoticePeriodDays(Number(event.target.value))} />
-                    </label>
-                  </div>
-                  <label>
-                    Preferred locations
-                    <input value={preferredLocations} onChange={(event) => setPreferredLocations(event.target.value)} />
-                  </label>
-                  <div className="gridTwo">
-                    <label>
-                      Current CTC LPA
-                      <input type="number" min={0} step="0.1" value={currentCtcLpa} onChange={(event) => setCurrentCtcLpa(event.target.value)} />
-                    </label>
-                    <label>
-                      Expected CTC LPA
-                      <input type="number" min={0} step="0.1" value={expectedCtcLpa} onChange={(event) => setExpectedCtcLpa(event.target.value)} />
-                    </label>
-                  </div>
-                  <label>
-                    Work mode preference
-                    <input value={workModePreference} onChange={(event) => setWorkModePreference(event.target.value)} />
-                  </label>
-                  <label className="checkRow">
-                    <input type="checkbox" checked={relocationOpen} onChange={(event) => setRelocationOpen(event.target.checked)} />
-                    Open to relocation
-                  </label>
-                </div>
+                <ScoreStepper currentStep={scoreStep} onChange={setScoreStep} />
 
-                <div className="formSection">
-                  <div className="sectionHeading">
-                    <h3>Inputs</h3>
-                    <button type="button" className="tinyButton" onClick={() => setActiveTask("review")}>Open editors</button>
-                  </div>
-                  <div>
-                    <span className="fieldTitle">Resume source</span>
-                    <div className="segmented">
-                      <button type="button" className={resumeSource === "text" ? "active" : ""} onClick={() => setResumeSource("text")}>Text</button>
-                      <button type="button" className={resumeSource === "file" ? "active" : ""} onClick={() => setResumeSource("file")}>File upload</button>
+                {scoreStep === "upload" && (
+                  <>
+                    <div className="formSection">
+                      <div className="sectionHeading">
+                        <h3>Upload Inputs</h3>
+                        <span>Resume + JD</span>
+                      </div>
+                      <div className="uploadGrid">
+                        <div className="uploadCard">
+                          <div className="uploadHeader">
+                            <strong>Resume</strong>
+                            <span>{uploading ? "Extracting..." : uploadInfo || "PDF, DOCX, or TXT"}</span>
+                          </div>
+                          <input type="file" accept=".txt,.pdf,.docx" onChange={(event) => uploadResume(event.target.files?.[0] ?? null)} />
+                          <button type="button" className="tinyButton" onClick={() => setResumeSource(resumeSource === "file" ? "text" : "file")}>
+                            {resumeSource === "file" ? "Use text editor" : "Show text editor"}
+                          </button>
+                        </div>
+                        <div className="uploadCard">
+                          <div className="uploadHeader">
+                            <strong>Job Description</strong>
+                            <span>{jdUploading ? "Extracting..." : jdUploadInfo || "PDF, DOCX, or TXT"}</span>
+                          </div>
+                          <input type="file" accept=".txt,.pdf,.docx" onChange={(event) => uploadJobDescription(event.target.files?.[0] ?? null)} />
+                        </div>
+                      </div>
+                      <div className="editorSplit">
+                        <label>
+                          Resume text
+                          <textarea value={resumeText} onChange={(event) => setResumeText(event.target.value)} rows={10} />
+                        </label>
+                        <label>
+                          Job description text
+                          <textarea value={jobDescriptionText} onChange={(event) => setJobDescriptionText(event.target.value)} rows={10} />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="formSection">
+                      <div className="sectionHeading">
+                        <h3>Candidate Context</h3>
+                        <span>Used by scorer</span>
+                      </div>
+                      <div className="gridTwo">
+                        <label>
+                          Target role
+                          <input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} />
+                        </label>
+                        <label>
+                          Experience years
+                          <input type="number" min={0} max={50} step="0.1" value={experienceYears} onChange={(event) => setExperienceYears(Number(event.target.value))} />
+                        </label>
+                      </div>
+                      <label>
+                        Current stack
+                        <input value={currentStack} onChange={(event) => setCurrentStack(event.target.value)} />
+                      </label>
+                      <label>
+                        Target market
+                        <input value={targetMarket} onChange={(event) => setTargetMarket(event.target.value)} />
+                      </label>
+                      <div className="gridTwo">
+                        <label>
+                          Current location
+                          <input value={currentLocation} onChange={(event) => setCurrentLocation(event.target.value)} />
+                        </label>
+                        <label>
+                          Notice days
+                          <input type="number" min={0} max={365} value={noticePeriodDays} onChange={(event) => setNoticePeriodDays(Number(event.target.value))} />
+                        </label>
+                      </div>
+                      <label>
+                        Preferred locations
+                        <input value={preferredLocations} onChange={(event) => setPreferredLocations(event.target.value)} />
+                      </label>
+                      <div className="gridTwo">
+                        <label>
+                          Current CTC LPA
+                          <input type="number" min={0} step="0.1" value={currentCtcLpa} onChange={(event) => setCurrentCtcLpa(event.target.value)} />
+                        </label>
+                        <label>
+                          Expected CTC LPA
+                          <input type="number" min={0} step="0.1" value={expectedCtcLpa} onChange={(event) => setExpectedCtcLpa(event.target.value)} />
+                        </label>
+                      </div>
+                      <label>
+                        Work mode preference
+                        <input value={workModePreference} onChange={(event) => setWorkModePreference(event.target.value)} />
+                      </label>
+                      <label className="checkRow">
+                        <input type="checkbox" checked={relocationOpen} onChange={(event) => setRelocationOpen(event.target.checked)} />
+                        Open to relocation
+                      </label>
+                    </div>
+
+                    <div className="actionBar">
+                      <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
+                        {normalizing ? "Normalizing..." : "Normalize Resume"}
+                      </button>
+                      <button type="button" className="secondaryButton" disabled={parsingJd || jobDescriptionText.trim().length < 20} onClick={parseCurrentJd}>
+                        {parsingJd ? "Parsing JD..." : "Parse JD"}
+                      </button>
+                      <button type="button" onClick={() => setScoreStep("review")}>Next: Review & Edit</button>
+                    </div>
+                  </>
+                )}
+
+                {scoreStep === "review" && (
+                  <div className="reviewWorkspace compactReview">
+                    <ReviewWorkspaceSummary resume={structuredResume} jd={parsedJd} resumeText={resumeText} jdText={jobDescriptionText} />
+                    {structuredResume ? (
+                      <StructuredResumeEditor
+                        resume={structuredResume}
+                        finalText={resumeText}
+                        onChange={(nextResume) => {
+                          setStructuredResume(nextResume);
+                          setResumeText(formatStructuredResume(nextResume));
+                        }}
+                      />
+                    ) : (
+                      <EmptyState title="Resume needs normalization" body="Normalize the resume to edit profile, education, projects, certifications, and skills before scoring." />
+                    )}
+                    {parsedJd ? (
+                      <ParsedJdEditor
+                        parsedJd={parsedJd}
+                        finalText={jobDescriptionText}
+                        onChange={(nextJd) => {
+                          setParsedJd(nextJd);
+                          setJobDescriptionText(formatParsedJd(nextJd));
+                        }}
+                      />
+                    ) : (
+                      <EmptyState title="JD needs parsing" body="Parse the JD to review required, preferred, certification, and emphasized requirements before scoring." />
+                    )}
+                    <div className="actionBar">
+                      <button type="button" className="secondaryButton" onClick={() => setScoreStep("upload")}>Back</button>
+                      <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
+                        {normalizing ? "Normalizing..." : "Normalize Resume"}
+                      </button>
+                      <button type="button" className="secondaryButton" disabled={parsingJd || jobDescriptionText.trim().length < 20} onClick={parseCurrentJd}>
+                        {parsingJd ? "Parsing JD..." : "Parse JD"}
+                      </button>
+                      <button type="button" onClick={() => setScoreStep("score")}>Next: Calculate Score</button>
                     </div>
                   </div>
-                  {resumeSource === "file" && (
-                    <label>
-                      Upload resume (.txt, .pdf, .docx)
-                      <input type="file" accept=".txt,.pdf,.docx" onChange={(event) => uploadResume(event.target.files?.[0] ?? null)} />
-                      {uploading && <span className="hint">Extracting resume...</span>}
-                      {uploadInfo && <span className="hint">{uploadInfo}</span>}
-                    </label>
-                  )}
-                  <div className="editorSplit">
-                    <label>
-                      Resume text
-                      <textarea value={resumeText} onChange={(event) => setResumeText(event.target.value)} rows={10} />
-                    </label>
-                    <label>
-                      Job description text
-                      <textarea value={jobDescriptionText} onChange={(event) => setJobDescriptionText(event.target.value)} rows={10} />
-                    </label>
-                  </div>
-                </div>
+                )}
 
-                <div className="actionBar">
-                  <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
-                    {normalizing ? "Normalizing..." : "Normalize Resume"}
-                  </button>
-                  <button type="button" className="secondaryButton" disabled={parsingJd || jobDescriptionText.trim().length < 20} onClick={parseCurrentJd}>
-                    {parsingJd ? "Parsing JD..." : "Parse JD"}
-                  </button>
-                  <button disabled={loading}>{loading ? "Matching..." : "Run Resume Match"}</button>
-                </div>
+                {scoreStep === "score" && (
+                  <div className="formSection">
+                    <div className="sectionHeading">
+                      <h3>Score Calculator</h3>
+                      <span>Free mandatory output</span>
+                    </div>
+                    <div className="readyGrid">
+                      <div><span>Resume status</span><strong>{structuredResume ? "Reviewed structure" : "Raw text"}</strong></div>
+                      <div><span>JD status</span><strong>{parsedJd ? "Parsed requirements" : "Raw text"}</strong></div>
+                      <div><span>Plan days</span><strong>{preparationPlanDays}</strong></div>
+                      <div><span>Model mode</span><strong>{llmMode === "live" ? llmProvider : "mock"}</strong></div>
+                    </div>
+                    <div className="actionBar">
+                      <button type="button" className="secondaryButton" onClick={() => setScoreStep("review")}>Back to Review</button>
+                      <button disabled={loading || resumeText.trim().length < 20 || jobDescriptionText.trim().length < 20}>
+                        {loading ? "Matching..." : "Run Resume Match"}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {normalizeInfo && <p className="hint">{normalizeInfo}</p>}
                 {jdParseInfo && <p className="hint">{jdParseInfo}</p>}
                 {historyInfo && <p className="hint">{historyInfo}</p>}
@@ -834,7 +959,7 @@ function App() {
                 <div className="actionBar">
                   <button
                     type="button"
-                    className="secondaryButton"
+                    className="secondaryButton premiumButton"
                     disabled={Boolean(artifactLoading)}
                     onClick={() => buildOptionalArtifact(
                       "Resume improvements",
@@ -842,11 +967,12 @@ function App() {
                       (current, payload) => ({ ...current, resumeImprovements: payload as AnalysisResponse["resumeImprovements"] }),
                     )}
                   >
+                    <span>Pro</span>
                     {artifactLoading === "Resume improvements" ? "Generating..." : "Generate Resume Improvements"}
                   </button>
                   <button
                     type="button"
-                    className="secondaryButton"
+                    className="secondaryButton premiumButton"
                     disabled={Boolean(artifactLoading)}
                     onClick={() => buildOptionalArtifact(
                       "Interview questions",
@@ -854,11 +980,12 @@ function App() {
                       (current, payload) => ({ ...current, interviewQuestions: payload as AnalysisResponse["interviewQuestions"] }),
                     )}
                   >
+                    <span>Pro</span>
                     {artifactLoading === "Interview questions" ? "Generating..." : "Generate Interview Questions"}
                   </button>
                   <button
                     type="button"
-                    className="secondaryButton"
+                    className="secondaryButton premiumButton"
                     disabled={Boolean(artifactLoading)}
                     onClick={() => buildOptionalArtifact(
                       "Cross questions",
@@ -866,6 +993,7 @@ function App() {
                       (current, payload) => ({ ...current, crossQuestions: payload as AnalysisResponse["crossQuestions"] }),
                     )}
                   >
+                    <span>Pro</span>
                     {artifactLoading === "Cross questions" ? "Generating..." : "Generate Cross Questions"}
                   </button>
                 </div>
@@ -886,7 +1014,8 @@ function App() {
                   Preparation plan days
                   <input type="number" min={1} max={30} value={preparationPlanDays} onChange={(event) => setPreparationPlanDays(Math.max(1, Math.min(30, Number(event.target.value) || 7)))} />
                 </label>
-                <button type="button" disabled={!result || preparing} onClick={buildPreparation}>
+                <button type="button" className="premiumButton" disabled={!result || preparing} onClick={buildPreparation}>
+                  <span>Pro</span>
                   {preparing ? "Building Plan..." : preparation ? "Rebuild Preparation Plan" : "Build Preparation Plan"}
                 </button>
               </div>
@@ -1316,6 +1445,31 @@ function ReviewWorkspaceSummary({
   );
 }
 
+function ScoreStepper({ currentStep, onChange }: { currentStep: ScoreStep; onChange: (step: ScoreStep) => void }) {
+  const steps: Array<{ id: ScoreStep; title: string; meta: string }> = [
+    { id: "upload", title: "Upload", meta: "Resume + JD" },
+    { id: "review", title: "Review", meta: "Edit parsed data" },
+    { id: "score", title: "Score", meta: "Calculate match" },
+  ];
+
+  return (
+    <div className="scoreStepper" aria-label="Score calculator steps">
+      {steps.map((step, index) => (
+        <button
+          type="button"
+          key={step.id}
+          className={`stepPill ${currentStep === step.id ? "active" : ""}`}
+          onClick={() => onChange(step.id)}
+        >
+          <span>{index + 1}</span>
+          <strong>{step.title}</strong>
+          <em>{step.meta}</em>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function StructuredResumeEditor({
   resume,
   finalText,
@@ -1509,6 +1663,7 @@ function ParsedJdEditor({
         <span>{parsedJd.requiredSkills.length} required</span>
         <span>{parsedJd.preferredSkills.length} preferred</span>
         <span>{parsedJd.requiredCertifications.length} certifications</span>
+        <span>{(parsedJd.emphasizedRequirements ?? []).length} emphasized</span>
         <span>{experience}</span>
       </div>
       <div className="editorSection">
@@ -1523,6 +1678,7 @@ function ParsedJdEditor({
         <ListEditor title="Required Skills" items={parsedJd.requiredSkills} placeholder="Add required skill" onChange={(items) => update("requiredSkills", items)} />
         <ListEditor title="Preferred Skills" items={parsedJd.preferredSkills} placeholder="Add preferred skill" onChange={(items) => update("preferredSkills", items)} />
         <ListEditor title="Required Certifications" items={parsedJd.requiredCertifications} placeholder="Add certification requirement" onChange={(items) => update("requiredCertifications", items)} />
+        <ListEditor title="Emphasized Requirements" items={parsedJd.emphasizedRequirements ?? []} placeholder="Add must-have or strongly emphasized requirement" onChange={(items) => update("emphasizedRequirements", items)} />
         <ListEditor title="Responsibilities" items={parsedJd.responsibilities} placeholder="Add responsibility" onChange={(items) => update("responsibilities", items)} />
         <ListEditor title="Locations" items={parsedJd.locations} placeholder="Add location" onChange={(items) => update("locations", items)} />
         <ListEditor title="Work Modes" items={parsedJd.workModes} placeholder="Add work mode" onChange={(items) => update("workModes", items)} />
@@ -1575,6 +1731,7 @@ function formatParsedJd(jd: ParsedJobDescription) {
   if (jd.requiredSkills.length) output.push("", "Required Skills", ...jd.requiredSkills.map((item) => `- ${item}`));
   if (jd.preferredSkills.length) output.push("", "Preferred Skills", ...jd.preferredSkills.map((item) => `- ${item}`));
   if (jd.requiredCertifications.length) output.push("", "Required Certifications", ...jd.requiredCertifications.map((item) => `- ${item}`));
+  if ((jd.emphasizedRequirements ?? []).length) output.push("", "Emphasized Requirements", ...(jd.emphasizedRequirements ?? []).map((item) => `- ${item}`));
   if (jd.responsibilities.length) output.push("", "Responsibilities", ...jd.responsibilities.map((item) => `- ${item}`));
   if (jd.locations.length) output.push("", "Locations", jd.locations.join(", "));
   if (jd.workModes.length) output.push("", "Work Modes", jd.workModes.join(", "));
@@ -1617,6 +1774,7 @@ function ParsedJdPanel({ parsedJd }: { parsedJd: JdParseResponse["parsedJobDescr
       <ReviewTags title="Required" items={parsedJd.requiredSkills} />
       <ReviewTags title="Preferred" items={parsedJd.preferredSkills} />
       <ReviewTags title="Certifications" items={parsedJd.requiredCertifications} />
+      <ReviewTags title="Emphasized" items={parsedJd.emphasizedRequirements ?? []} />
       <ReviewTags title="Location" items={parsedJd.locations} />
       <ReviewTags title="Work mode" items={parsedJd.workModes} />
     </div>
