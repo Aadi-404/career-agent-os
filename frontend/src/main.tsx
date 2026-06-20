@@ -103,14 +103,40 @@ type AnalyzeRequestPayload = {
 
 type HistoryAnalysisRecord = {
   id: string;
+  title: string;
+  technicalMatchScore: number;
+  fitCategory: string;
+  createdAt: string;
+  response: AnalysisResponse;
 };
 
 type HistoryResumeRecord = {
   id: string;
+  title: string;
+  createdAt: string;
 };
 
 type HistoryJobDescriptionRecord = {
   id: string;
+  title: string;
+  company?: string | null;
+  createdAt: string;
+};
+
+type HistoryPreparationRecord = {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  plan: PreparationIntelligence;
+};
+
+type WorkspaceSummary = {
+  resumeCount: number;
+  jobDescriptionCount: number;
+  analysisCount: number;
+  preparationSessionCount: number;
+  latestAnalysis?: HistoryAnalysisRecord | null;
 };
 
 type StructuredResume = {
@@ -210,12 +236,24 @@ function App() {
   const [error, setError] = useState("");
   const [preparationInfo, setPreparationInfo] = useState("");
   const [historyInfo, setHistoryInfo] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
+  const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
+  const [resumeHistory, setResumeHistory] = useState<HistoryResumeRecord[]>([]);
+  const [jdHistory, setJdHistory] = useState<HistoryJobDescriptionRecord[]>([]);
+  const [preparationHistory, setPreparationHistory] = useState<HistoryPreparationRecord[]>([]);
 
   useEffect(() => {
     ensureLocalUser().catch(() => {
       setHistoryInfo("History is offline until the backend database is available.");
     });
   }, []);
+
+  useEffect(() => {
+    if (activeTask === "history") {
+      loadHistory();
+    }
+  }, [activeTask]);
 
   function buildAnalyzeRequest(): AnalyzeRequestPayload {
     return {
@@ -320,6 +358,36 @@ function App() {
     if (!response.ok) throw new Error("Preparation history save failed");
   }
 
+  async function loadHistory() {
+    setHistoryLoading(true);
+    setHistoryInfo("");
+    try {
+      await ensureLocalUser();
+      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/workspace`),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/analyses`),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/resumes`),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/job-descriptions`),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/preparation-sessions`),
+      ]);
+
+      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok) {
+        throw new Error("History load failed");
+      }
+
+      setWorkspaceSummary(await workspaceResponse.json() as WorkspaceSummary);
+      setAnalysisHistory(await analysesResponse.json() as HistoryAnalysisRecord[]);
+      setResumeHistory(await resumesResponse.json() as HistoryResumeRecord[]);
+      setJdHistory(await jdsResponse.json() as HistoryJobDescriptionRecord[]);
+      setPreparationHistory(await preparationsResponse.json() as HistoryPreparationRecord[]);
+      setHistoryInfo("Loaded saved PostgreSQL history.");
+    } catch (err) {
+      setHistoryInfo(err instanceof Error ? err.message : "History load failed");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
   async function analyze() {
     setLoading(true);
     setError("");
@@ -346,6 +414,7 @@ function App() {
         const saved = await saveHistorySnapshot(payload, analysis);
         setLastSavedAnalysisId(saved.id);
         setHistoryInfo("Saved latest resume, JD, and match report to history.");
+        if (activeTask === "history") void loadHistory();
       } catch (historyError) {
         setHistoryInfo(historyError instanceof Error ? historyError.message : "History save failed.");
       }
@@ -387,6 +456,7 @@ function App() {
       setResult({ ...result, preparationIntelligence: preparation });
       try {
         await savePreparationSession(preparation);
+        if (activeTask === "history") void loadHistory();
         setPreparationInfo(`Built and saved a ${preparation.dailyPlan.length}-day preparation plan from the latest match result.`);
       } catch (historyError) {
         setPreparationInfo(`Built a ${preparation.dailyPlan.length}-day preparation plan, but history save failed.`);
@@ -760,9 +830,22 @@ function App() {
             <TaskPanel
               eyebrow="Task 4"
               title="User History"
-              description="This is the future multi-user area for resume versions, JD library, analysis reports, and preparation sessions."
+              description="Saved resume versions, JD records, match reports, and preparation sessions from PostgreSQL."
             >
-              <HistoryPlaceholder result={result} />
+              <div className="actionBar">
+                <button type="button" className="secondaryButton" disabled={historyLoading} onClick={loadHistory}>
+                  {historyLoading ? "Loading History..." : "Refresh History"}
+                </button>
+                {historyInfo && <p className="hint">{historyInfo}</p>}
+              </div>
+              <HistoryPanel
+                summary={workspaceSummary}
+                analyses={analysisHistory}
+                resumes={resumeHistory}
+                jobDescriptions={jdHistory}
+                preparations={preparationHistory}
+                currentResult={result}
+              />
             </TaskPanel>
           )}
         </section>
@@ -982,31 +1065,115 @@ function ProgressPlaceholder({ result }: { result: AnalysisResponse | null }) {
   );
 }
 
-function HistoryPlaceholder({ result }: { result: AnalysisResponse | null }) {
+function HistoryPanel({
+  summary,
+  analyses,
+  resumes,
+  jobDescriptions,
+  preparations,
+  currentResult,
+}: {
+  summary: WorkspaceSummary | null;
+  analyses: HistoryAnalysisRecord[];
+  resumes: HistoryResumeRecord[];
+  jobDescriptions: HistoryJobDescriptionRecord[];
+  preparations: HistoryPreparationRecord[];
+  currentResult: AnalysisResponse | null;
+}) {
   return (
-    <div className="placeholderGrid">
+    <div className="historyGrid">
       <div className="panel">
-        <h3>History objects</h3>
-        <ul>
-          <li>Resume versions with original text and edited normalized JSON.</li>
-          <li>JD records with parsed requirements and seniority signals.</li>
-          <li>Analysis snapshots with score, matrix, gaps, and recommendations.</li>
-          <li>Preparation sessions linked to an analysis snapshot.</li>
-        </ul>
+        <h3>Workspace Summary</h3>
+        <div className="scoreGrid">
+          <div className="scoreTile"><span>Resumes</span><strong>{summary?.resumeCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>JDs</span><strong>{summary?.jobDescriptionCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Reports</span><strong>{summary?.analysisCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Plans</span><strong>{summary?.preparationSessionCount ?? 0}</strong></div>
+        </div>
       </div>
+
       <div className="panel">
-        <h3>Latest report preview</h3>
-        {result ? (
+        <h3>Latest Local Report</h3>
+        {currentResult ? (
           <div className="historyPreview">
-            <strong>{result.technicalMatchScore}% - {result.fitCategory}</strong>
-            <p>{result.overallSummary}</p>
+            <strong>{currentResult.technicalMatchScore}% - {currentResult.fitCategory}</strong>
+            <p>{currentResult.overallSummary}</p>
           </div>
         ) : (
           <p className="hint">No local report generated in this session yet.</p>
         )}
       </div>
+
+      <div className="panel historyWide">
+        <h3>Saved Match Reports</h3>
+        {analyses.length ? (
+          <div className="historyList">
+            {analyses.slice(0, 8).map((analysis) => (
+              <div className="historyItem" key={analysis.id}>
+                <div>
+                  <strong>{analysis.title}</strong>
+                  <small>{formatDate(analysis.createdAt)}</small>
+                </div>
+                <span>{analysis.technicalMatchScore}%</span>
+                <em>{analysis.fitCategory}</em>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="hint">No saved match reports yet.</p>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>Resume Versions</h3>
+        {resumes.length ? <CompactHistoryList items={resumes.map((item) => ({ id: item.id, title: item.title, meta: formatDate(item.createdAt) }))} /> : <p className="hint">No resumes saved yet.</p>}
+      </div>
+
+      <div className="panel">
+        <h3>JD Library</h3>
+        {jobDescriptions.length ? <CompactHistoryList items={jobDescriptions.map((item) => ({ id: item.id, title: item.title, meta: item.company ? `${item.company} - ${formatDate(item.createdAt)}` : formatDate(item.createdAt) }))} /> : <p className="hint">No JDs saved yet.</p>}
+      </div>
+
+      <div className="panel historyWide">
+        <h3>Preparation Sessions</h3>
+        {preparations.length ? (
+          <div className="historyList">
+            {preparations.slice(0, 8).map((session) => (
+              <div className="historyItem" key={session.id}>
+                <div>
+                  <strong>{session.title}</strong>
+                  <small>{formatDate(session.createdAt)}</small>
+                </div>
+                <span>{session.plan.dailyPlan?.length ?? 0} day(s)</span>
+                <em>{session.status}</em>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="hint">No saved preparation sessions yet.</p>
+        )}
+      </div>
     </div>
   );
+}
+
+function CompactHistoryList({ items }: { items: Array<{ id: string; title: string; meta: string }> }) {
+  return (
+    <div className="compactHistoryList">
+      {items.slice(0, 8).map((item) => (
+        <div className="compactHistoryItem" key={item.id}>
+          <strong>{item.title}</strong>
+          <small>{item.meta}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
 }
 
 function Results({ result }: { result: AnalysisResponse }) {
