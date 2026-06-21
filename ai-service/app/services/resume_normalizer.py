@@ -746,12 +746,36 @@ def _looks_like_certification_line(line: str) -> bool:
         return False
     if lowered.startswith(("holds multiple", "validating deep expertise")):
         return False
+    if _looks_like_certification_noise(line):
+        return False
     return bool(
         re.search(r"\b(?:az|ai|dp|pl|sc|ms)-\d{3}\b", lowered)
         or "certified" in lowered
         or "certification" in lowered
         or "certificate" in lowered
     )
+
+
+def _looks_like_certification_noise(line: str) -> bool:
+    lowered = line.lower()
+    if re.search(r"\b(?:az|ai|dp|pl|sc|ms)-\d{3}\b", lowered):
+        return False
+    if re.search(r"\b(?:microsoft|aws|google|oracle|salesforce|snowflake)\s+certified\b", lowered):
+        return False
+    if re.search(r"\bcertified\s*:", lowered):
+        return False
+    action_prefixes = (
+        "built ",
+        "created ",
+        "developed ",
+        "designed ",
+        "implemented ",
+        "improved ",
+        "reduced ",
+        "validated ",
+        "validating ",
+    )
+    return lowered.startswith(action_prefixes)
 
 
 def _looks_like_project_achievement(line: str) -> bool:

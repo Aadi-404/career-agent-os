@@ -171,6 +171,32 @@ React.js, ReactJS, JS, JavaScript, NodeJS, Node.js, Express.js, Postgres, Postgr
 """
 
 
+NOISY_CERTIFICATION_RESUME = """
+Meera Iyer
+Contact: meera.iyer@example.com | +91 9222233333
+
+Summary
+Data engineer with Azure, Python, SQL, and Power BI experience.
+
+Experience
+Data Engineer
+Northstar Analytics
+Jan 2023 - Present
+Mumbai, India
+Built ETL validation workflows and Power BI reports.
+
+Certifications
+Certifications
+Microsoft Certified: Azure Data Engineer Associate (DP-203) - Microsoft
+Microsoft Certified: Azure Fundamentals (AZ-900) - Microsoft
+Holds multiple Microsoft Azure certifications including AI and data engineering
+validating deep expertise in cloud and AI technologies
+Built certification dashboard for internal learning team
+Reduced manual certificate validation effort by 50%
+Experience
+"""
+
+
 class ResumeNormalizerRegressionTests(unittest.TestCase):
     def test_aditya_resume_keeps_three_distinct_projects_and_contact_cleanup(self):
         structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=ADITYA_RESUME)).structuredResume
@@ -260,6 +286,17 @@ class ResumeNormalizerRegressionTests(unittest.TestCase):
         self.assertEqual(structured.skills.count("JavaScript"), 1)
         self.assertEqual(structured.skills.count("Node.js"), 1)
         self.assertEqual(structured.skills.count("PostgreSQL"), 1)
+
+    def test_noisy_certification_section_keeps_only_real_credentials(self):
+        structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=NOISY_CERTIFICATION_RESUME)).structuredResume
+
+        self.assertEqual(
+            structured.certifications,
+            [
+                "Microsoft Certified: Azure Data Engineer Associate (DP-203) - Microsoft",
+                "Microsoft Certified: Azure Fundamentals (AZ-900) - Microsoft",
+            ],
+        )
 
 
 if __name__ == "__main__":
