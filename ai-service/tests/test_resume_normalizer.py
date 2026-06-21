@@ -150,6 +150,27 @@ React, Node.js, Django, Python, PostgreSQL, SQLite, JWT
 """
 
 
+SKILL_ALIAS_RESUME = """
+Karan Verma
+Contact: karan.verma@example.com | +91 9111122222
+
+Summary
+Frontend focused full stack developer working with React.js, JS, NodeJS, Express, Postgres, and TypeScript.
+
+Experience
+Full Stack Developer
+Orbit Apps
+Mar 2023 - Present
+Noida, India
+Built React.js dashboards for sales analytics.
+Developed NodeJS APIs with Express and PostgreSQL.
+Improved JS utilities and TypeScript shared models.
+
+Skills
+React.js, ReactJS, JS, JavaScript, NodeJS, Node.js, Express.js, Postgres, PostgreSQL, TypeScript
+"""
+
+
 class ResumeNormalizerRegressionTests(unittest.TestCase):
     def test_aditya_resume_keeps_three_distinct_projects_and_contact_cleanup(self):
         structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=ADITYA_RESUME)).structuredResume
@@ -225,6 +246,20 @@ class ResumeNormalizerRegressionTests(unittest.TestCase):
         self.assertEqual([len(project.highlights) for project in structured.projects], [2, 2])
         self.assertIn("Node.js", structured.projects[0].techStack)
         self.assertIn("Django", structured.projects[1].techStack)
+
+    def test_skill_aliases_are_normalized_without_duplicates(self):
+        structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=SKILL_ALIAS_RESUME)).structuredResume
+
+        self.assertIn("React", structured.skills)
+        self.assertIn("JavaScript", structured.skills)
+        self.assertIn("Node.js", structured.skills)
+        self.assertIn("Express.js", structured.skills)
+        self.assertIn("PostgreSQL", structured.skills)
+        self.assertIn("TypeScript", structured.skills)
+        self.assertEqual(structured.skills.count("React"), 1)
+        self.assertEqual(structured.skills.count("JavaScript"), 1)
+        self.assertEqual(structured.skills.count("Node.js"), 1)
+        self.assertEqual(structured.skills.count("PostgreSQL"), 1)
 
 
 if __name__ == "__main__":
