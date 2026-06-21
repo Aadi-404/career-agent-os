@@ -122,6 +122,34 @@ Java, Spring Boot, Kafka, PostgreSQL, SQL, Git
 """
 
 
+NO_PROJECT_HEADING_RESUME = """
+Nisha Kapoor
+Contact: nisha.kapoor@example.com | +91 9000011111 | linkedin.com/in/nishakapoor
+
+Summary
+Full stack developer with React, Node.js, Django, Python, PostgreSQL, and deployment experience.
+
+Experience
+Software Developer
+BluePeak Systems
+Aug 2023 - Present
+Pune, India
+Built REST APIs for customer management workflows.
+Developed React screens for internal operations teams.
+
+Smart Expense Tracker | React, Node.js, PostgreSQL
+Built a personal finance dashboard with category-wise expense tracking.
+Implemented JWT authentication and monthly budget alerts.
+
+Inventory Forecasting App | Python, Django, SQLite
+Created demand forecasting module for stock planning.
+Designed admin reports for low-stock and reorder recommendations.
+
+Skills
+React, Node.js, Django, Python, PostgreSQL, SQLite, JWT
+"""
+
+
 class ResumeNormalizerRegressionTests(unittest.TestCase):
     def test_aditya_resume_keeps_three_distinct_projects_and_contact_cleanup(self):
         structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=ADITYA_RESUME)).structuredResume
@@ -187,6 +215,16 @@ class ResumeNormalizerRegressionTests(unittest.TestCase):
         self.assertIn("Spring Boot services", structured.experience[0].highlights[0])
         self.assertIn("Java REST APIs", structured.experience[1].highlights[0])
         self.assertEqual([project.name for project in structured.projects], ["Loan Risk Engine"])
+
+    def test_project_blocks_without_projects_heading_are_extracted(self):
+        structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=NO_PROJECT_HEADING_RESUME)).structuredResume
+
+        self.assertEqual(len(structured.experience), 1)
+        self.assertEqual(structured.experience[0].company, "BluePeak Systems")
+        self.assertEqual([project.name for project in structured.projects], ["Smart Expense Tracker", "Inventory Forecasting App"])
+        self.assertEqual([len(project.highlights) for project in structured.projects], [2, 2])
+        self.assertIn("Node.js", structured.projects[0].techStack)
+        self.assertIn("Django", structured.projects[1].techStack)
 
 
 if __name__ == "__main__":
