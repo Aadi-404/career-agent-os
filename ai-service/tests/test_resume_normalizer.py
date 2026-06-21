@@ -89,6 +89,39 @@ Java, Spring Boot, React, AWS, SQL, PostgreSQL
 """
 
 
+STACKED_EXPERIENCE_RESUME = """
+Rahul Mehta
+Contact: rahul.mehta@example.com | +91 9988776655 | linkedin.com/in/rahulmehta
+
+Summary
+Backend developer with Java, Spring Boot, SQL, Kafka, and cloud deployment experience.
+
+Experience
+Software Engineer
+CloudWave Technologies
+Jan 2024 - Present
+Bangalore, India
+Built Spring Boot services for loan processing workflows.
+Integrated Kafka consumers for asynchronous status updates.
+Improved PostgreSQL query performance for reporting APIs.
+
+Associate Developer
+MetroSoft Labs
+Jul 2022 - Dec 2023
+Hyderabad, India
+Developed Java REST APIs for customer profile management.
+Created SQL reports for operations and finance users.
+Resolved production defects in CI/CD releases.
+
+Projects
+Loan Risk Engine | Java, Spring Boot, Kafka, PostgreSQL
+Built risk scoring workflow for loan applications.
+
+Skills
+Java, Spring Boot, Kafka, PostgreSQL, SQL, Git
+"""
+
+
 class ResumeNormalizerRegressionTests(unittest.TestCase):
     def test_aditya_resume_keeps_three_distinct_projects_and_contact_cleanup(self):
         structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=ADITYA_RESUME)).structuredResume
@@ -139,6 +172,21 @@ class ResumeNormalizerRegressionTests(unittest.TestCase):
         self.assertIn("Spring Boot APIs", structured.experience[0].highlights[0])
         self.assertIn("Java microservices", structured.experience[1].highlights[0])
         self.assertEqual([project.name for project in structured.projects], ["Invoice Automation Tool"])
+
+    def test_stacked_experience_layout_splits_title_company_date_location(self):
+        structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=STACKED_EXPERIENCE_RESUME)).structuredResume
+
+        self.assertEqual(len(structured.experience), 2)
+        self.assertEqual(
+            [(item.title, item.company, item.duration, item.location, len(item.highlights)) for item in structured.experience],
+            [
+                ("Software Engineer", "CloudWave Technologies", "Jan 2024 - Present", "Bangalore, India", 3),
+                ("Associate Developer", "MetroSoft Labs", "Jul 2022 - Dec 2023", "Hyderabad, India", 3),
+            ],
+        )
+        self.assertIn("Spring Boot services", structured.experience[0].highlights[0])
+        self.assertIn("Java REST APIs", structured.experience[1].highlights[0])
+        self.assertEqual([project.name for project in structured.projects], ["Loan Risk Engine"])
 
 
 if __name__ == "__main__":

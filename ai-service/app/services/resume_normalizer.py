@@ -246,8 +246,10 @@ def _split_experience_blocks(lines: list[str]) -> list[list[str]]:
     blocks: list[list[str]] = []
     current: list[str] = []
 
-    for line in lines:
-        if current and _looks_like_experience_header(line):
+    for index, line in enumerate(lines):
+        next_line = lines[index + 1] if index + 1 < len(lines) else ""
+        following_line = lines[index + 2] if index + 2 < len(lines) else ""
+        if current and (_looks_like_experience_header(line) or _looks_like_stacked_experience_header(line, next_line, following_line)):
             blocks.append(current)
             current = [line]
             continue
@@ -274,6 +276,35 @@ def _looks_like_experience_header(line: str) -> bool:
         return True
     title_part = re.split(r"\s+-\s+", after_duration, maxsplit=1)[0].strip(" ,|-")
     return 1 <= len(title_part.split()) <= 6 and not _looks_like_detail(title_part)
+
+
+def _looks_like_stacked_experience_header(line: str, next_line: str, following_line: str) -> bool:
+    if _find_duration([line]) or _looks_like_detail(line) or not _looks_like_title(line):
+        return False
+    if not _looks_like_role_title(line):
+        return False
+    if not next_line or _looks_like_detail(next_line) or _match_section_header(next_line):
+        return False
+    if len(line.split()) > 5 or len(next_line.split()) > 6:
+        return False
+    return _find_duration([next_line]) is not None or _find_duration([following_line]) is not None
+
+
+def _looks_like_role_title(line: str) -> bool:
+    lowered = line.lower()
+    role_tokens = [
+        "analyst",
+        "architect",
+        "consultant",
+        "developer",
+        "engineer",
+        "intern",
+        "lead",
+        "manager",
+        "programmer",
+        "specialist",
+    ]
+    return any(token in lowered for token in role_tokens)
 
 
 def _extract_projects(lines: list[str]) -> list[ResumeProject]:
@@ -807,6 +838,7 @@ def _looks_like_detail(line: str) -> bool:
         "developed ",
         "delivered ",
         "reduced ",
+        "resolved ",
         "cut ",
         "cutting ",
         "eliminated ",
