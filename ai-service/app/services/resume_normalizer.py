@@ -219,22 +219,61 @@ def _extract_experience(lines: list[str]) -> list[ResumeExperience]:
     if not lines:
         return []
 
-    expanded_lines = _expand_experience_lines(lines)
-    title = _extract_experience_title(expanded_lines)
-    company = _extract_company(expanded_lines)
-    duration = _find_duration(expanded_lines)
-    location = _find_location(expanded_lines, company)
-    highlights = _extract_highlights(_experience_detail_lines(expanded_lines))
-
-    return [
-        ResumeExperience(
-            title=title,
-            company=company,
-            duration=duration,
-            location=location,
-            highlights=highlights,
+    experiences = []
+    for block in _split_experience_blocks(lines):
+        expanded_lines = _expand_experience_lines(block)
+        if not expanded_lines:
+            continue
+        title = _extract_experience_title(expanded_lines)
+        company = _extract_company(expanded_lines)
+        duration = _find_duration(expanded_lines)
+        location = _find_location(expanded_lines, company)
+        highlights = _extract_highlights(_experience_detail_lines(expanded_lines))
+        experiences.append(
+            ResumeExperience(
+                title=title,
+                company=company,
+                duration=duration,
+                location=location,
+                highlights=highlights,
+            )
         )
-    ]
+
+    return experiences
+
+
+def _split_experience_blocks(lines: list[str]) -> list[list[str]]:
+    blocks: list[list[str]] = []
+    current: list[str] = []
+
+    for line in lines:
+        if current and _looks_like_experience_header(line):
+            blocks.append(current)
+            current = [line]
+            continue
+        current.append(line)
+
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def _looks_like_experience_header(line: str) -> bool:
+    if not _find_duration([line]):
+        return False
+    lowered = line.lower()
+    if _looks_like_detail(line):
+        return False
+    if any(token in lowered for token in ["built ", "developed ", "designed ", "implemented ", "improved ", "optimized ", "created "]):
+        return False
+    before_duration = _before_duration(line).strip(" ,|-")
+    after_duration = _after_duration(line).strip(" ,|-")
+    if len(before_duration.split()) > 6 or len(before_duration.split()) == 0:
+        return False
+    if "|" in after_duration or _extract_location_value(after_duration):
+        return True
+    title_part = re.split(r"\s+-\s+", after_duration, maxsplit=1)[0].strip(" ,|-")
+    return 1 <= len(title_part.split()) <= 6 and not _looks_like_detail(title_part)
 
 
 def _extract_projects(lines: list[str]) -> list[ResumeProject]:
@@ -451,12 +490,14 @@ def _extract_highlights(lines: list[str]) -> list[str]:
         "delivered",
         "optimized",
         "implemented",
+        "integrated",
         "designed",
         "used",
         "monitored",
         "resolved",
         "created",
         "developed",
+        "improved",
         "helps",
         "enabled",
         "enables",
@@ -756,6 +797,7 @@ def _looks_like_detail(line: str) -> bool:
     return lowered.startswith((
         "used ",
         "implemented ",
+        "integrated ",
         "designed ",
         "tech ",
         "with ",
@@ -771,6 +813,7 @@ def _looks_like_detail(line: str) -> bool:
         "eliminating ",
         "improved ",
         "improving ",
+        "optimized ",
         "helps ",
         "enabled ",
         "enables ",

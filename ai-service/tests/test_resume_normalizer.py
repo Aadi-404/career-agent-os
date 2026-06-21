@@ -62,6 +62,33 @@ Microsoft Certified: Azure Data Engineer Associate (DP-600) - Microsoft
 """
 
 
+MULTI_EXPERIENCE_RESUME = """
+Priya Sharma
+Contact: priya.sharma@example.com | +91 9876543210 | linkedin.com/in/priyasharma
+
+Summary
+Full stack engineer with experience across Java, Spring Boot, React, AWS, and payment platforms.
+
+Experience
+TechNova Solutions Jan 2024 - Present - Software Engineer | Pune, India
+Built Spring Boot APIs for order management and payment reconciliation.
+Improved React dashboards used by operations teams for daily issue tracking.
+Integrated AWS S3 and SQS for asynchronous document processing.
+
+BrightApps Pvt Ltd Jun 2022 - Dec 2023 - Associate Software Developer | Mumbai, India
+Developed Java microservices for customer onboarding workflows.
+Created reusable React components and reduced duplicate UI code.
+Optimized SQL queries and reduced report generation time by 30%.
+
+Projects
+Invoice Automation Tool | Java, Spring Boot, React, PostgreSQL
+Built invoice upload and approval workflow with role-based access.
+
+Skills
+Java, Spring Boot, React, AWS, SQL, PostgreSQL
+"""
+
+
 class ResumeNormalizerRegressionTests(unittest.TestCase):
     def test_aditya_resume_keeps_three_distinct_projects_and_contact_cleanup(self):
         structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=ADITYA_RESUME)).structuredResume
@@ -97,6 +124,21 @@ class ResumeNormalizerRegressionTests(unittest.TestCase):
 
         self.assertEqual(len(structured.certifications), 4)
         self.assertTrue(all(cert.startswith("Microsoft Certified:") for cert in structured.certifications))
+
+    def test_multi_experience_resume_splits_jobs_without_mixing_highlights(self):
+        structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=MULTI_EXPERIENCE_RESUME)).structuredResume
+
+        self.assertEqual(len(structured.experience), 2)
+        self.assertEqual(
+            [(item.company, item.title, item.duration, item.location, len(item.highlights)) for item in structured.experience],
+            [
+                ("TechNova Solutions", "Software Engineer", "Jan 2024 - Present", "Pune, India", 3),
+                ("BrightApps Pvt Ltd", "Associate Software Developer", "Jun 2022 - Dec 2023", "Mumbai, India", 3),
+            ],
+        )
+        self.assertIn("Spring Boot APIs", structured.experience[0].highlights[0])
+        self.assertIn("Java microservices", structured.experience[1].highlights[0])
+        self.assertEqual([project.name for project in structured.projects], ["Invoice Automation Tool"])
 
 
 if __name__ == "__main__":
