@@ -87,7 +87,8 @@ def normalize_resume(request: ResumeNormalizeRequest) -> ResumeNormalizeResponse
     cleaned_lines = _clean_lines(request.rawResumeText)
     sections = _split_sections(cleaned_lines)
     profile = _extract_profile(cleaned_lines, sections)
-    inline_projects = _extract_inline_project_blocks(cleaned_lines)
+    has_project_section = bool(sections.get("projects"))
+    inline_projects = [] if has_project_section else _extract_inline_project_blocks(cleaned_lines)
     experience_lines = _strip_inline_project_blocks(sections.get("experience", [])) if inline_projects else sections.get("experience", [])
     experience = _extract_experience(experience_lines)
     projects = _extract_projects(sections.get("projects", []))
@@ -941,9 +942,27 @@ def _extract_location_value(line: str) -> str | None:
         flags=re.IGNORECASE,
     )
     if not match:
-        return None
+        generic_match = re.search(
+            r"\b([A-Z][A-Za-z]+(?:[-\s][A-Z][A-Za-z]+){0,2}\s*,\s*(?:[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,2}|India))\b",
+            line,
+        )
+        if not generic_match:
+            return None
+        candidate = re.sub(r"\s+", " ", generic_match.group(1)).strip(" ,|-")
+        if _looks_like_non_location_phrase(candidate):
+            return None
+        return candidate
     city = re.sub(r"\s+", " ", match.group(1)).title()
     return f"{city}, India" if "india" in match.group(0).lower() else city
+
+
+def _looks_like_non_location_phrase(value: str) -> bool:
+    lowered = value.lower()
+    if any(token in lowered for token in ["linkedin", "github", "certified", "engineer associate", "fundamentals"]):
+        return True
+    if any(skill.lower() in lowered for skill in KNOWN_SKILLS):
+        return True
+    return False
 
 
 def _clean_profile_url(url: str) -> str:

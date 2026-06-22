@@ -62,6 +62,47 @@ Microsoft Certified: Azure Data Engineer Associate (DP-600) - Microsoft
 """
 
 
+HARSH_DOCX_EXTRACTED_TEXT = """
+Harsh Garud
+Indore, Madhya Pradesh
++91-7898480696   |   harsh412g@gmail.com   |   linkedin.com/in/harshgarud
+PROFESSIONAL SUMMARY
+Results-driven Senior Analyst with 2+ years of experience at Capgemini in full-stack development, data engineering, and AI-driven solutions. Proficient in building scalable web applications using Django, Python, and React, and delivering actionable business insights through Power BI and SQL.
+Hands-on experience designing and deploying AI Agents and intelligent automation pipelines that streamline business processes and improve operational efficiency. Holds multiple Microsoft Azure certifications including AI Engineer Associate, validating deep expertise in cloud and AI technologies.
+TECHNICAL SKILLS
+Languages: Python, SQL, JavaScript, C++
+Frameworks: Django, React
+AI / Agents: AI Agents, LLM Integration, GitHub Copilot, Intelligent Automation
+Cloud: Microsoft Azure (ADF, ADLS, AI Services, Data, Fundamentals)
+Data & BI: Power BI, SQL, Data Modelling, ETL Pipelines
+Databases: MySQL, SSMS
+Tools: Git, REST APIs, Control-M
+PROFESSIONAL EXPERIENCE
+Capgemini\tJun 2024 \u2013 Present
+Senior Analyst / Software engineer | Navi-Mumbai, India
+Built 3+ enterprise web applications using Django, React, and Python, reducing client reporting turnaround by 40% through optimised APIs and responsive UIs.
+Designed ETL pipelines and Power BI dashboards processing 1M+ daily records, cutting manual reporting effort by 35% across business units.
+Developed and deployed AI Agents and automation workflows eliminating ~20 hours/week of manual data processing and improving operational efficiency significantly.
+Delivered projects within Agile sprints, collaborating across business analysts, QA, and DevOps teams while maintaining high code quality through reviews and documentation.
+PROJECTS
+Data Simplified Tool | React, Django, Python, SQL
+Built a full-stack data quality platform connecting to 5+ databases (SSMS, Snowflake), with modules for quality checks, metadata analysis, SQL validation, and cross-database comparison.
+Reduced manual data validation effort by 50% and cross-database comparison time from hours to under 10 minutes via a unified interface.
+AI Agents Platform (GitHub Copilot-Based) | Python, Azure Data Factory, ADLS, Control-M
+Developed AI Agents integrated with ADF, ADLS, Control-M, and databases for natural language-driven pipeline triggering, job fetching, and data validation \u2014 reducing operational overhead by 30%.
+Implemented an STTM file parser that automated mapping-based validations, eliminating 100% of manual mapping review and cutting setup time from days to minutes.
+EDUCATION
+Bachelor of Technology (B. Tech) \u2013 Mechanical Engineering
+Acropolis Institute of Technology and Research, Indore\t2019 \u2013 2023
+CGPA: 7.7 / 10
+CERTIFICATIONS
+Microsoft Certified: Azure AI Engineer Associate \u2013 Microsoft
+Microsoft Certified: Azure AI Fundamentals (AI-900) \u2013 Microsoft
+Microsoft Certified: Azure Fundamentals (AZ-900) \u2013 Microsoft
+Microsoft Certified: Azure Data Engineer Associate (DP-600) \u2013 Microsoft
+"""
+
+
 MULTI_EXPERIENCE_RESUME = """
 Priya Sharma
 Contact: priya.sharma@example.com | +91 9876543210 | linkedin.com/in/priyasharma
@@ -232,6 +273,30 @@ class ResumeNormalizerRegressionTests(unittest.TestCase):
 
         self.assertEqual(len(structured.certifications), 4)
         self.assertTrue(all(cert.startswith("Microsoft Certified:") for cert in structured.certifications))
+
+    def test_harsh_docx_extracted_text_parses_profile_experience_projects_and_certifications(self):
+        response = normalize_resume(ResumeNormalizeRequest(rawResumeText=HARSH_DOCX_EXTRACTED_TEXT))
+        structured = response.structuredResume
+
+        self.assertEqual(structured.profile.name, "Harsh Garud")
+        self.assertEqual(structured.profile.location, "Indore, Madhya Pradesh")
+        self.assertEqual(structured.profile.email, "harsh412g@gmail.com")
+        self.assertEqual(structured.profile.linkedin, "linkedin.com/in/harshgarud")
+        self.assertEqual(len(structured.experience), 1)
+        self.assertEqual(structured.experience[0].company, "Capgemini")
+        self.assertEqual(structured.experience[0].duration, "Jun 2024 - Present")
+        self.assertEqual(structured.experience[0].location, "Navi Mumbai, India")
+        self.assertEqual(len(structured.experience[0].highlights), 4)
+        self.assertEqual(
+            [project.name for project in structured.projects],
+            ["Data Simplified Tool", "AI Agents Platform (GitHub Copilot-Based)"],
+        )
+        self.assertEqual([len(project.highlights) for project in structured.projects], [2, 2])
+        self.assertEqual(len(structured.certifications), 4)
+        self.assertIsNotNone(response.parserDebug)
+        self.assertEqual(response.parserDebug.rawLineCount, 37)
+        self.assertEqual(response.parserDebug.parsedCounts["projects"], 2)
+        self.assertEqual(response.parserDebug.detectedSections["projects"], 6)
 
     def test_multi_experience_resume_splits_jobs_without_mixing_highlights(self):
         structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=MULTI_EXPERIENCE_RESUME)).structuredResume
