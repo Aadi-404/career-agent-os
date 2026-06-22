@@ -12,6 +12,7 @@ from app.models.analysis import (
     OptionalArtifactBuildRequest,
     PreparationBuildRequest,
     PreparationIntelligence,
+    RequirementMatch,
     ResumeImprovement,
 )
 from app.models.extension import ExtensionMatchRequest, ExtensionMatchResponse
@@ -96,6 +97,20 @@ def match(request: AnalyzeRequest) -> AnalysisResponse:
     return match_resume_jd(request)
 
 
+@app.post("/ai/match/score", response_model=AnalysisResponse)
+def calculate_score(request: AnalyzeRequest) -> AnalysisResponse:
+    return match_resume_jd(request)
+
+
+@app.post("/ai/analysis/gaps", response_model=list[RequirementMatch])
+def build_gap_report(request: OptionalArtifactBuildRequest) -> list[RequirementMatch]:
+    return [
+        match
+        for match in request.analysis.requirementMatches
+        if match.score < 60
+    ][: request.limit]
+
+
 @app.post("/extension/jobs/match", response_model=ExtensionMatchResponse)
 def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchResponse:
     if request.anonymousSessionId:
@@ -150,9 +165,19 @@ def build_preparation(request: PreparationBuildRequest) -> PreparationIntelligen
     )
 
 
+@app.post("/ai/preparation/plan", response_model=PreparationIntelligence)
+def build_preparation_plan_artifact(request: PreparationBuildRequest) -> PreparationIntelligence:
+    return build_preparation(request)
+
+
 @app.post("/ai/resume-improvements/build", response_model=list[ResumeImprovement])
 def build_resume_improvement_artifacts(request: OptionalArtifactBuildRequest) -> list[ResumeImprovement]:
     return build_resume_improvements(request.sourceRequest, request.analysis, request.limit)
+
+
+@app.post("/ai/resume-improvements", response_model=list[ResumeImprovement])
+def build_resume_improvement_artifacts_alias(request: OptionalArtifactBuildRequest) -> list[ResumeImprovement]:
+    return build_resume_improvement_artifacts(request)
 
 
 @app.post("/ai/interview-questions/build", response_model=list[InterviewQuestion])
@@ -160,9 +185,19 @@ def build_interview_question_artifacts(request: OptionalArtifactBuildRequest) ->
     return build_interview_questions(request.sourceRequest, request.analysis, request.limit)
 
 
+@app.post("/ai/interview/questions", response_model=list[InterviewQuestion])
+def build_interview_question_artifacts_alias(request: OptionalArtifactBuildRequest) -> list[InterviewQuestion]:
+    return build_interview_question_artifacts(request)
+
+
 @app.post("/ai/cross-questions/build", response_model=list[CrossQuestion])
 def build_cross_question_artifacts(request: OptionalArtifactBuildRequest) -> list[CrossQuestion]:
     return build_cross_questions(request.sourceRequest, request.analysis, request.limit)
+
+
+@app.post("/ai/cross-questions", response_model=list[CrossQuestion])
+def build_cross_question_artifacts_alias(request: OptionalArtifactBuildRequest) -> list[CrossQuestion]:
+    return build_cross_question_artifacts(request)
 
 
 @app.post("/ai/resume/extract", response_model=ResumeExtractResponse)

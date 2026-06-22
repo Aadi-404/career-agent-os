@@ -2,6 +2,7 @@ import unittest
 
 from app.models.resume_normalize import ResumeNormalizeRequest
 from app.services.resume_normalizer import normalize_resume
+from tests.parser_fixtures import ResumeParserExpectation, ResumeParserFixture
 
 
 ADITYA_RESUME = """
@@ -238,7 +239,90 @@ Experience
 """
 
 
+RESUME_PARSER_FIXTURES = [
+    ResumeParserFixture(
+        id="aditya_project_heavy_pdf_artifacts",
+        description="Project-heavy resume with noisy contact extraction artifacts.",
+        raw_text=ADITYA_RESUME,
+        expected=ResumeParserExpectation(
+            email="adityarana81027@gmail.com",
+            location="Navi Mumbai, India",
+            experience_count=0,
+            project_names=["Flight Reservation System", "PCAP Data Analysis (Desktop App)", "Cross-Share Web App"],
+            project_highlight_counts=[3, 3, 3],
+            skills=["ASP.NET Core", "Electron.js", "Django"],
+        ),
+    ),
+    ResumeParserFixture(
+        id="harsh_docx_extracted_text",
+        description="DOCX extraction shape with separate company/date, title/location, projects, education, and certifications.",
+        raw_text=HARSH_DOCX_EXTRACTED_TEXT,
+        expected=ResumeParserExpectation(
+            name="Harsh Garud",
+            email="harsh412g@gmail.com",
+            location="Indore, Madhya Pradesh",
+            experience_count=1,
+            project_names=["Data Simplified Tool", "AI Agents Platform (GitHub Copilot-Based)"],
+            project_highlight_counts=[2, 2],
+            certification_count=4,
+        ),
+    ),
+    ResumeParserFixture(
+        id="inline_projects_without_heading",
+        description="Resume where projects appear as heading-like blocks outside a Projects section.",
+        raw_text=NO_PROJECT_HEADING_RESUME,
+        expected=ResumeParserExpectation(
+            experience_count=1,
+            project_names=["Smart Expense Tracker", "Inventory Forecasting App"],
+            project_highlight_counts=[2, 2],
+            skills=["Node.js", "Django"],
+            parser_note_contains="Projects were detected from explicit inline project headings",
+        ),
+    ),
+    ResumeParserFixture(
+        id="noisy_certification_section",
+        description="Certification section containing real credentials mixed with prose and copied resume lines.",
+        raw_text=NOISY_CERTIFICATION_RESUME,
+        expected=ResumeParserExpectation(
+            experience_count=1,
+            certification_count=2,
+            parser_note_contains="Certification lines were filtered",
+        ),
+    ),
+]
+
+
 class ResumeNormalizerRegressionTests(unittest.TestCase):
+    def test_resume_parser_fixture_pack(self):
+        for fixture in RESUME_PARSER_FIXTURES:
+            with self.subTest(fixture=fixture.id):
+                response = normalize_resume(ResumeNormalizeRequest(rawResumeText=fixture.raw_text))
+                structured = response.structuredResume
+                expected = fixture.expected
+
+                if expected.name is not None:
+                    self.assertEqual(structured.profile.name, expected.name)
+                if expected.email is not None:
+                    self.assertEqual(structured.profile.email, expected.email)
+                if expected.location is not None:
+                    self.assertEqual(structured.profile.location, expected.location)
+                if expected.experience_count is not None:
+                    self.assertEqual(len(structured.experience), expected.experience_count)
+                if expected.project_names:
+                    self.assertEqual([project.name for project in structured.projects], expected.project_names)
+                if expected.project_highlight_counts:
+                    self.assertEqual([len(project.highlights) for project in structured.projects], expected.project_highlight_counts)
+                if expected.certification_count is not None:
+                    self.assertEqual(len(structured.certifications), expected.certification_count)
+                for skill in expected.skills:
+                    self.assertTrue(
+                        any(skill in project.techStack for project in structured.projects) or skill in structured.skills,
+                        f"{skill} was not found in parsed skills or project tech stacks",
+                    )
+                if expected.parser_note_contains:
+                    self.assertIsNotNone(response.parserDebug)
+                    self.assertIn(expected.parser_note_contains, " ".join(response.parserDebug.parserNotes))
+
     def test_aditya_resume_keeps_three_distinct_projects_and_contact_cleanup(self):
         structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=ADITYA_RESUME)).structuredResume
 

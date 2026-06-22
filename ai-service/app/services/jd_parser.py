@@ -123,9 +123,13 @@ def _parse_json(raw_response: str) -> dict:
 
 
 def _extract_role_title(lines: list[str]) -> str | None:
+    for line in lines[:6]:
+        explicit_match = re.match(r"^(?:role|position|job title)\s*[:\-]\s*(.+)$", line, flags=re.IGNORECASE)
+        if explicit_match:
+            return _clean_title(explicit_match.group(1))
     title_patterns = [
-        r"(?:looking for|hiring|opening for|role[:\s]+|position[:\s]+)\s+(?:an?\s+)?([^.,\n]{3,80})",
-        r"([^.,\n]{3,80}\b(?:developer|engineer|architect|lead|analyst|consultant)\b[^.,\n]*)",
+        r"(?:looking for|hiring|opening for|role[:\s]+|position[:\s]+)\s+(?:an?\s+)?([^\n]{3,80})",
+        r"([^\n]{3,80}\b(?:developer|engineer|architect|lead|analyst|consultant)\b[^\n]*)",
     ]
     text = " ".join(lines[:4])
     for pattern in title_patterns:
@@ -241,7 +245,7 @@ def _extract_skill_phrases(text: str, mode: str) -> list[str]:
             sentence,
             flags=re.IGNORECASE,
         )
-        for phrase in re.split(r"\s*[;,]\s+|\s+\|\s+|\s+and/or\s+", cleaned):
+        for phrase in re.split(r"\s*[;,]\s+|\s+\|\s+|\s+and/or\s+|\s+\band\s+", cleaned):
             skill = _clean_skill_phrase(phrase)
             if _looks_like_skill_phrase(skill):
                 results.append(skill)
@@ -250,12 +254,16 @@ def _extract_skill_phrases(text: str, mode: str) -> list[str]:
 
 def _clean_skill_phrase(value: str) -> str:
     value = re.sub(r"^(?:\(?\d+\)\s*|\d+\.\s+)", "", value.strip(" .:-*"))
-    value = re.sub(
-        r"^(strong hands-on|hands-on|strong|deep|advanced|proven|solid|experience with|knowledge of|proficiency in|familiarity with|understanding of|ability to|work with|using)\s+",
-        "",
-        value,
-        flags=re.IGNORECASE,
-    )
+    for _ in range(3):
+        next_value = re.sub(
+            r"^(?:and\s+)?(?:must have\s+)?(strong hands-on|hands-on|strong|deep|advanced|proven|solid|experience with|knowledge of|proficiency in|familiarity with|understanding of|exposure to|ability to|work with|using)\s+",
+            "",
+            value,
+            flags=re.IGNORECASE,
+        )
+        if next_value == value:
+            break
+        value = next_value
     return re.sub(r"\s+", " ", value).strip(" .:-")
 
 
@@ -299,20 +307,35 @@ def _extract_responsibilities(lines: list[str]) -> list[str]:
         "develop",
         "design",
         "maintain",
+        "maintaining",
         "implement",
+        "implementing",
         "integrate",
+        "integrating",
         "optimize",
+        "optimizing",
         "debug",
+        "debugging",
         "participate",
         "collaborate",
+        "collaborating",
         "work",
         "deliver",
+        "delivering",
     )
     for line in lines:
         for sentence in _sentences(line):
-            lowered = sentence.lower()
-            if lowered.startswith(action_words) or any(f" {word} " in f" {lowered} " for word in action_words):
-                responsibilities.append(_sentence(sentence))
+            cleaned_sentence = re.sub(
+                r"^(?:responsibilities include|key responsibility is to|responsibility is to|you will|you are expected to)\s+",
+                "",
+                sentence,
+                flags=re.IGNORECASE,
+            )
+            for part in re.split(r"\s*,\s*|\s+\band\s+", cleaned_sentence):
+                part = part.strip(" .:-")
+                lowered = part.lower()
+                if lowered.startswith(action_words) or any(f" {word} " in f" {lowered} " for word in action_words):
+                    responsibilities.append(_sentence(part))
     return responsibilities[:8]
 
 

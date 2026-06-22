@@ -484,7 +484,7 @@ function App() {
         throw new Error("Parse and review the resume and JD before calculating the score.");
       }
       const payload = buildAnalyzeRequest();
-      const response = await fetch(`${API_BASE_URL}/ai/resume-jd/match`, {
+      const response = await fetch(`${API_BASE_URL}/ai/match/score`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -525,7 +525,7 @@ function App() {
     setPreparationInfo("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/preparation/build`, {
+      const response = await fetch(`${API_BASE_URL}/ai/preparation/plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1089,7 +1089,7 @@ function App() {
                     disabled={Boolean(artifactLoading)}
                     onClick={() => buildOptionalArtifact(
                       "Resume improvements",
-                      "/ai/resume-improvements/build",
+                      "/ai/resume-improvements",
                       (current, payload) => ({ ...current, resumeImprovements: payload as AnalysisResponse["resumeImprovements"] }),
                     )}
                   >
@@ -1102,7 +1102,7 @@ function App() {
                     disabled={Boolean(artifactLoading)}
                     onClick={() => buildOptionalArtifact(
                       "Interview questions",
-                      "/ai/interview-questions/build",
+                      "/ai/interview/questions",
                       (current, payload) => ({ ...current, interviewQuestions: payload as AnalysisResponse["interviewQuestions"] }),
                     )}
                   >
@@ -1115,7 +1115,7 @@ function App() {
                     disabled={Boolean(artifactLoading)}
                     onClick={() => buildOptionalArtifact(
                       "Cross questions",
-                      "/ai/cross-questions/build",
+                      "/ai/cross-questions",
                       (current, payload) => ({ ...current, crossQuestions: payload as AnalysisResponse["crossQuestions"] }),
                     )}
                   >
