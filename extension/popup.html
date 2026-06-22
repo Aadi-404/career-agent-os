@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Career Agent OS</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <strong>Career Agent OS</strong>
+      <span id="status">Connecting...</span>
+    </header>
+
+    <label>
+      User ID
+      <input id="userId" value="local-aditya" />
+    </label>
+
+    <label>
+      Resume
+      <select id="resumeSelect"></select>
+    </label>
+
+    <section class="jobBox">
+      <div>
+        <strong id="jobTitle">No job parsed yet</strong>
+        <small id="jobMeta">Select text on the page or paste the JD manually.</small>
+      </div>
+      <button id="parsePage" type="button">Parse Page</button>
+    </section>
+
+    <label>
+      Manual JD fallback
+      <textarea id="manualJd" placeholder="Paste role, company, and full job description when page parsing is weak."></textarea>
+    </label>
+
+    <button id="matchJob" type="button">Match Saved Resume</button>
+
+    <section id="result" class="result empty">No score yet.</section>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

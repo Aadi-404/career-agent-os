@@ -146,6 +146,26 @@ type PreparationProgress = {
   confidence: Record<string, ConfidenceLevel>;
 };
 
+type PrepMemoryResponse = {
+  summary: string;
+  repeatedWeakTopics: Array<{
+    topic: string;
+    occurrences: number;
+    averageScore: number;
+    latestEvidence?: string | null;
+    recommendation: string;
+  }>;
+  unfinishedPreparation: Array<{
+    sessionId: string;
+    title: string;
+    status: string;
+    completionPercent: number;
+    unfinishedTaskCount: number;
+    lowConfidenceDays: number;
+  }>;
+  nextRecommendedActions: string[];
+};
+
 type JobOpportunityStatus = "viewed" | "shortlisted" | "applied" | "interview" | "rejected" | "offer" | "archived";
 
 type HistoryJobOpportunityRecord = {
@@ -283,6 +303,7 @@ function App() {
   const [activePreparationSession, setActivePreparationSession] = useState<HistoryPreparationRecord | null>(null);
   const [progressSaving, setProgressSaving] = useState(false);
   const [progressInfo, setProgressInfo] = useState("");
+  const [prepMemory, setPrepMemory] = useState<PrepMemoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [artifactLoading, setArtifactLoading] = useState("");
@@ -487,10 +508,21 @@ function App() {
       }
       setJobOpportunityHistory(await opportunitiesResponse.json() as HistoryJobOpportunityRecord[]);
       setHistoryInfo("Loaded saved PostgreSQL history.");
+      void loadPrepMemory();
     } catch (err) {
       setHistoryInfo(err instanceof Error ? err.message : "History load failed");
     } finally {
       setHistoryLoading(false);
+    }
+  }
+
+  async function loadPrepMemory() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/ai/preparation/memory/${defaultUserId}`);
+      if (!response.ok) throw new Error("Preparation memory load failed");
+      setPrepMemory(await response.json() as PrepMemoryResponse);
+    } catch {
+      setPrepMemory(null);
     }
   }
 
@@ -669,6 +701,7 @@ function App() {
       setActivePreparationSession(updated);
       setPreparationHistory((items) => items.map((item) => item.id === updated.id ? updated : item));
       setProgressInfo("Progress saved.");
+      void loadPrepMemory();
     } catch (err) {
       setProgressInfo(err instanceof Error ? err.message : "Progress save failed.");
     } finally {
@@ -1248,6 +1281,7 @@ function App() {
                 onSelectSession={setActivePreparationSession}
                 onUpdate={updatePreparationProgress}
               />
+              <PrepMemoryPanel memory={prepMemory} onRefresh={loadPrepMemory} />
             </TaskPanel>
           )}
 
@@ -1599,6 +1633,66 @@ function PreparationProgressTracker({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function PrepMemoryPanel({ memory, onRefresh }: { memory: PrepMemoryResponse | null; onRefresh: () => void }) {
+  return (
+    <div className="panel prepMemoryPanel">
+      <div className="panelHeader">
+        <div>
+          <p className="eyebrow">Memory</p>
+          <h3>Preparation Memory Intelligence</h3>
+        </div>
+        <button type="button" className="secondaryButton" onClick={onRefresh}>Refresh Memory</button>
+      </div>
+      {!memory ? (
+        <p className="hint">Load history or save progress to build preparation memory.</p>
+      ) : (
+        <>
+          <p className="recommendation">{memory.summary}</p>
+          {memory.nextRecommendedActions.length > 0 && (
+            <div className="prepSection">
+              <h4>Next Actions</h4>
+              <ul>
+                {memory.nextRecommendedActions.map((action) => <li key={action}>{action}</li>)}
+              </ul>
+            </div>
+          )}
+          {memory.repeatedWeakTopics.length > 0 && (
+            <div className="prepTopicList">
+              {memory.repeatedWeakTopics.map((topic) => (
+                <div className="prepTopic" key={topic.topic}>
+                  <div className="prepTopicTop">
+                    <strong>{topic.topic}</strong>
+                    <span>{topic.occurrences}x | avg {topic.averageScore}%</span>
+                  </div>
+                  <p>{topic.recommendation}</p>
+                  {topic.latestEvidence && <small>{topic.latestEvidence}</small>}
+                </div>
+              ))}
+            </div>
+          )}
+          {memory.unfinishedPreparation.length > 0 && (
+            <div className="prepSection">
+              <h4>Unfinished Preparation</h4>
+              <div className="historyList">
+                {memory.unfinishedPreparation.map((item) => (
+                  <div className="historyItem" key={item.sessionId}>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <small>{item.unfinishedTaskCount} task(s) left, {item.lowConfidenceDays} low-confidence day(s)</small>
+                    </div>
+                    <span>{item.completionPercent}%</span>
+                    <em>{item.status}</em>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

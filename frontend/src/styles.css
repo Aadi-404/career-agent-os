@@ -672,6 +672,11 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.prepMemoryPanel {
+  display: grid;
+  gap: 16px;
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 8px;

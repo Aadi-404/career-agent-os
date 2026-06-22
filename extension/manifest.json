@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Career Agent OS",
+  "version": "0.1.0",
+  "description": "Match the current job page against saved Career Agent OS resumes.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1:8001/*", "http://localhost:8001/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Career Agent OS"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.analysis import AnalysisResponse, CandidateContext, LlmOptions
-from app.models.history import JobOpportunityRecord
+from app.models.history import AnonymousSessionRecord, JobOpportunityRecord
 
 
 OpportunityStatus = Literal["viewed", "shortlisted", "applied", "interview", "rejected", "offer", "archived"]
@@ -15,6 +15,43 @@ class ExtensionJobPayload(BaseModel):
     location: str | None = Field(default=None, max_length=180)
     url: str | None = Field(default=None, max_length=1000)
     description: str = Field(min_length=50)
+
+
+class ExtensionJobDraft(BaseModel):
+    title: str | None = Field(default=None, max_length=180)
+    company: str | None = Field(default=None, max_length=180)
+    location: str | None = Field(default=None, max_length=180)
+    url: str | None = Field(default=None, max_length=1000)
+    description: str = Field(default="", max_length=20000)
+    parseConfidence: Literal["high", "medium", "low"] = "low"
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ExtensionPageParseRequest(BaseModel):
+    pageTitle: str | None = Field(default=None, max_length=300)
+    pageUrl: str | None = Field(default=None, max_length=1000)
+    selectedText: str | None = Field(default=None, max_length=20000)
+    pageText: str | None = Field(default=None, max_length=50000)
+
+
+class ExtensionResumeOption(BaseModel):
+    id: str
+    title: str
+    updatedAt: str
+    summary: str
+    isStructured: bool
+
+
+class ExtensionBootstrapRequest(BaseModel):
+    userId: str | None = Field(default=None, min_length=2, max_length=80)
+    anonymousSessionId: str | None = Field(default=None, min_length=8, max_length=120)
+
+
+class ExtensionBootstrapResponse(BaseModel):
+    anonymousSession: AnonymousSessionRecord
+    resumes: list[ExtensionResumeOption] = Field(default_factory=list)
+    manualPasteRequired: bool = False
+    defaultCandidateContext: CandidateContext | None = None
 
 
 class ExtensionMatchRequest(BaseModel):

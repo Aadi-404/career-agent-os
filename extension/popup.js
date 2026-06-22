@@ -1,0 +1,127 @@
+const API_BASE_URL = "http://127.0.0.1:8001";
+
+const state = {
+  anonymousSessionId: null,
+  jobDraft: null,
+};
+
+const els = {
+  status: document.getElementById("status"),
+  userId: document.getElementById("userId"),
+  resumeSelect: document.getElementById("resumeSelect"),
+  parsePage: document.getElementById("parsePage"),
+  matchJob: document.getElementById("matchJob"),
+  manualJd: document.getElementById("manualJd"),
+  jobTitle: document.getElementById("jobTitle"),
+  jobMeta: document.getElementById("jobMeta"),
+  result: document.getElementById("result"),
+};
+
+bootstrap();
+
+els.userId.addEventListener("change", bootstrap);
+els.parsePage.addEventListener("click", parseCurrentPage);
+els.matchJob.addEventListener("click", matchJob);
+
+async function bootstrap() {
+  setStatus("Connecting...");
+  const saved = await chrome.storage.local.get(["anonymousSessionId", "userId"]);
+  if (saved.userId) els.userId.value = saved.userId;
+  const response = await post("/extension/bootstrap", {
+    userId: els.userId.value.trim() || null,
+    anonymousSessionId: saved.anonymousSessionId || null,
+  });
+  state.anonymousSessionId = response.anonymousSession.id;
+  await chrome.storage.local.set({ anonymousSessionId: state.anonymousSessionId, userId: els.userId.value.trim() });
+  renderResumes(response.resumes);
+  setStatus(response.resumes.length ? "Ready" : "Paste resume/JD in app first");
+}
+
+async function parseCurrentPage() {
+  setStatus("Parsing page...");
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const page = await chrome.tabs.sendMessage(tab.id, { type: "CAREER_AGENT_EXTRACT_JOB" });
+  const draft = await post("/extension/jobs/parse-page", page);
+  state.jobDraft = draft;
+  els.manualJd.value = draft.description || "";
+  els.jobTitle.textContent = draft.title || "Job parsed";
+  els.jobMeta.textContent = `${draft.company || "Company unknown"} | ${draft.location || "Location unknown"} | ${draft.parseConfidence} confidence`;
+  setStatus(draft.warnings?.length ? "Review JD text" : "Page parsed");
+}
+
+async function matchJob() {
+  const resumeId = els.resumeSelect.value;
+  const description = els.manualJd.value.trim() || state.jobDraft?.description || "";
+  if (!resumeId) {
+    renderResult("Select a saved resume first.", true);
+    return;
+  }
+  if (description.length < 50) {
+    renderResult("Paste the full JD before matching.", true);
+    return;
+  }
+  setStatus("Matching...");
+  els.matchJob.disabled = true;
+  try {
+    const analysis = await post("/extension/jobs/match", {
+      userId: els.userId.value.trim(),
+      anonymousSessionId: state.anonymousSessionId,
+      resumeId,
+      job: {
+        title: state.jobDraft?.title || "Pasted job description",
+        company: state.jobDraft?.company || null,
+        location: state.jobDraft?.location || null,
+        url: state.jobDraft?.url || null,
+        description,
+      },
+      saveOpportunity: true,
+      status: "viewed",
+    });
+    renderResult(`<strong>${analysis.analysis.technicalMatchScore}%</strong>${analysis.analysis.fitCategory}<br>${analysis.analysis.recommendedAction || ""}`);
+    setStatus("Matched");
+  } catch (error) {
+    renderResult(error.message || "Match failed", true);
+    setStatus("Error");
+  } finally {
+    els.matchJob.disabled = false;
+  }
+}
+
+function renderResumes(resumes) {
+  els.resumeSelect.innerHTML = "";
+  if (!resumes.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No saved resumes found";
+    els.resumeSelect.append(option);
+    return;
+  }
+  for (const resume of resumes) {
+    const option = document.createElement("option");
+    option.value = resume.id;
+    option.textContent = `${resume.title} - ${resume.summary}`;
+    els.resumeSelect.append(option);
+  }
+}
+
+function renderResult(html, isError = false) {
+  els.result.classList.toggle("empty", isError);
+  els.result.innerHTML = html;
+}
+
+function setStatus(value) {
+  els.status.textContent = value;
+}
+
+async function post(path, body) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `${path} failed`);
+  }
+  return response.json();
+}

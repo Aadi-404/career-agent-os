@@ -1,3 +1,5 @@
+import re
+
 from fastapi import FastAPI, HTTPException
 from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +17,15 @@ from app.models.analysis import (
     RequirementMatch,
     ResumeImprovement,
 )
-from app.models.extension import ExtensionMatchRequest, ExtensionMatchResponse
+from app.models.extension import (
+    ExtensionBootstrapRequest,
+    ExtensionBootstrapResponse,
+    ExtensionJobDraft,
+    ExtensionMatchRequest,
+    ExtensionMatchResponse,
+    ExtensionPageParseRequest,
+    ExtensionResumeOption,
+)
 from app.models.history import (
     AnonymousSessionCreateRequest,
     AnonymousSessionRecord,
@@ -37,6 +47,7 @@ from app.models.history import (
     WorkspaceSummary,
 )
 from app.models.jd_parse import JdParseRequest, JdParseResponse
+from app.models.prep_memory import PrepMemoryResponse
 from app.models.resume_extract import ResumeExtractResponse
 from app.models.resume_normalize import ResumeNormalizeRequest, ResumeNormalizeResponse
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
@@ -68,6 +79,7 @@ from app.services.optional_artifact_service import (
     build_resume_improvements,
 )
 from app.services.preparation_service import build_preparation_intelligence
+from app.services.prep_memory_service import build_prep_memory
 from app.services.resume_extractor import extract_resume
 from app.services.resume_normalizer import normalize_resume
 
@@ -114,6 +126,55 @@ def build_gap_report(request: OptionalArtifactBuildRequest) -> list[RequirementM
         for match in request.analysis.requirementMatches
         if match.score < 60
     ][: request.limit]
+
+
+@app.post("/extension/bootstrap", response_model=ExtensionBootstrapResponse)
+def bootstrap_extension(request: ExtensionBootstrapRequest) -> ExtensionBootstrapResponse:
+    anonymous_session = create_or_touch_anonymous_session(
+        AnonymousSessionCreateRequest(anonymousSessionId=request.anonymousSessionId)
+    )
+    resumes = list_extension_resumes(request.userId) if request.userId else []
+    return ExtensionBootstrapResponse(
+        anonymousSession=anonymous_session,
+        resumes=resumes,
+        manualPasteRequired=not bool(resumes),
+        defaultCandidateContext=(
+            CandidateContext(
+                targetRole="Software Developer",
+                experienceYears=0,
+                currentStack=["general software engineering"],
+                targetMarket="Browser extension job matching",
+                relocationOpen=False,
+            )
+            if not resumes
+            else None
+        ),
+    )
+
+
+@app.get("/extension/users/{user_id}/resumes", response_model=list[ExtensionResumeOption])
+def list_extension_resumes(user_id: str) -> list[ExtensionResumeOption]:
+    return [_extension_resume_option(resume) for resume in list_resumes(user_id)]
+
+
+@app.post("/extension/jobs/parse-page", response_model=ExtensionJobDraft)
+def parse_extension_job_page(request: ExtensionPageParseRequest) -> ExtensionJobDraft:
+    source_text = (request.selectedText or request.pageText or "").strip()
+    warnings = []
+    if not request.selectedText:
+        warnings.append("No selected text was provided; parsed from visible page text. Manual JD paste may be more accurate.")
+    if len(source_text) < 50:
+        warnings.append("JD text is short. Ask the user to paste the full job description manually.")
+    title = _infer_extension_title(request.pageTitle, source_text)
+    return ExtensionJobDraft(
+        title=title,
+        company=_infer_extension_company(request.pageTitle, source_text),
+        location=_infer_extension_location(source_text),
+        url=request.pageUrl,
+        description=source_text,
+        parseConfidence="high" if request.selectedText and len(source_text) >= 300 else "medium" if len(source_text) >= 100 else "low",
+        warnings=warnings,
+    )
 
 
 @app.post("/extension/jobs/match", response_model=ExtensionMatchResponse)
@@ -280,6 +341,11 @@ def get_preparation_session_records(user_id: str) -> list[PreparationSessionReco
     return list_preparation_sessions(user_id)
 
 
+@app.get("/ai/preparation/memory/{user_id}", response_model=PrepMemoryResponse)
+def get_preparation_memory(user_id: str) -> PrepMemoryResponse:
+    return build_prep_memory(list_analyses(user_id), list_preparation_sessions(user_id))
+
+
 @app.get("/history/users/{user_id}/preparation-sessions/{session_id}", response_model=PreparationSessionRecord)
 def get_preparation_session_record(user_id: str, session_id: str) -> PreparationSessionRecord:
     return get_preparation_session(user_id, session_id)
@@ -350,3 +416,57 @@ def _infer_stack_from_text(text: str) -> list[str]:
     ]
     lowered = text.lower()
     return [term for term in known_terms if term.lower() in lowered][:12]
+
+
+def _extension_resume_option(resume: ResumeRecord) -> ExtensionResumeOption:
+    structured = resume.structuredResume
+    profile = structured.profile if structured else None
+    summary_parts = [
+        profile.name if profile and profile.name else None,
+        f"{len(structured.experience)} exp" if structured else None,
+        f"{len(structured.projects)} projects" if structured else None,
+        f"{len(structured.skills)} skills" if structured else None,
+    ]
+    summary = " | ".join(part for part in summary_parts if part) or resume.rawText[:120]
+    return ExtensionResumeOption(
+        id=resume.id,
+        title=resume.title,
+        updatedAt=resume.updatedAt,
+        summary=summary,
+        isStructured=bool(structured),
+    )
+
+
+def _infer_extension_title(page_title: str | None, text: str) -> str | None:
+    if page_title:
+        return page_title.split("|")[0].split("-")[0].strip()[:180] or None
+    for line in text.splitlines()[:8]:
+        if any(token in line.lower() for token in ["developer", "engineer", "analyst", "architect"]):
+            return line.strip()[:180]
+    return None
+
+
+def _infer_extension_company(page_title: str | None, text: str) -> str | None:
+    if page_title and " at " in page_title.lower():
+        return page_title.lower().split(" at ", 1)[1].split("|")[0].strip().title()[:180]
+    for line in text.splitlines()[:12]:
+        lowered = line.lower()
+        if lowered.startswith("company") or lowered.startswith("organization"):
+            return line.split(":", 1)[-1].strip()[:180]
+    return None
+
+
+def _infer_extension_location(text: str) -> str | None:
+    location_match = re.search(r"(?i)\blocation\s*:\s*([^.\n|;]+)", text)
+    if location_match:
+        location = location_match.group(1).strip(" ,:-")
+        if location:
+            return location[:180]
+    for line in text.splitlines()[:20]:
+        lowered = line.lower()
+        if "location" in lowered:
+            return line.split(":", 1)[-1].strip()[:180]
+    for city in ["Mumbai", "Pune", "Bangalore", "Bengaluru", "Hyderabad", "Delhi", "Noida", "Gurgaon", "Remote"]:
+        if city.lower() in text.lower():
+            return city
+    return None
