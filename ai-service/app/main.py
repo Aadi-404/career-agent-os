@@ -25,6 +25,8 @@ from app.models.extension import (
     ExtensionMatchResponse,
     ExtensionPageParseRequest,
     ExtensionResumeOption,
+    ExtensionSessionClaimRequest,
+    ExtensionSessionClaimResponse,
 )
 from app.models.history import (
     AnonymousSessionCreateRequest,
@@ -53,6 +55,7 @@ from app.models.resume_normalize import ResumeNormalizeRequest, ResumeNormalizeR
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.history_store import (
     create_or_touch_anonymous_session,
+    claim_anonymous_session,
     create_or_update_user,
     get_resume,
     get_preparation_session,
@@ -152,6 +155,21 @@ def bootstrap_extension(request: ExtensionBootstrapRequest) -> ExtensionBootstra
     )
 
 
+@app.post("/extension/session/claim", response_model=ExtensionSessionClaimResponse)
+def claim_extension_session(request: ExtensionSessionClaimRequest) -> ExtensionSessionClaimResponse:
+    anonymous_session, migrated_count = claim_anonymous_session(
+        request.anonymousSessionId,
+        request.userId,
+        request.displayName,
+        request.email,
+    )
+    return ExtensionSessionClaimResponse(
+        anonymousSession=anonymous_session,
+        resumes=list_extension_resumes(request.userId),
+        migratedOpportunityCount=migrated_count,
+    )
+
+
 @app.get("/extension/users/{user_id}/resumes", response_model=list[ExtensionResumeOption])
 def list_extension_resumes(user_id: str) -> list[ExtensionResumeOption]:
     return [_extension_resume_option(resume) for resume in list_resumes(user_id)]
@@ -159,20 +177,23 @@ def list_extension_resumes(user_id: str) -> list[ExtensionResumeOption]:
 
 @app.post("/extension/jobs/parse-page", response_model=ExtensionJobDraft)
 def parse_extension_job_page(request: ExtensionPageParseRequest) -> ExtensionJobDraft:
-    source_text = (request.selectedText or request.pageText or "").strip()
+    source_text = (request.selectedText or request.extractedDescription or request.pageText or "").strip()
     warnings = []
     if not request.selectedText:
         warnings.append("No selected text was provided; parsed from visible page text. Manual JD paste may be more accurate.")
     if len(source_text) < 50:
         warnings.append("JD text is short. Ask the user to paste the full job description manually.")
-    title = _infer_extension_title(request.pageTitle, source_text)
+    title = _clean_optional(request.extractedTitle) or _infer_extension_title(request.pageTitle, source_text)
+    company = _clean_optional(request.extractedCompany) or _infer_extension_company(request.pageTitle, source_text)
+    location = _clean_optional(request.extractedLocation) or _infer_extension_location(source_text)
+    parse_confidence = "high" if request.source and request.extractedDescription and len(source_text) >= 300 else "high" if request.selectedText and len(source_text) >= 300 else "medium" if len(source_text) >= 100 else "low"
     return ExtensionJobDraft(
         title=title,
-        company=_infer_extension_company(request.pageTitle, source_text),
-        location=_infer_extension_location(source_text),
+        company=company,
+        location=location,
         url=request.pageUrl,
         description=source_text,
-        parseConfidence="high" if request.selectedText and len(source_text) >= 300 else "medium" if len(source_text) >= 100 else "low",
+        parseConfidence=parse_confidence,
         warnings=warnings,
     )
 
@@ -449,6 +470,11 @@ def _infer_extension_title(page_title: str | None, text: str) -> str | None:
 def _infer_extension_company(page_title: str | None, text: str) -> str | None:
     if page_title and " at " in page_title.lower():
         return page_title.lower().split(" at ", 1)[1].split("|")[0].strip().title()[:180]
+    company_match = re.search(r"(?i)\b(?:company|organization)\s*:\s*([^.\n|;]+)", text)
+    if company_match:
+        company = company_match.group(1).strip(" ,:-")
+        if company:
+            return company[:180]
     for line in text.splitlines()[:12]:
         lowered = line.lower()
         if lowered.startswith("company") or lowered.startswith("organization"):
@@ -470,3 +496,10 @@ def _infer_extension_location(text: str) -> str | None:
         if city.lower() in text.lower():
             return city
     return None
+
+
+def _clean_optional(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = " ".join(value.strip().split())
+    return cleaned or None

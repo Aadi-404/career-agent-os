@@ -42,6 +42,12 @@ label {
   font-weight: 700;
 }
 
+.inlineControl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr auto;
+}
+
 input,
 select,
 textarea,

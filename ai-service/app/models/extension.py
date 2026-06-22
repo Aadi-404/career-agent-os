@@ -32,6 +32,11 @@ class ExtensionPageParseRequest(BaseModel):
     pageUrl: str | None = Field(default=None, max_length=1000)
     selectedText: str | None = Field(default=None, max_length=20000)
     pageText: str | None = Field(default=None, max_length=50000)
+    extractedTitle: str | None = Field(default=None, max_length=180)
+    extractedCompany: str | None = Field(default=None, max_length=180)
+    extractedLocation: str | None = Field(default=None, max_length=180)
+    extractedDescription: str | None = Field(default=None, max_length=50000)
+    source: str | None = Field(default=None, max_length=80)
 
 
 class ExtensionResumeOption(BaseModel):
@@ -52,6 +57,19 @@ class ExtensionBootstrapResponse(BaseModel):
     resumes: list[ExtensionResumeOption] = Field(default_factory=list)
     manualPasteRequired: bool = False
     defaultCandidateContext: CandidateContext | None = None
+
+
+class ExtensionSessionClaimRequest(BaseModel):
+    anonymousSessionId: str = Field(min_length=8, max_length=120)
+    userId: str = Field(min_length=2, max_length=80)
+    displayName: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=180)
+
+
+class ExtensionSessionClaimResponse(BaseModel):
+    anonymousSession: AnonymousSessionRecord
+    resumes: list[ExtensionResumeOption] = Field(default_factory=list)
+    migratedOpportunityCount: int = Field(ge=0)
 
 
 class ExtensionMatchRequest(BaseModel):

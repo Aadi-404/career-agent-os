@@ -80,6 +80,42 @@ def create_or_touch_anonymous_session(request: AnonymousSessionCreateRequest) ->
     return AnonymousSessionRecord(id=session_id, createdAt=now, lastSeenAt=now)
 
 
+def claim_anonymous_session(
+    anonymous_session_id: str,
+    user_id: str,
+    display_name: str | None = None,
+    email: str | None = None,
+) -> tuple[AnonymousSessionRecord, int]:
+    now = _now()
+    with get_connection() as connection:
+        _get_anonymous_session(connection, anonymous_session_id)
+        existing_user = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not existing_user:
+            connection.execute(
+                "INSERT INTO users (id, display_name, email, created_at) VALUES (?, ?, ?, ?)",
+                (user_id, display_name or user_id, email, now),
+            )
+        connection.execute(
+            """
+            UPDATE anonymous_sessions
+            SET last_seen_at = ?, converted_user_id = ?
+            WHERE id = ?
+            """,
+            (now, user_id, anonymous_session_id),
+        )
+        update_result = connection.execute(
+            """
+            UPDATE job_opportunities
+            SET user_id = ?, anonymous_session_id = NULL, updated_at = ?
+            WHERE anonymous_session_id = ? AND user_id IS NULL
+            """,
+            (user_id, now, anonymous_session_id),
+        )
+        row = connection.execute("SELECT * FROM anonymous_sessions WHERE id = ?", (anonymous_session_id,)).fetchone()
+    migrated_count = getattr(update_result, "rowcount", 0) or 0
+    return _anonymous_session_from_row(_require_row(row, "Anonymous session not found after claim")), migrated_count
+
+
 def get_workspace_summary(user_id: str) -> WorkspaceSummary:
     with get_connection() as connection:
         user = _get_user(connection, user_id)
