@@ -264,7 +264,8 @@ class ResumeNormalizerRegressionTests(unittest.TestCase):
         self.assertEqual([project.name for project in structured.projects], ["Loan Risk Engine"])
 
     def test_project_blocks_without_projects_heading_are_extracted(self):
-        structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=NO_PROJECT_HEADING_RESUME)).structuredResume
+        response = normalize_resume(ResumeNormalizeRequest(rawResumeText=NO_PROJECT_HEADING_RESUME))
+        structured = response.structuredResume
 
         self.assertEqual(len(structured.experience), 1)
         self.assertEqual(structured.experience[0].company, "BluePeak Systems")
@@ -272,6 +273,8 @@ class ResumeNormalizerRegressionTests(unittest.TestCase):
         self.assertEqual([len(project.highlights) for project in structured.projects], [2, 2])
         self.assertIn("Node.js", structured.projects[0].techStack)
         self.assertIn("Django", structured.projects[1].techStack)
+        self.assertIsNotNone(response.parserDebug)
+        self.assertIn("Projects were detected from explicit inline project headings", " ".join(response.parserDebug.parserNotes))
 
     def test_skill_aliases_are_normalized_without_duplicates(self):
         structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=SKILL_ALIAS_RESUME)).structuredResume
@@ -288,7 +291,8 @@ class ResumeNormalizerRegressionTests(unittest.TestCase):
         self.assertEqual(structured.skills.count("PostgreSQL"), 1)
 
     def test_noisy_certification_section_keeps_only_real_credentials(self):
-        structured = normalize_resume(ResumeNormalizeRequest(rawResumeText=NOISY_CERTIFICATION_RESUME)).structuredResume
+        response = normalize_resume(ResumeNormalizeRequest(rawResumeText=NOISY_CERTIFICATION_RESUME))
+        structured = response.structuredResume
 
         self.assertEqual(
             structured.certifications,
@@ -297,6 +301,9 @@ class ResumeNormalizerRegressionTests(unittest.TestCase):
                 "Microsoft Certified: Azure Fundamentals (AZ-900) - Microsoft",
             ],
         )
+        self.assertIsNotNone(response.parserDebug)
+        self.assertEqual(response.parserDebug.parsedCounts["certifications"], 2)
+        self.assertIn("Certification lines were filtered", " ".join(response.parserDebug.parserNotes))
 
 
 if __name__ == "__main__":

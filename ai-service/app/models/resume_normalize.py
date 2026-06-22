@@ -40,7 +40,15 @@ class ResumeNormalizeRequest(BaseModel):
     rawResumeText: str = Field(min_length=20)
 
 
+class ResumeParserDebug(BaseModel):
+    detectedSections: dict[str, int] = Field(default_factory=dict)
+    parsedCounts: dict[str, int] = Field(default_factory=dict)
+    rawLineCount: int = 0
+    parserNotes: list[str] = Field(default_factory=list)
+
+
 class ResumeNormalizeResponse(BaseModel):
     normalizedResumeText: str
     structuredResume: StructuredResume
     warnings: list[str] = Field(default_factory=list)
+    parserDebug: ResumeParserDebug | None = None

@@ -200,6 +200,13 @@ type ParsedJobDescription = {
   senioritySignals: string[];
 };
 
+type ResumeParserDebug = {
+  detectedSections: Record<string, number>;
+  parsedCounts: Record<string, number>;
+  rawLineCount: number;
+  parserNotes: string[];
+};
+
 type JdParseResponse = {
   normalizedJobDescriptionText: string;
   warnings: string[];
@@ -254,6 +261,7 @@ function App() {
   const [normalizeInfo, setNormalizeInfo] = useState("");
   const [jdParseInfo, setJdParseInfo] = useState("");
   const [structuredResume, setStructuredResume] = useState<StructuredResume | null>(null);
+  const [resumeParserDebug, setResumeParserDebug] = useState<ResumeParserDebug | null>(null);
   const [parsedJd, setParsedJd] = useState<JdParseResponse["parsedJobDescription"] | null>(null);
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [lastAnalysisRequest, setLastAnalysisRequest] = useState<AnalyzeRequestPayload | null>(null);
@@ -314,6 +322,7 @@ function App() {
     setResumeText(value);
     setResumeParseSourceText(value);
     setStructuredResume(null);
+    setResumeParserDebug(null);
     setNormalizeInfo("");
     setResult(null);
   }
@@ -616,6 +625,7 @@ function App() {
       setResumeText(extracted.extractedText);
       setResumeParseSourceText(extracted.extractedText);
       setStructuredResume(null);
+      setResumeParserDebug(null);
       setNormalizeInfo("");
       setResult(null);
       setUploadInfo(
@@ -691,11 +701,13 @@ function App() {
         normalizedResumeText: string;
         warnings: string[];
         structuredResume: StructuredResume;
+        parserDebug?: ResumeParserDebug | null;
       };
 
       setResumeParseSourceText(resumeText);
       setResumeText(normalized.normalizedResumeText);
       setStructuredResume(normalized.structuredResume);
+      setResumeParserDebug(normalized.parserDebug ?? null);
       const warnings = normalized.warnings.length ? ` Warnings: ${normalized.warnings.join(" ")}` : "";
       setNormalizeInfo(
         `Normalized ${normalized.structuredResume.experience.length} experience item(s), ${normalized.structuredResume.projects.length} project(s), ${normalized.structuredResume.skills.length} skill(s).${warnings}`
@@ -927,6 +939,7 @@ function App() {
                       rawText={resumeParseSourceText}
                       normalizedText={resumeText}
                       resume={structuredResume}
+                      parserDebug={resumeParserDebug}
                     />
                     <div className="reviewToggle">
                       <button type="button" className={reviewPane === "resume" ? "active" : ""} onClick={() => setReviewPane("resume")}>Resume Review</button>
@@ -1010,6 +1023,7 @@ function App() {
                   rawText={resumeParseSourceText}
                   normalizedText={resumeText}
                   resume={structuredResume}
+                  parserDebug={resumeParserDebug}
                 />
                 <div className="actionBar">
                   <button type="button" className="secondaryButton" disabled={normalizing || resumeText.trim().length < 20} onClick={normalizeCurrentResume}>
@@ -1598,10 +1612,12 @@ function ResumeParserDebugPanel({
   rawText,
   normalizedText,
   resume,
+  parserDebug,
 }: {
   rawText: string;
   normalizedText: string;
   resume: StructuredResume | null;
+  parserDebug: ResumeParserDebug | null;
 }) {
   if (!resume && rawText.trim().length < 20) return null;
 
@@ -1613,7 +1629,20 @@ function ResumeParserDebugPanel({
         <span>{resume ? `${resume.projects.length} projects` : "No projects parsed"}</span>
         <span>{resume ? `${resume.certifications.length} certifications` : "No certifications parsed"}</span>
         <span>{rawText.length.toLocaleString()} raw chars</span>
+        {parserDebug && <span>{parserDebug.rawLineCount} parsed lines</span>}
       </div>
+      {parserDebug && (
+        <div className="parserDebugStats">
+          {Object.entries(parserDebug.detectedSections).map(([section, count]) => (
+            <span key={section}>{section}: {count}</span>
+          ))}
+        </div>
+      )}
+      {parserDebug?.parserNotes.length ? (
+        <ul className="parserDebugNotes">
+          {parserDebug.parserNotes.map((note) => <li key={note}>{note}</li>)}
+        </ul>
+      ) : null}
       <div className="debugGrid">
         <div>
           <h4>Raw extracted text</h4>

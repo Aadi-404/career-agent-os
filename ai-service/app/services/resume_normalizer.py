@@ -4,6 +4,7 @@ from app.models.resume_normalize import (
     ResumeExperience,
     ResumeNormalizeRequest,
     ResumeNormalizeResponse,
+    ResumeParserDebug,
     ResumeProfile,
     ResumeProject,
     StructuredResume,
@@ -90,10 +91,14 @@ def normalize_resume(request: ResumeNormalizeRequest) -> ResumeNormalizeResponse
     experience_lines = _strip_inline_project_blocks(sections.get("experience", [])) if inline_projects else sections.get("experience", [])
     experience = _extract_experience(experience_lines)
     projects = _extract_projects(sections.get("projects", []))
+    used_inline_projects = False
+    used_project_fallback = False
     if inline_projects:
         projects = inline_projects
+        used_inline_projects = True
     if not projects:
         projects = _extract_project_fallback(cleaned_lines, experience)
+        used_project_fallback = bool(projects)
     structured = StructuredResume(
         profile=profile,
         experience=experience,
@@ -108,6 +113,13 @@ def normalize_resume(request: ResumeNormalizeRequest) -> ResumeNormalizeResponse
         normalizedResumeText=_format_normalized_resume(structured),
         structuredResume=structured,
         warnings=warnings,
+        parserDebug=_build_parser_debug(
+            cleaned_lines=cleaned_lines,
+            sections=sections,
+            structured=structured,
+            used_inline_projects=used_inline_projects,
+            used_project_fallback=used_project_fallback,
+        ),
     )
 
 
@@ -1048,6 +1060,39 @@ def _build_warnings(structured: StructuredResume, sections: dict[str, list[str]]
     if "profile" in sections and len(sections["profile"]) > 10:
         warnings.append("Profile section has many lines before the first detected heading; PDF layout may need manual cleanup.")
     return warnings
+
+
+def _build_parser_debug(
+    *,
+    cleaned_lines: list[str],
+    sections: dict[str, list[str]],
+    structured: StructuredResume,
+    used_inline_projects: bool,
+    used_project_fallback: bool,
+) -> ResumeParserDebug:
+    notes = []
+    if used_inline_projects:
+        notes.append("Projects were detected from explicit inline project headings outside the Projects section.")
+    if used_project_fallback:
+        notes.append("Projects were inferred from project-like blocks because a dedicated Projects section was not detected.")
+    if "experience" in sections and len(structured.experience) > 1:
+        notes.append("Experience section was split into multiple role blocks.")
+    if "certifications" in sections and structured.certifications:
+        notes.append("Certification lines were filtered to keep credential-like entries.")
+
+    return ResumeParserDebug(
+        detectedSections={section: len(lines) for section, lines in sections.items()},
+        parsedCounts={
+            "experience": len(structured.experience),
+            "projects": len(structured.projects),
+            "skills": len(structured.skills),
+            "education": len(structured.education),
+            "achievements": len(structured.achievements),
+            "certifications": len(structured.certifications),
+        },
+        rawLineCount=len(cleaned_lines),
+        parserNotes=notes,
+    )
 
 
 def _format_normalized_resume(structured: StructuredResume) -> str:
