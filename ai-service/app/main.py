@@ -19,6 +19,7 @@ from app.models.extension import ExtensionMatchRequest, ExtensionMatchResponse
 from app.models.history import (
     AnonymousSessionCreateRequest,
     AnonymousSessionRecord,
+    AnalysisLookupRequest,
     AnalysisRecord,
     AnalysisSaveRequest,
     JobOpportunityRecord,
@@ -27,6 +28,7 @@ from app.models.history import (
     JobDescriptionRecord,
     JobDescriptionSaveRequest,
     PreparationSessionRecord,
+    PreparationSessionProgressUpdateRequest,
     PreparationSessionSaveRequest,
     ResumeRecord,
     ResumeSaveRequest,
@@ -42,6 +44,7 @@ from app.services.history_store import (
     create_or_touch_anonymous_session,
     create_or_update_user,
     get_resume,
+    get_preparation_session,
     get_workspace_summary,
     list_analyses,
     list_job_descriptions,
@@ -53,7 +56,9 @@ from app.services.history_store import (
     save_job_description,
     save_job_opportunity,
     save_preparation_session,
+    lookup_analysis,
     save_resume,
+    update_preparation_session_progress,
     update_job_opportunity_status,
 )
 from app.services.jd_parser import parse_jd
@@ -255,6 +260,11 @@ def create_analysis_record(request: AnalysisSaveRequest) -> AnalysisRecord:
     return save_analysis(request)
 
 
+@app.post("/history/analyses/lookup", response_model=AnalysisRecord | None)
+def lookup_analysis_record(request: AnalysisLookupRequest) -> AnalysisRecord | None:
+    return lookup_analysis(request)
+
+
 @app.get("/history/users/{user_id}/analyses", response_model=list[AnalysisRecord])
 def get_analysis_records(user_id: str) -> list[AnalysisRecord]:
     return list_analyses(user_id)
@@ -268,6 +278,16 @@ def create_preparation_session_record(request: PreparationSessionSaveRequest) ->
 @app.get("/history/users/{user_id}/preparation-sessions", response_model=list[PreparationSessionRecord])
 def get_preparation_session_records(user_id: str) -> list[PreparationSessionRecord]:
     return list_preparation_sessions(user_id)
+
+
+@app.get("/history/users/{user_id}/preparation-sessions/{session_id}", response_model=PreparationSessionRecord)
+def get_preparation_session_record(user_id: str, session_id: str) -> PreparationSessionRecord:
+    return get_preparation_session(user_id, session_id)
+
+
+@app.patch("/history/preparation-sessions/{session_id}/progress", response_model=PreparationSessionRecord)
+def update_preparation_progress_record(session_id: str, request: PreparationSessionProgressUpdateRequest) -> PreparationSessionRecord:
+    return update_preparation_session_progress(session_id, request)
 
 
 @app.post("/history/job-opportunities", response_model=JobOpportunityRecord)

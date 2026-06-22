@@ -78,8 +78,14 @@ class AnalysisSaveRequest(BaseModel):
     title: str = Field(min_length=2, max_length=180)
     resumeId: str | None = None
     jobDescriptionId: str | None = None
+    fingerprint: str | None = Field(default=None, min_length=16, max_length=128)
     request: AnalyzeRequest
     response: AnalysisResponse
+
+
+class AnalysisLookupRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    fingerprint: str = Field(min_length=16, max_length=128)
 
 
 class AnalysisRecord(BaseModel):
@@ -88,6 +94,7 @@ class AnalysisRecord(BaseModel):
     resumeId: str | None = None
     jobDescriptionId: str | None = None
     title: str
+    fingerprint: str | None = None
     technicalMatchScore: int
     fitCategory: str
     request: AnalyzeRequest
@@ -101,6 +108,13 @@ class PreparationSessionSaveRequest(BaseModel):
     title: str = Field(min_length=2, max_length=180)
     status: Literal["planned", "in_progress", "completed", "paused"] = "planned"
     plan: PreparationIntelligence | dict[str, Any]
+    progress: dict[str, Any] | None = None
+
+
+class PreparationSessionProgressUpdateRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    status: Literal["planned", "in_progress", "completed", "paused"] | None = None
+    progress: dict[str, Any] = Field(default_factory=dict)
 
 
 class PreparationSessionRecord(BaseModel):
@@ -110,6 +124,7 @@ class PreparationSessionRecord(BaseModel):
     title: str
     status: str
     plan: PreparationIntelligence | dict[str, Any]
+    progress: dict[str, Any] | None = None
     createdAt: str
     updatedAt: str
 

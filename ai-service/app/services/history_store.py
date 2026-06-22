@@ -13,6 +13,7 @@ from app.models.analysis import AnalysisResponse, AnalyzeRequest, PreparationInt
 from app.models.history import (
     AnonymousSessionCreateRequest,
     AnonymousSessionRecord,
+    AnalysisLookupRequest,
     AnalysisRecord,
     AnalysisSaveRequest,
     JobOpportunityRecord,
@@ -21,6 +22,7 @@ from app.models.history import (
     JobDescriptionRecord,
     JobDescriptionSaveRequest,
     PreparationSessionRecord,
+    PreparationSessionProgressUpdateRequest,
     PreparationSessionSaveRequest,
     ResumeRecord,
     ResumeSaveRequest,
@@ -218,10 +220,10 @@ def save_analysis(request: AnalysisSaveRequest) -> AnalysisRecord:
         connection.execute(
             """
             INSERT INTO analyses (
-                id, user_id, resume_id, job_description_id, title, technical_match_score,
+                id, user_id, resume_id, job_description_id, title, fingerprint, technical_match_score,
                 fit_category, request_json, response_json, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record_id,
@@ -229,6 +231,7 @@ def save_analysis(request: AnalysisSaveRequest) -> AnalysisRecord:
                 request.resumeId,
                 request.jobDescriptionId,
                 request.title,
+                request.fingerprint,
                 request.response.technicalMatchScore,
                 request.response.fitCategory,
                 _json_dump(request.request),
@@ -242,12 +245,28 @@ def save_analysis(request: AnalysisSaveRequest) -> AnalysisRecord:
         resumeId=request.resumeId,
         jobDescriptionId=request.jobDescriptionId,
         title=request.title,
+        fingerprint=request.fingerprint,
         technicalMatchScore=request.response.technicalMatchScore,
         fitCategory=request.response.fitCategory,
         request=request.request,
         response=request.response,
         createdAt=now,
     )
+
+
+def lookup_analysis(request: AnalysisLookupRequest) -> AnalysisRecord | None:
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        row = connection.execute(
+            """
+            SELECT * FROM analyses
+            WHERE user_id = ? AND fingerprint = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (request.userId, request.fingerprint),
+        ).fetchone()
+    return _analysis_from_row(row) if row else None
 
 
 def list_analyses(user_id: str) -> list[AnalysisRecord]:
@@ -270,9 +289,9 @@ def save_preparation_session(request: PreparationSessionSaveRequest) -> Preparat
         connection.execute(
             """
             INSERT INTO preparation_sessions (
-                id, user_id, analysis_id, title, status, plan_json, created_at, updated_at
+                id, user_id, analysis_id, title, status, plan_json, progress_json, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record_id,
@@ -281,6 +300,7 @@ def save_preparation_session(request: PreparationSessionSaveRequest) -> Preparat
                 request.title,
                 request.status,
                 _json_dump(request.plan),
+                _json_dump(request.progress),
                 now,
                 now,
             ),
@@ -292,9 +312,45 @@ def save_preparation_session(request: PreparationSessionSaveRequest) -> Preparat
         title=request.title,
         status=request.status,
         plan=request.plan,
+        progress=request.progress,
         createdAt=now,
         updatedAt=now,
     )
+
+
+def get_preparation_session(user_id: str, session_id: str) -> PreparationSessionRecord:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        row = connection.execute(
+            "SELECT * FROM preparation_sessions WHERE id = ? AND user_id = ?",
+            (session_id, user_id),
+        ).fetchone()
+    return _preparation_session_from_row(_require_row(row, "Preparation session not found for this user"))
+
+
+def update_preparation_session_progress(session_id: str, request: PreparationSessionProgressUpdateRequest) -> PreparationSessionRecord:
+    now = _now()
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        existing = connection.execute(
+            "SELECT * FROM preparation_sessions WHERE id = ? AND user_id = ?",
+            (session_id, request.userId),
+        ).fetchone()
+        _require_row(existing, "Preparation session not found for this user")
+        status = request.status or existing["status"]
+        connection.execute(
+            """
+            UPDATE preparation_sessions
+            SET status = ?, progress_json = ?, updated_at = ?
+            WHERE id = ? AND user_id = ?
+            """,
+            (status, _json_dump(request.progress), now, session_id, request.userId),
+        )
+        row = connection.execute(
+            "SELECT * FROM preparation_sessions WHERE id = ? AND user_id = ?",
+            (session_id, request.userId),
+        ).fetchone()
+    return _preparation_session_from_row(_require_row(row, "Preparation session not found after update"))
 
 
 def list_preparation_sessions(user_id: str) -> list[PreparationSessionRecord]:
@@ -471,6 +527,7 @@ def _analysis_from_row(row: Any) -> AnalysisRecord:
         resumeId=row["resume_id"],
         jobDescriptionId=row["job_description_id"],
         title=row["title"],
+        fingerprint=row.get("fingerprint") if hasattr(row, "get") else row["fingerprint"],
         technicalMatchScore=row["technical_match_score"],
         fitCategory=row["fit_category"],
         request=_json_model(row["request_json"], AnalyzeRequest),
@@ -487,6 +544,7 @@ def _preparation_session_from_row(row: Any) -> PreparationSessionRecord:
         title=row["title"],
         status=row["status"],
         plan=_json_model(row["plan_json"], PreparationIntelligence) or _json_load(row["plan_json"]),
+        progress=_json_load(row["progress_json"]) if _row_value(row, "progress_json") else None,
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
     )
@@ -535,6 +593,15 @@ def _json_load(value):
     if isinstance(value, (bytes, bytearray)):
         return from_json(value)
     return json.loads(value)
+
+
+def _row_value(row: Any, key: str):
+    if hasattr(row, "get"):
+        return row.get(key)
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return None
 
 
 def _require_row(row: Any | None, detail: str) -> Any:

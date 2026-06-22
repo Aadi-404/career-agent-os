@@ -106,9 +106,11 @@ type AnalyzeRequestPayload = {
 type HistoryAnalysisRecord = {
   id: string;
   title: string;
+  fingerprint?: string | null;
   technicalMatchScore: number;
   fitCategory: string;
   createdAt: string;
+  request: AnalyzeRequestPayload;
   response: AnalysisResponse;
 };
 
@@ -130,7 +132,18 @@ type HistoryPreparationRecord = {
   title: string;
   status: string;
   createdAt: string;
+  updatedAt: string;
   plan: PreparationIntelligence;
+  progress?: PreparationProgress | null;
+};
+
+type TaskStatus = "todo" | "in_progress" | "done" | "skipped";
+type ConfidenceLevel = "low" | "medium" | "high";
+
+type PreparationProgress = {
+  tasks: Record<string, TaskStatus>;
+  notes: Record<string, string>;
+  confidence: Record<string, ConfidenceLevel>;
 };
 
 type JobOpportunityStatus = "viewed" | "shortlisted" | "applied" | "interview" | "rejected" | "offer" | "archived";
@@ -266,6 +279,10 @@ function App() {
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [lastAnalysisRequest, setLastAnalysisRequest] = useState<AnalyzeRequestPayload | null>(null);
   const [lastSavedAnalysisId, setLastSavedAnalysisId] = useState<string | null>(null);
+  const [lastAnalysisFingerprint, setLastAnalysisFingerprint] = useState<string | null>(null);
+  const [activePreparationSession, setActivePreparationSession] = useState<HistoryPreparationRecord | null>(null);
+  const [progressSaving, setProgressSaving] = useState(false);
+  const [progressInfo, setProgressInfo] = useState("");
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [artifactLoading, setArtifactLoading] = useState("");
@@ -359,7 +376,21 @@ function App() {
     });
   }
 
-  async function saveHistorySnapshot(payload: AnalyzeRequestPayload, analysis: AnalysisResponse) {
+  async function lookupSavedAnalysis(fingerprint: string): Promise<HistoryAnalysisRecord | null> {
+    await ensureLocalUser();
+    const response = await fetch(`${API_BASE_URL}/history/analyses/lookup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: defaultUserId,
+        fingerprint,
+      }),
+    });
+    if (!response.ok) throw new Error("Saved score lookup failed");
+    return await response.json() as HistoryAnalysisRecord | null;
+  }
+
+  async function saveHistorySnapshot(payload: AnalyzeRequestPayload, analysis: AnalysisResponse, fingerprint: string) {
     await ensureLocalUser();
 
     const resumeResponse = await fetch(`${API_BASE_URL}/history/resumes`, {
@@ -400,6 +431,7 @@ function App() {
         title: `${payload.candidateContext.targetRole} - ${analysis.technicalMatchScore}%`,
         resumeId: resumeRecord.id,
         jobDescriptionId: jdRecord.id,
+        fingerprint,
         request: payload,
         response: analysis,
       }),
@@ -419,9 +451,11 @@ function App() {
         title: `${preparation.dailyPlan.length}-day preparation plan`,
         status: "planned",
         plan: preparation,
+        progress: createInitialProgress(preparation),
       }),
     });
     if (!response.ok) throw new Error("Preparation history save failed");
+    return await response.json() as HistoryPreparationRecord;
   }
 
   async function loadHistory() {
@@ -446,7 +480,11 @@ function App() {
       setAnalysisHistory(await analysesResponse.json() as HistoryAnalysisRecord[]);
       setResumeHistory(await resumesResponse.json() as HistoryResumeRecord[]);
       setJdHistory(await jdsResponse.json() as HistoryJobDescriptionRecord[]);
-      setPreparationHistory(await preparationsResponse.json() as HistoryPreparationRecord[]);
+      const savedPreparations = await preparationsResponse.json() as HistoryPreparationRecord[];
+      setPreparationHistory(savedPreparations);
+      if (!activePreparationSession && savedPreparations.length) {
+        setActivePreparationSession(savedPreparations[0]);
+      }
       setJobOpportunityHistory(await opportunitiesResponse.json() as HistoryJobOpportunityRecord[]);
       setHistoryInfo("Loaded saved PostgreSQL history.");
     } catch (err) {
@@ -477,13 +515,26 @@ function App() {
     setLoading(true);
     setError("");
     setPreparationInfo("");
+    setProgressInfo("");
     setResult(null);
+    setActivePreparationSession(null);
 
     try {
       if (!structuredResume || !parsedJd) {
         throw new Error("Parse and review the resume and JD before calculating the score.");
       }
       const payload = buildAnalyzeRequest();
+      const fingerprint = await buildAnalysisFingerprint(payload);
+      const savedAnalysis = await lookupSavedAnalysis(fingerprint);
+      if (savedAnalysis) {
+        setLastAnalysisRequest(savedAnalysis.request);
+        setLastSavedAnalysisId(savedAnalysis.id);
+        setLastAnalysisFingerprint(savedAnalysis.fingerprint ?? fingerprint);
+        setResult(savedAnalysis.response);
+        setHistoryInfo(`Reused saved score from ${formatDate(savedAnalysis.createdAt)}. Edit inputs to calculate a new score.`);
+        setActiveTask("report");
+        return;
+      }
       const response = await fetch(`${API_BASE_URL}/ai/match/score`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -497,9 +548,10 @@ function App() {
 
       const analysis = await response.json() as AnalysisResponse;
       setLastAnalysisRequest(payload);
+      setLastAnalysisFingerprint(fingerprint);
       setResult(analysis);
       try {
-        const saved = await saveHistorySnapshot(payload, analysis);
+        const saved = await saveHistorySnapshot(payload, analysis, fingerprint);
         setLastSavedAnalysisId(saved.id);
         setHistoryInfo("Saved latest resume, JD, and match report to history.");
         if (activeTask === "history") void loadHistory();
@@ -543,7 +595,8 @@ function App() {
       const preparation = await response.json() as PreparationIntelligence;
       setResult({ ...result, preparationIntelligence: preparation });
       try {
-        await savePreparationSession(preparation);
+        const savedSession = await savePreparationSession(preparation);
+        setActivePreparationSession(savedSession);
         if (activeTask === "history") void loadHistory();
         setPreparationInfo(`Built and saved a ${preparation.dailyPlan.length}-day preparation plan from the latest match result.`);
       } catch (historyError) {
@@ -591,6 +644,35 @@ function App() {
       setError(err instanceof Error ? err.message : `${label} generation failed`);
     } finally {
       setArtifactLoading("");
+    }
+  }
+
+  async function updatePreparationProgress(nextProgress: PreparationProgress, nextStatus?: HistoryPreparationRecord["status"]) {
+    if (!activePreparationSession) {
+      setProgressInfo("Build or load a preparation session before tracking progress.");
+      return;
+    }
+    setProgressSaving(true);
+    setProgressInfo("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/history/preparation-sessions/${activePreparationSession.id}/progress`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: defaultUserId,
+          status: nextStatus ?? inferPreparationStatus(nextProgress, activePreparationSession.plan),
+          progress: nextProgress,
+        }),
+      });
+      if (!response.ok) throw new Error("Progress save failed");
+      const updated = await response.json() as HistoryPreparationRecord;
+      setActivePreparationSession(updated);
+      setPreparationHistory((items) => items.map((item) => item.id === updated.id ? updated : item));
+      setProgressInfo("Progress saved.");
+    } catch (err) {
+      setProgressInfo(err instanceof Error ? err.message : "Progress save failed.");
+    } finally {
+      setProgressSaving(false);
     }
   }
 
@@ -1155,9 +1237,17 @@ function App() {
             <TaskPanel
               eyebrow="Task 3"
               title="Preparation Progress"
-              description="This area will track daily tasks, interview practice answers, confidence, and readiness once persistence is added."
+              description="Track daily preparation tasks, notes, confidence, and completion from saved preparation sessions."
             >
-              <ProgressPlaceholder result={result} />
+              <PreparationProgressTracker
+                currentSession={activePreparationSession}
+                sessions={preparationHistory}
+                currentResult={result}
+                saving={progressSaving}
+                info={progressInfo}
+                onSelectSession={setActivePreparationSession}
+                onUpdate={updatePreparationProgress}
+              />
             </TaskPanel>
           )}
 
@@ -1373,30 +1463,141 @@ function PreparationEmpty() {
   );
 }
 
-function ProgressPlaceholder({ result }: { result: AnalysisResponse | null }) {
-  const tasks = result?.preparationIntelligence?.dailyPlan.flatMap((day) =>
-    day.tasks.map((task) => ({ day: day.day, task }))
-  ) ?? [];
+function PreparationProgressTracker({
+  currentSession,
+  sessions,
+  currentResult,
+  saving,
+  info,
+  onSelectSession,
+  onUpdate,
+}: {
+  currentSession: HistoryPreparationRecord | null;
+  sessions: HistoryPreparationRecord[];
+  currentResult: AnalysisResponse | null;
+  saving: boolean;
+  info: string;
+  onSelectSession: (session: HistoryPreparationRecord) => void;
+  onUpdate: (progress: PreparationProgress) => void;
+}) {
+  const plan = currentSession?.plan ?? currentResult?.preparationIntelligence ?? null;
+  const progress = currentSession?.progress ?? (plan ? createInitialProgress(plan) : null);
+  const tasks = plan ? flattenPreparationTasks(plan) : [];
+  const doneCount = progress ? tasks.filter((task) => progress.tasks[task.id] === "done").length : 0;
+  const skippedCount = progress ? tasks.filter((task) => progress.tasks[task.id] === "skipped").length : 0;
+  const completion = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0;
+
+  function updateTask(taskId: string, status: TaskStatus) {
+    if (!progress) return;
+    onUpdate({
+      ...progress,
+      tasks: { ...progress.tasks, [taskId]: status },
+    });
+  }
+
+  function updateNote(dayKey: string, note: string) {
+    if (!progress) return;
+    onUpdate({
+      ...progress,
+      notes: { ...progress.notes, [dayKey]: note },
+    });
+  }
+
+  function updateConfidence(dayKey: string, confidence: ConfidenceLevel) {
+    if (!progress) return;
+    onUpdate({
+      ...progress,
+      confidence: { ...progress.confidence, [dayKey]: confidence },
+    });
+  }
+
+  if (!plan || !progress) {
+    return (
+      <div className="panel empty">
+        <h2>No preparation session yet</h2>
+        <p>Build a preparation plan from the latest match result, then return here to track task progress.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="placeholderGrid">
-      <div className="panel">
-        <h3>Progress model</h3>
-        <ul>
-          <li>Daily tasks will be saved with pending, in progress, completed, skipped.</li>
-          <li>Each topic can carry confidence before and after practice.</li>
-          <li>Mock interview answers can update weak-area trends.</li>
-        </ul>
+    <div className="progressGrid">
+      <div className="panel progressSummary">
+        <div>
+          <p className="eyebrow">Progress</p>
+          <h3>{completion}% complete</h3>
+          <p>{doneCount} done, {skippedCount} skipped, {tasks.length - doneCount - skippedCount} active.</p>
+        </div>
+        <div className="progressBar"><span style={{ width: `${completion}%` }} /></div>
+        <div className="gridTwo">
+          <label>
+            Preparation session
+            <select
+              value={currentSession?.id ?? ""}
+              onChange={(event) => {
+                const selected = sessions.find((session) => session.id === event.target.value);
+                if (selected) onSelectSession(selected);
+              }}
+            >
+              {currentSession && !sessions.some((session) => session.id === currentSession.id) && <option value={currentSession.id}>{currentSession.title}</option>}
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>{session.title} - {formatDate(session.createdAt)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Status
+            <input value={currentSession?.status ?? inferPreparationStatus(progress, plan)} readOnly />
+          </label>
+        </div>
+        {saving && <p className="hint">Saving progress...</p>}
+        {info && <p className="hint">{info}</p>}
       </div>
-      <div className="panel">
-        <h3>Current plan preview</h3>
-        {tasks.length ? (
-          <ul>
-            {tasks.slice(0, 8).map((item, index) => <li key={`progress-task-${index}`}>Day {item.day}: {item.task}</li>)}
-          </ul>
-        ) : (
-          <p className="hint">Run matching to generate preparation tasks.</p>
-        )}
+
+      <div className="progressDayList">
+        {plan.dailyPlan.map((day) => {
+          const dayKey = `day-${day.day}`;
+          return (
+            <div className="panel progressDay" key={dayKey}>
+              <div className="prepDayTop">
+                <strong>Day {day.day}</strong>
+                <span>{day.focus}</span>
+              </div>
+              <p>{day.goal}</p>
+              <div className="taskList">
+                {day.tasks.map((task, index) => {
+                  const taskId = `${dayKey}-task-${index}`;
+                  return (
+                    <div className="taskRow" key={taskId}>
+                      <span>{task}</span>
+                      <select value={progress.tasks[taskId] ?? "todo"} onChange={(event) => updateTask(taskId, event.target.value as TaskStatus)}>
+                        <option value="todo">Todo</option>
+                        <option value="in_progress">In progress</option>
+                        <option value="done">Done</option>
+                        <option value="skipped">Skipped</option>
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="gridTwo">
+                <label>
+                  Confidence
+                  <select value={progress.confidence[dayKey] ?? "low"} onChange={(event) => updateConfidence(dayKey, event.target.value as ConfidenceLevel)}>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </label>
+                <label>
+                  Notes
+                  <input value={progress.notes[dayKey] ?? ""} onChange={(event) => updateNote(dayKey, event.target.value)} placeholder="What did you practice?" />
+                </label>
+              </div>
+              <small>Output: {day.output}</small>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1546,6 +1747,86 @@ function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+async function buildAnalysisFingerprint(payload: AnalyzeRequestPayload) {
+  const stablePayload = {
+    version: "score-v2",
+    resumeText: normalizeFingerprintText(payload.resumeText),
+    jobDescriptionText: normalizeFingerprintText(payload.jobDescriptionText),
+    candidateContext: normalizeForFingerprint(payload.candidateContext),
+    llmOptions: normalizeForFingerprint(payload.llmOptions),
+  };
+  const source = stableStringify(stablePayload);
+  if (crypto?.subtle) {
+    const data = new TextEncoder().encode(source);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = ((hash << 5) - hash + source.charCodeAt(index)) | 0;
+  }
+  return `fallback-${Math.abs(hash).toString(16).padStart(16, "0")}`;
+}
+
+function normalizeFingerprintText(value: string) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function normalizeForFingerprint(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeForFingerprint);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, normalizeForFingerprint(item)]),
+    );
+  }
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  return value;
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(normalizeForFingerprint(value));
+}
+
+function createInitialProgress(plan: PreparationIntelligence): PreparationProgress {
+  const tasks: Record<string, TaskStatus> = {};
+  const notes: Record<string, string> = {};
+  const confidence: Record<string, ConfidenceLevel> = {};
+  for (const day of plan.dailyPlan) {
+    const dayKey = `day-${day.day}`;
+    notes[dayKey] = "";
+    confidence[dayKey] = "low";
+    day.tasks.forEach((_task, index) => {
+      tasks[`${dayKey}-task-${index}`] = "todo";
+    });
+  }
+  return { tasks, notes, confidence };
+}
+
+function flattenPreparationTasks(plan: PreparationIntelligence) {
+  return plan.dailyPlan.flatMap((day) =>
+    day.tasks.map((task, index) => ({
+      id: `day-${day.day}-task-${index}`,
+      day: day.day,
+      task,
+    })),
+  );
+}
+
+function inferPreparationStatus(progress: PreparationProgress, plan: PreparationIntelligence): HistoryPreparationRecord["status"] {
+  const tasks = flattenPreparationTasks(plan);
+  if (!tasks.length) return "planned";
+  const statuses = tasks.map((task) => progress.tasks[task.id] ?? "todo");
+  if (statuses.every((status) => status === "done" || status === "skipped")) return "completed";
+  if (statuses.some((status) => status === "done" || status === "in_progress" || status === "skipped")) return "in_progress";
+  return "planned";
 }
 
 function Results({ result }: { result: AnalysisResponse }) {

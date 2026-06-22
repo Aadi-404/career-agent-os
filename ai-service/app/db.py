@@ -128,6 +128,7 @@ def _postgres_schema() -> str:
                 resume_id TEXT REFERENCES resumes(id) ON DELETE SET NULL,
                 job_description_id TEXT REFERENCES job_descriptions(id) ON DELETE SET NULL,
                 title TEXT NOT NULL,
+                fingerprint TEXT,
                 technical_match_score INTEGER NOT NULL,
                 fit_category TEXT NOT NULL,
                 request_json TEXT NOT NULL,
@@ -138,6 +139,13 @@ def _postgres_schema() -> str:
             CREATE INDEX IF NOT EXISTS idx_analyses_user_created
             ON analyses(user_id, created_at DESC);
 
+            ALTER TABLE analyses
+            ADD COLUMN IF NOT EXISTS fingerprint TEXT;
+
+            CREATE INDEX IF NOT EXISTS idx_analyses_user_fingerprint
+            ON analyses(user_id, fingerprint)
+            WHERE fingerprint IS NOT NULL;
+
             CREATE TABLE IF NOT EXISTS preparation_sessions (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -145,12 +153,16 @@ def _postgres_schema() -> str:
                 title TEXT NOT NULL,
                 status TEXT NOT NULL,
                 plan_json TEXT NOT NULL,
+                progress_json TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
 
             CREATE INDEX IF NOT EXISTS idx_preparation_sessions_user_created
             ON preparation_sessions(user_id, created_at DESC);
+
+            ALTER TABLE preparation_sessions
+            ADD COLUMN IF NOT EXISTS progress_json TEXT;
 
             CREATE TABLE IF NOT EXISTS job_opportunities (
                 id TEXT PRIMARY KEY,
