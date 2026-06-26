@@ -81,6 +81,7 @@ class AnalysisSaveRequest(BaseModel):
     fingerprint: str | None = Field(default=None, min_length=16, max_length=128)
     request: AnalyzeRequest
     response: AnalysisResponse
+    optionalArtifacts: dict[str, Any] = Field(default_factory=dict)
 
 
 class AnalysisLookupRequest(BaseModel):
@@ -99,7 +100,14 @@ class AnalysisRecord(BaseModel):
     fitCategory: str
     request: AnalyzeRequest
     response: AnalysisResponse
+    optionalArtifacts: dict[str, Any] = Field(default_factory=dict)
     createdAt: str
+
+
+class OptionalArtifactUsageUpdateRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    artifactKey: str = Field(min_length=2, max_length=80)
+    response: AnalysisResponse
 
 
 class PreparationSessionSaveRequest(BaseModel):
@@ -143,6 +151,7 @@ class JobOpportunitySaveRequest(BaseModel):
     technicalMatchScore: int | None = Field(default=None, ge=0, le=100)
     fitCategory: str | None = Field(default=None, max_length=80)
     analysisResponse: AnalysisResponse | None = None
+    optionalArtifacts: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_owner(self):
@@ -170,6 +179,7 @@ class JobOpportunityRecord(BaseModel):
     technicalMatchScore: int | None = None
     fitCategory: str | None = None
     analysisResponse: AnalysisResponse | None = None
+    optionalArtifacts: dict[str, Any] = Field(default_factory=dict)
     createdAt: str
     updatedAt: str
 

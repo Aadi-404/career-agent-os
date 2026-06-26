@@ -39,6 +39,7 @@ from app.models.history import (
     JobOpportunityStatusUpdateRequest,
     JobDescriptionRecord,
     JobDescriptionSaveRequest,
+    OptionalArtifactUsageUpdateRequest,
     PreparationSessionRecord,
     PreparationSessionProgressUpdateRequest,
     PreparationSessionSaveRequest,
@@ -67,6 +68,7 @@ from app.services.history_store import (
     list_preparation_sessions,
     list_resumes,
     save_analysis,
+    update_analysis_optional_artifact,
     save_job_description,
     save_job_opportunity,
     save_preparation_session,
@@ -74,6 +76,7 @@ from app.services.history_store import (
     save_resume,
     update_preparation_session_progress,
     update_job_opportunity_status,
+    update_job_opportunity_optional_artifact,
 )
 from app.services.jd_parser import parse_jd
 from app.services.optional_artifact_service import (
@@ -221,6 +224,17 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
         preparationPlanDays=request.preparationPlanDays,
     )
     analysis = match_resume_jd(analysis_request)
+    analysis_record = None
+    if request.userId:
+        analysis_record = save_analysis(
+            AnalysisSaveRequest(
+                userId=request.userId,
+                title=f"{request.job.title} - {analysis.technicalMatchScore}%",
+                resumeId=request.resumeId,
+                request=analysis_request,
+                response=analysis,
+            )
+        )
     opportunity = None
     if request.saveOpportunity:
         opportunity = save_job_opportunity(
@@ -228,6 +242,7 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
                 userId=request.userId,
                 anonymousSessionId=request.anonymousSessionId,
                 resumeId=request.resumeId,
+                analysisId=analysis_record.id if analysis_record else None,
                 title=request.job.title,
                 company=request.job.company,
                 location=request.job.location,
@@ -352,6 +367,11 @@ def get_analysis_records(user_id: str) -> list[AnalysisRecord]:
     return list_analyses(user_id)
 
 
+@app.patch("/history/analyses/{analysis_id}/optional-artifacts", response_model=AnalysisRecord)
+def update_analysis_optional_artifact_record(analysis_id: str, request: OptionalArtifactUsageUpdateRequest) -> AnalysisRecord:
+    return update_analysis_optional_artifact(analysis_id, request)
+
+
 @app.post("/history/preparation-sessions", response_model=PreparationSessionRecord)
 def create_preparation_session_record(request: PreparationSessionSaveRequest) -> PreparationSessionRecord:
     return save_preparation_session(request)
@@ -398,6 +418,14 @@ def update_job_opportunity_status_record(
     request: JobOpportunityStatusUpdateRequest,
 ) -> JobOpportunityRecord:
     return update_job_opportunity_status(job_opportunity_id, request)
+
+
+@app.patch("/history/job-opportunities/{job_opportunity_id}/optional-artifacts", response_model=JobOpportunityRecord)
+def update_job_opportunity_optional_artifact_record(
+    job_opportunity_id: str,
+    request: OptionalArtifactUsageUpdateRequest,
+) -> JobOpportunityRecord:
+    return update_job_opportunity_optional_artifact(job_opportunity_id, request)
 
 
 def _default_extension_candidate_context(request: ExtensionMatchRequest) -> CandidateContext:

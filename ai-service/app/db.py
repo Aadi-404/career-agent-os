@@ -142,6 +142,9 @@ def _postgres_schema() -> str:
             ALTER TABLE analyses
             ADD COLUMN IF NOT EXISTS fingerprint TEXT;
 
+            ALTER TABLE analyses
+            ADD COLUMN IF NOT EXISTS optional_artifacts_json TEXT;
+
             CREATE INDEX IF NOT EXISTS idx_analyses_user_fingerprint
             ON analyses(user_id, fingerprint)
             WHERE fingerprint IS NOT NULL;
@@ -189,4 +192,7 @@ def _postgres_schema() -> str:
 
             CREATE INDEX IF NOT EXISTS idx_job_opportunities_anonymous_created
             ON job_opportunities(anonymous_session_id, created_at DESC);
+
+            ALTER TABLE job_opportunities
+            ADD COLUMN IF NOT EXISTS optional_artifacts_json TEXT;
             """

@@ -113,6 +113,7 @@ type HistoryAnalysisRecord = {
   createdAt: string;
   request: AnalyzeRequestPayload;
   response: AnalysisResponse;
+  optionalArtifacts?: Record<string, { generatedAt: string }>;
 };
 
 type HistoryResumeRecord = {
@@ -182,6 +183,7 @@ type HistoryJobOpportunityRecord = {
   technicalMatchScore?: number | null;
   fitCategory?: string | null;
   analysisResponse?: AnalysisResponse | null;
+  optionalArtifacts?: Record<string, { generatedAt: string }>;
   createdAt: string;
   updatedAt: string;
 };
@@ -549,6 +551,38 @@ function App() {
     }
   }
 
+  async function persistAnalysisArtifact(analysisId: string, artifactKey: string, response: AnalysisResponse) {
+    const updateResponse = await fetch(`${API_BASE_URL}/history/analyses/${analysisId}/optional-artifacts`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: defaultUserId,
+        artifactKey,
+        response,
+      }),
+    });
+    if (!updateResponse.ok) throw new Error("Optional artifact usage save failed");
+    const updated = await updateResponse.json() as HistoryAnalysisRecord;
+    setAnalysisHistory((items) => items.map((item) => item.id === updated.id ? updated : item));
+    return updated;
+  }
+
+  async function persistOpportunityArtifact(opportunityId: string, artifactKey: string, response: AnalysisResponse) {
+    const updateResponse = await fetch(`${API_BASE_URL}/history/job-opportunities/${opportunityId}/optional-artifacts`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: defaultUserId,
+        artifactKey,
+        response,
+      }),
+    });
+    if (!updateResponse.ok) throw new Error("Opportunity artifact usage save failed");
+    const updated = await updateResponse.json() as HistoryJobOpportunityRecord;
+    setJobOpportunityHistory((items) => items.map((item) => item.id === updated.id ? updated : item));
+    return updated;
+  }
+
   async function analyze() {
     setLoading(true);
     setError("");
@@ -633,7 +667,15 @@ function App() {
       }
 
       const preparation = await response.json() as PreparationIntelligence;
-      setResult({ ...result, preparationIntelligence: preparation });
+      const updatedResult = { ...result, preparationIntelligence: preparation };
+      setResult(updatedResult);
+      if (lastSavedAnalysisId) {
+        try {
+          await persistAnalysisArtifact(lastSavedAnalysisId, "preparation_plan", updatedResult);
+        } catch (artifactError) {
+          setCostModeInfo("Preparation plan generated, but usage metadata was not saved.");
+        }
+      }
       try {
         const savedSession = await savePreparationSession(preparation);
         setActivePreparationSession(savedSession);
@@ -653,6 +695,7 @@ function App() {
 
   async function buildOptionalArtifact(
     label: string,
+    artifactKey: string,
     endpoint: string,
     applyResult: (current: AnalysisResponse, payload: unknown) => AnalysisResponse,
   ): Promise<boolean> {
@@ -682,7 +725,15 @@ function App() {
       }
 
       const payload = await response.json();
-      setResult((current) => current ? applyResult(current, payload) : current);
+      const updatedResult = applyResult(result, payload);
+      setResult(updatedResult);
+      if (lastSavedAnalysisId) {
+        try {
+          await persistAnalysisArtifact(lastSavedAnalysisId, artifactKey, updatedResult);
+        } catch (artifactError) {
+          setCostModeInfo(`${label} generated, but usage metadata was not saved.`);
+        }
+      }
       setCostModeInfo(`Completed ${label}.`);
       return true;
     } catch (err) {
@@ -704,11 +755,13 @@ function App() {
     const standardSteps = [
       () => buildOptionalArtifact(
         "Resume improvements",
+        "resume_improvements",
         "/ai/resume-improvements",
         (current, payload) => ({ ...current, resumeImprovements: payload as AnalysisResponse["resumeImprovements"] }),
       ),
       () => buildOptionalArtifact(
         "Interview questions",
+        "interview_questions",
         "/ai/interview/questions",
         (current, payload) => ({ ...current, interviewQuestions: payload as AnalysisResponse["interviewQuestions"] }),
       ),
@@ -717,6 +770,7 @@ function App() {
       ...standardSteps,
       () => buildOptionalArtifact(
         "Cross questions",
+        "cross_questions",
         "/ai/cross-questions",
         (current, payload) => ({ ...current, crossQuestions: payload as AnalysisResponse["crossQuestions"] }),
       ),
@@ -738,6 +792,66 @@ function App() {
       }
     }
     setCostModeInfo(mode === "standard" ? "Standard artifacts completed with separate calls." : "Premium artifacts completed with separate calls.");
+  }
+
+  async function buildOpportunityArtifact(
+    opportunity: HistoryJobOpportunityRecord,
+    artifactKey: "resume_improvements" | "interview_questions" | "cross_questions",
+  ) {
+    const linkedAnalysis = analysisHistory.find((analysis) => analysis.id === opportunity.analysisId);
+    const sourceRequest = linkedAnalysis?.request;
+    const baseAnalysis = opportunity.analysisResponse ?? linkedAnalysis?.response;
+    if (!sourceRequest || !baseAnalysis) {
+      setHistoryInfo("This saved job does not have a linked analysis request yet. Re-run it from the extension after connecting a user.");
+      return;
+    }
+
+    const config = {
+      resume_improvements: {
+        label: "Resume improvements",
+        endpoint: "/ai/resume-improvements",
+        apply: (current: AnalysisResponse, payload: unknown) => ({ ...current, resumeImprovements: payload as AnalysisResponse["resumeImprovements"] }),
+      },
+      interview_questions: {
+        label: "Interview questions",
+        endpoint: "/ai/interview/questions",
+        apply: (current: AnalysisResponse, payload: unknown) => ({ ...current, interviewQuestions: payload as AnalysisResponse["interviewQuestions"] }),
+      },
+      cross_questions: {
+        label: "Cross questions",
+        endpoint: "/ai/cross-questions",
+        apply: (current: AnalysisResponse, payload: unknown) => ({ ...current, crossQuestions: payload as AnalysisResponse["crossQuestions"] }),
+      },
+    }[artifactKey];
+
+    setArtifactLoading(`Opportunity ${config.label}`);
+    setHistoryInfo(`Generating ${config.label} for ${opportunity.title}.`);
+    try {
+      const response = await fetch(`${API_BASE_URL}${config.endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceRequest,
+          analysis: baseAnalysis,
+          limit: 8,
+        }),
+      });
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(details || `${config.label} generation failed`);
+      }
+      const payload = await response.json();
+      const updatedAnalysis = config.apply(baseAnalysis, payload);
+      await persistOpportunityArtifact(opportunity.id, artifactKey, updatedAnalysis);
+      if (linkedAnalysis) {
+        await persistAnalysisArtifact(linkedAnalysis.id, artifactKey, updatedAnalysis);
+      }
+      setHistoryInfo(`${config.label} saved for ${opportunity.title}.`);
+    } catch (err) {
+      setHistoryInfo(err instanceof Error ? err.message : `${config.label} generation failed`);
+    } finally {
+      setArtifactLoading("");
+    }
   }
 
   async function updatePreparationProgress(nextProgress: PreparationProgress, nextStatus?: HistoryPreparationRecord["status"]) {
@@ -1312,6 +1426,7 @@ function App() {
                     disabled={Boolean(artifactLoading) || preparing}
                     onClick={() => buildOptionalArtifact(
                       "Resume improvements",
+                      "resume_improvements",
                       "/ai/resume-improvements",
                       (current, payload) => ({ ...current, resumeImprovements: payload as AnalysisResponse["resumeImprovements"] }),
                     )}
@@ -1325,6 +1440,7 @@ function App() {
                     disabled={Boolean(artifactLoading) || preparing}
                     onClick={() => buildOptionalArtifact(
                       "Interview questions",
+                      "interview_questions",
                       "/ai/interview/questions",
                       (current, payload) => ({ ...current, interviewQuestions: payload as AnalysisResponse["interviewQuestions"] }),
                     )}
@@ -1338,6 +1454,7 @@ function App() {
                     disabled={Boolean(artifactLoading) || preparing}
                     onClick={() => buildOptionalArtifact(
                       "Cross questions",
+                      "cross_questions",
                       "/ai/cross-questions",
                       (current, payload) => ({ ...current, crossQuestions: payload as AnalysisResponse["crossQuestions"] }),
                     )}
@@ -1414,6 +1531,8 @@ function App() {
                 opportunities={jobOpportunityHistory}
                 currentResult={result}
                 onOpportunityStatusChange={updateJobOpportunityStatus}
+                onOpportunityArtifactBuild={buildOpportunityArtifact}
+                artifactLoading={artifactLoading}
               />
             </TaskPanel>
           )}
@@ -1814,6 +1933,8 @@ function HistoryPanel({
   opportunities,
   currentResult,
   onOpportunityStatusChange,
+  onOpportunityArtifactBuild,
+  artifactLoading,
 }: {
   summary: WorkspaceSummary | null;
   analyses: HistoryAnalysisRecord[];
@@ -1823,6 +1944,8 @@ function HistoryPanel({
   opportunities: HistoryJobOpportunityRecord[];
   currentResult: AnalysisResponse | null;
   onOpportunityStatusChange: (jobOpportunityId: string, status: JobOpportunityStatus) => void;
+  onOpportunityArtifactBuild: (opportunity: HistoryJobOpportunityRecord, artifactKey: "resume_improvements" | "interview_questions" | "cross_questions") => void;
+  artifactLoading: string;
 }) {
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(opportunities[0]?.id ?? null);
   const selectedOpportunity = opportunities.find((item) => item.id === selectedOpportunityId) ?? opportunities[0] ?? null;
@@ -1921,6 +2044,8 @@ function HistoryPanel({
         <JobOpportunityDetail
           opportunity={selectedOpportunity}
           onStatusChange={onOpportunityStatusChange}
+          onArtifactBuild={onOpportunityArtifactBuild}
+          artifactLoading={artifactLoading}
         />
       )}
 
@@ -1960,9 +2085,13 @@ function HistoryPanel({
 function JobOpportunityDetail({
   opportunity,
   onStatusChange,
+  onArtifactBuild,
+  artifactLoading,
 }: {
   opportunity: HistoryJobOpportunityRecord;
   onStatusChange: (jobOpportunityId: string, status: JobOpportunityStatus) => void;
+  onArtifactBuild: (opportunity: HistoryJobOpportunityRecord, artifactKey: "resume_improvements" | "interview_questions" | "cross_questions") => void;
+  artifactLoading: string;
 }) {
   const analysis = opportunity.analysisResponse;
   const score = opportunity.technicalMatchScore ?? analysis?.technicalMatchScore ?? null;
@@ -1970,6 +2099,8 @@ function JobOpportunityDetail({
   const requirements = analysis?.requirementMatches ?? [];
   const breakdown = analysis?.scoreBreakdown ?? [];
   const weakRequirements = requirements.filter((item) => item.score < 60).slice(0, 5);
+  const canBuildArtifacts = Boolean(opportunity.analysisId && analysis);
+  const generatedArtifacts = Object.keys(opportunity.optionalArtifacts ?? {});
 
   return (
     <div className="panel historyWide opportunityDetailPanel">
@@ -2068,11 +2199,45 @@ function JobOpportunityDetail({
         </section>
       )}
 
+      {generatedArtifacts.length > 0 && (
+        <section>
+          <h4>Generated Artifacts</h4>
+          <div className="tags">
+            {generatedArtifacts.map((item) => <span key={item}>{formatCategory(item)}</span>)}
+          </div>
+        </section>
+      )}
+
       <div className="premiumActionGrid">
-        <button type="button" className="secondaryButton premiumButton"><span>Paid</span> Build gap report</button>
-        <button type="button" className="secondaryButton premiumButton"><span>Paid</span> Generate prep plan</button>
-        <button type="button" className="secondaryButton premiumButton"><span>Paid</span> Create interview questions</button>
+        <button
+          type="button"
+          className="secondaryButton premiumButton"
+          disabled={!canBuildArtifacts || Boolean(artifactLoading)}
+          onClick={() => onArtifactBuild(opportunity, "resume_improvements")}
+        >
+          <span>Paid</span>
+          {artifactLoading === "Opportunity Resume improvements" ? "Generating..." : "Build resume fixes"}
+        </button>
+        <button
+          type="button"
+          className="secondaryButton premiumButton"
+          disabled={!canBuildArtifacts || Boolean(artifactLoading)}
+          onClick={() => onArtifactBuild(opportunity, "interview_questions")}
+        >
+          <span>Paid</span>
+          {artifactLoading === "Opportunity Interview questions" ? "Generating..." : "Create interview questions"}
+        </button>
+        <button
+          type="button"
+          className="secondaryButton premiumButton"
+          disabled={!canBuildArtifacts || Boolean(artifactLoading)}
+          onClick={() => onArtifactBuild(opportunity, "cross_questions")}
+        >
+          <span>Paid</span>
+          {artifactLoading === "Opportunity Cross questions" ? "Generating..." : "Generate cross questions"}
+        </button>
       </div>
+      {!canBuildArtifacts && <p className="hint">Paid actions need a linked analysis request. Re-run this job from the connected extension to enable them.</p>}
     </div>
   );
 }

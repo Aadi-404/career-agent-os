@@ -21,6 +21,7 @@ from app.models.history import (
     JobOpportunityStatusUpdateRequest,
     JobDescriptionRecord,
     JobDescriptionSaveRequest,
+    OptionalArtifactUsageUpdateRequest,
     PreparationSessionRecord,
     PreparationSessionProgressUpdateRequest,
     PreparationSessionSaveRequest,
@@ -257,9 +258,9 @@ def save_analysis(request: AnalysisSaveRequest) -> AnalysisRecord:
             """
             INSERT INTO analyses (
                 id, user_id, resume_id, job_description_id, title, fingerprint, technical_match_score,
-                fit_category, request_json, response_json, created_at
+                fit_category, request_json, response_json, optional_artifacts_json, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record_id,
@@ -272,6 +273,7 @@ def save_analysis(request: AnalysisSaveRequest) -> AnalysisRecord:
                 request.response.fitCategory,
                 _json_dump(request.request),
                 _json_dump(request.response),
+                _json_dump(request.optionalArtifacts),
                 now,
             ),
         )
@@ -286,6 +288,7 @@ def save_analysis(request: AnalysisSaveRequest) -> AnalysisRecord:
         fitCategory=request.response.fitCategory,
         request=request.request,
         response=request.response,
+        optionalArtifacts=request.optionalArtifacts,
         createdAt=now,
     )
 
@@ -313,6 +316,32 @@ def list_analyses(user_id: str) -> list[AnalysisRecord]:
             (user_id,),
         ).fetchall()
     return [_analysis_from_row(row) for row in rows]
+
+
+def update_analysis_optional_artifact(record_id: str, request: OptionalArtifactUsageUpdateRequest) -> AnalysisRecord:
+    now = _now()
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        existing = connection.execute(
+            "SELECT * FROM analyses WHERE id = ? AND user_id = ?",
+            (record_id, request.userId),
+        ).fetchone()
+        _require_row(existing, "Analysis record not found for this user")
+        optional_artifacts = _json_load(_row_value(existing, "optional_artifacts_json")) if _row_value(existing, "optional_artifacts_json") else {}
+        optional_artifacts[request.artifactKey] = {"generatedAt": now}
+        connection.execute(
+            """
+            UPDATE analyses
+            SET response_json = ?, optional_artifacts_json = ?
+            WHERE id = ? AND user_id = ?
+            """,
+            (_json_dump(request.response), _json_dump(optional_artifacts), record_id, request.userId),
+        )
+        row = connection.execute(
+            "SELECT * FROM analyses WHERE id = ? AND user_id = ?",
+            (record_id, request.userId),
+        ).fetchone()
+    return _analysis_from_row(_require_row(row, "Analysis record not found after artifact update"))
 
 
 def save_preparation_session(request: PreparationSessionSaveRequest) -> PreparationSessionRecord:
@@ -413,9 +442,9 @@ def save_job_opportunity(request: JobOpportunitySaveRequest) -> JobOpportunityRe
             INSERT INTO job_opportunities (
                 id, user_id, anonymous_session_id, resume_id, analysis_id, title, company, location,
                 url, description, status, technical_match_score, fit_category, analysis_response_json,
-                created_at, updated_at
+                optional_artifacts_json, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record_id,
@@ -432,6 +461,7 @@ def save_job_opportunity(request: JobOpportunitySaveRequest) -> JobOpportunityRe
                 request.technicalMatchScore,
                 request.fitCategory,
                 _json_dump(request.analysisResponse),
+                _json_dump(request.optionalArtifacts),
                 now,
                 now,
             ),
@@ -471,6 +501,32 @@ def update_job_opportunity_status(record_id: str, request: JobOpportunityStatusU
         )
         row = connection.execute("SELECT * FROM job_opportunities WHERE id = ?", (record_id,)).fetchone()
     return _job_opportunity_from_row(_require_row(row, "Job opportunity not found after update"))
+
+
+def update_job_opportunity_optional_artifact(record_id: str, request: OptionalArtifactUsageUpdateRequest) -> JobOpportunityRecord:
+    now = _now()
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        existing = connection.execute(
+            "SELECT * FROM job_opportunities WHERE id = ? AND user_id = ?",
+            (record_id, request.userId),
+        ).fetchone()
+        _require_row(existing, "Job opportunity not found for this user")
+        optional_artifacts = _json_load(_row_value(existing, "optional_artifacts_json")) if _row_value(existing, "optional_artifacts_json") else {}
+        optional_artifacts[request.artifactKey] = {"generatedAt": now}
+        connection.execute(
+            """
+            UPDATE job_opportunities
+            SET analysis_response_json = ?, optional_artifacts_json = ?, updated_at = ?
+            WHERE id = ? AND user_id = ?
+            """,
+            (_json_dump(request.response), _json_dump(optional_artifacts), now, record_id, request.userId),
+        )
+        row = connection.execute(
+            "SELECT * FROM job_opportunities WHERE id = ? AND user_id = ?",
+            (record_id, request.userId),
+        ).fetchone()
+    return _job_opportunity_from_row(_require_row(row, "Job opportunity not found after artifact update"))
 
 
 def _get_user(connection, user_id: str) -> UserRecord:
@@ -568,6 +624,7 @@ def _analysis_from_row(row: Any) -> AnalysisRecord:
         fitCategory=row["fit_category"],
         request=_json_model(row["request_json"], AnalyzeRequest),
         response=_json_model(row["response_json"], AnalysisResponse),
+        optionalArtifacts=_json_load(_row_value(row, "optional_artifacts_json")) if _row_value(row, "optional_artifacts_json") else {},
         createdAt=row["created_at"],
     )
 
@@ -602,6 +659,7 @@ def _job_opportunity_from_row(row: Any) -> JobOpportunityRecord:
         technicalMatchScore=row["technical_match_score"],
         fitCategory=row["fit_category"],
         analysisResponse=_json_model(row["analysis_response_json"], AnalysisResponse),
+        optionalArtifacts=_json_load(_row_value(row, "optional_artifacts_json")) if _row_value(row, "optional_artifacts_json") else {},
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
     )
