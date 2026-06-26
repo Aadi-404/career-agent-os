@@ -3,6 +3,8 @@ from dataclasses import dataclass
 
 from app.models.analysis import AnalyzeRequest, RequirementMatch, ScoreBreakdownItem, ShortlistingFactor
 from app.services.certificate_matcher import best_certificate_match
+from app.services.jd_parser import _extract_locations as extract_jd_locations
+from app.services.jd_parser import _extract_work_modes as extract_work_modes
 from app.services.requirement_matcher import build_requirement_matches
 
 
@@ -18,52 +20,11 @@ class ScoringResult:
     recommended_action: str
 
 
-SKILL_ALIASES: dict[str, list[str]] = {
-    ".NET": [".net", "dotnet"],
-    "ASP.NET Core": ["asp.net core", "asp net core"],
-    "ASP.NET MVC": ["asp.net mvc", "mvc"],
-    "C#": ["c#"],
-    "Java": ["java", "spring boot"],
-    "Python": ["python", "django", "fastapi"],
-    "Web API": ["web api", "rest api", "restapi", "restful", "api integration", "apis"],
-    "SQL Server": ["sql server", "ssms"],
-    "SQL": ["sql", "database", "dbms"],
-    "SQLite": ["sqlite", "sqlite3"],
-    "Entity Framework": ["entity framework", "ef core", "ef"],
-    "LINQ": ["linq"],
-    "Angular": ["angular"],
-    "React": ["react", "reactjs"],
-    "JavaScript": ["javascript", "js", "jquery"],
-    "Azure": ["azure", "azure cloud", "app service", "azure sql"],
-    "Azure DevOps": ["azure devops", "ci/cd", "pipeline", "build pipeline", "release pipeline"],
-    "Azure Fundamentals": ["azure fundamentals", "az-900"],
-    "AWS Certification": ["aws certified", "aws certification"],
-    "Microsoft Certification": ["microsoft certified", "microsoft certification"],
-    "Certification": ["certification", "certified", "certificate"],
-    "Docker": ["docker", "container"],
-    "Authentication": ["jwt", "authentication", "authorization", "oauth"],
-    "DSA": ["dsa", "leetcode", "codechef", "geeksforgeeks", "hackerRank"],
-    "System Design": ["system design", "scalable", "architecture", "cache", "queue", "distributed"],
-    "Production Debugging": ["production", "debug", "logs", "monitor", "incident", "root cause"],
-}
-
-
 def score_resume_against_jd(request: AnalyzeRequest) -> ScoringResult:
-    resume_text = request.resumeText
-    jd_text = request.jobDescriptionText
-    context = request.candidateContext
-    combined_resume = f"{resume_text} {' '.join(context.currentStack)}"
-    jd_skills = _extract_skills(jd_text)
-    resume_skills = _extract_skills(combined_resume)
-    weights = _weights_for_experience(context.experienceYears)
-
-    category_scores = _category_scores(
-        request=request,
-        jd_skills=jd_skills,
-        resume_skills=resume_skills,
-    )
-    breakdown = _build_breakdown(weights, category_scores)
     requirement_matches = build_requirement_matches(request)
+    weights = _weights_for_experience(request.candidateContext.experienceYears)
+    category_scores = _category_scores(request, requirement_matches)
+    breakdown = _build_breakdown(weights, category_scores)
     technical_score = round(sum(item.weightedScore for item in breakdown))
     interview_readiness = _calculate_interview_readiness(technical_score, category_scores)
     shortlisting_score, shortlisting_factors = _calculate_shortlisting_score(request, technical_score)
@@ -85,92 +46,90 @@ def _weights_for_experience(experience_years: int) -> dict[str, int]:
     if experience_years <= 1:
         return {
             "experienceFit": 10,
-            "dsaProblemSolving": 15,
-            "coreSkills": 20,
+            "problemSolving": 15,
+            "dynamicRequirementFit": 25,
             "projectRelevance": 20,
-            "databaseDepth": 10,
-            "backendFrontendBasics": 15,
-            "cloudDevOps": 5,
-            "systemDesignReadiness": 5,
+            "technicalDepth": 15,
+            "deliveryReadiness": 10,
+            "systemReadiness": 5,
         }
     if experience_years <= 4:
         return {
             "experienceFit": 10,
-            "projectOwnership": 20,
-            "backendFrontendDepth": 20,
-            "databaseDepth": 15,
-            "debuggingProduction": 15,
-            "cloudDevOps": 10,
-            "systemDesignReadiness": 5,
-            "dsaProblemSolving": 5,
+            "dynamicRequirementFit": 30,
+            "projectRelevance": 20,
+            "technicalDepth": 15,
+            "deliveryReadiness": 15,
+            "systemReadiness": 5,
+            "problemSolving": 5,
         }
     return {
         "experienceFit": 10,
-        "architecture": 20,
-        "systemDesignReadiness": 20,
+        "dynamicRequirementFit": 25,
+        "architectureReadiness": 20,
         "scalabilityReliability": 15,
-        "cloudDevOps": 10,
+        "deliveryReadiness": 10,
         "teamOwnership": 10,
         "domainDepth": 10,
-        "coding": 5,
     }
 
 
-def _category_scores(request: AnalyzeRequest, jd_skills: set[str], resume_skills: set[str]) -> dict[str, tuple[int, str]]:
+def _category_scores(request: AnalyzeRequest, requirement_matches: list[RequirementMatch]) -> dict[str, tuple[int, str]]:
     resume = f"{request.resumeText} {' '.join(request.candidateContext.currentStack)}"
-    jd = request.jobDescriptionText
-    matched_skills = sorted(jd_skills & resume_skills)
-    missing_skills = sorted(jd_skills - resume_skills)
-    skill_ratio = len(matched_skills) / max(len(jd_skills), 1)
-    semantic_ratio = _semantic_phrase_overlap(resume, jd)
     experience_score, experience_reason = _experience_score(request)
+    dynamic_score = _dynamic_requirement_score(requirement_matches)
+    technical_score = _category_requirement_score(requirement_matches, ["technical_requirement"], fallback=dynamic_score)
+    responsibility_score = _category_requirement_score(requirement_matches, ["responsibility"], fallback=dynamic_score)
+    certification_score = _category_requirement_score(requirement_matches, ["certification"], fallback=dynamic_score)
 
-    core_score = round((skill_ratio * 75) + (semantic_ratio * 25))
-    core_reason = _skill_reason(matched_skills, missing_skills)
-    database_score = _topic_score(resume, jd, ["SQL", "SQL Server", "Entity Framework", "LINQ"], fallback=45)
-    cloud_topic_score = _topic_score(
-        resume,
-        jd,
-        ["Azure", "Azure DevOps", "Docker", "Azure Fundamentals", "AWS Certification", "Microsoft Certification", "Certification"],
-        fallback=35,
-    )
-    certificate_match = best_certificate_match(resume, jd)
-    cloud_score = certificate_match.score if certificate_match else cloud_topic_score
-    cloud_reason = (
+    certificate_match = best_certificate_match(resume, request.jobDescriptionText)
+    certification_aware_score = certificate_match.score if certificate_match else certification_score
+    certification_reason = (
         certificate_match.reason
         if certificate_match
-        else "Cloud/DevOps score checks Azure, CI/CD, pipelines, deployment, Docker, release ownership, and cloud/vendor certifications."
+        else "Certification and platform-specific requirements are scored from dynamically extracted JD requirements."
     )
-    system_score = _topic_score(resume, jd, ["System Design"], fallback=35)
-    dsa_score = _topic_score(resume, jd, ["DSA"], fallback=45)
-    backend_frontend_score = _topic_score(
+
+    ownership_score = _signal_score(
         resume,
-        jd,
-        ["ASP.NET Core", "ASP.NET MVC", "C#", "Web API", "Angular", "React", "JavaScript"],
-        fallback=50,
+        ["owned", "delivered", "maintained", "released", "improved", "optimized", "end-to-end", "requirements"],
+        fallback=responsibility_score,
     )
-    debugging_score = _topic_score(resume, jd, ["Production Debugging"], fallback=45)
-    ownership_score = _ownership_score(resume)
-    architecture_score = max(system_score - 5, 25)
-    scalability_score = _keyword_presence_score(resume, ["scalable", "performance", "indexing", "caching", "queue", "monitoring"])
+    delivery_score = _signal_score(
+        resume,
+        ["production", "debug", "logs", "monitor", "incident", "release", "deployment", "support", "root cause"],
+        fallback=responsibility_score,
+    )
+    system_score = _signal_score(
+        resume,
+        ["architecture", "design", "scale", "scalable", "distributed", "reliable", "performance", "latency"],
+        fallback=technical_score,
+    )
+    problem_score = _signal_score(
+        resume,
+        ["problem", "algorithm", "optimized", "debugged", "analysis", "solved", "complexity"],
+        fallback=dynamic_score,
+    )
+    scalability_score = _signal_score(
+        resume,
+        ["scale", "performance", "monitoring", "reliable", "cache", "queue", "latency", "throughput"],
+        fallback=system_score,
+    )
+    project_score = _project_relevance_score(requirement_matches, ownership_score)
+    domain_score = round((dynamic_score + project_score + ownership_score) / 3)
 
     return {
         "experienceFit": (experience_score, experience_reason),
-        "dsaProblemSolving": (dsa_score, "Coding-platform and DSA evidence from the resume is evaluated against experience-level expectations."),
-        "coreSkills": (core_score, core_reason),
-        "projectRelevance": (round((backend_frontend_score * 0.55) + (ownership_score * 0.45)), "Projects are scored for role-relevant implementation, stack overlap, and ownership evidence."),
-        "databaseDepth": (database_score, "Database score checks SQL, indexing, ORM, LINQ, transactions, and query optimization signals."),
-        "backendFrontendBasics": (backend_frontend_score, "Checks practical fullstack basics: APIs, C#, ASP.NET, frontend integration, and JavaScript framework exposure."),
-        "projectOwnership": (ownership_score, "Ownership score looks for end-to-end delivery, production work, measurable impact, and responsibility depth."),
-        "backendFrontendDepth": (backend_frontend_score, "Checks deeper backend/frontend role alignment against the JD and resume evidence."),
-        "debuggingProduction": (debugging_score, "Production-readiness checks debugging, monitoring, logs, support, and root-cause evidence."),
-        "cloudDevOps": (cloud_score, cloud_reason),
-        "systemDesignReadiness": (system_score, "System design readiness checks architecture, scaling, caching, queues, reliability, and distributed-system signals."),
-        "architecture": (architecture_score, "Senior-level architecture score checks design decisions, boundaries, scalability, and ownership beyond implementation."),
-        "scalabilityReliability": (scalability_score, "Scalability score checks performance, monitoring, indexing, caching, queues, and reliability evidence."),
-        "teamOwnership": (ownership_score, "Team ownership checks mentoring, leading, delivery responsibility, and cross-functional coordination signals."),
-        "domainDepth": (round((core_score + ownership_score) / 2), "Domain depth is inferred from role-relevant skills plus project ownership evidence."),
-        "coding": (round((core_score + dsa_score) / 2), "Coding score combines core language fit and explicit problem-solving evidence."),
+        "problemSolving": (problem_score, "Problem-solving is inferred from dynamic JD matches plus resume evidence of debugging, optimization, analysis, and algorithms."),
+        "dynamicRequirementFit": (dynamic_score, _dynamic_requirement_reason(requirement_matches)),
+        "projectRelevance": (project_score, "Projects are scored against dynamic JD requirements and evidence source strength."),
+        "technicalDepth": (technical_score, "Technical depth is based on dynamically extracted JD requirements instead of a fixed skill whitelist."),
+        "deliveryReadiness": (max(delivery_score, certification_aware_score if certification_score else delivery_score), certification_reason if certification_score else "Delivery readiness checks dynamic responsibilities plus production, release, debugging, and support evidence."),
+        "systemReadiness": (system_score, "System readiness is inferred from architecture, design, scale, reliability, and performance evidence."),
+        "architectureReadiness": (round((system_score + technical_score) / 2), "Architecture readiness combines dynamic technical fit with design and scalability signals."),
+        "scalabilityReliability": (scalability_score, "Scalability and reliability are inferred from performance, monitoring, queueing, caching, and reliability evidence."),
+        "teamOwnership": (ownership_score, "Team ownership checks delivery responsibility, ownership wording, and measurable impact signals."),
+        "domainDepth": (domain_score, "Domain depth is inferred from dynamic JD fit, project evidence, and ownership depth."),
     }
 
 
@@ -178,52 +137,73 @@ def _build_breakdown(weights: dict[str, int], category_scores: dict[str, tuple[i
     breakdown = []
     for category, weight in weights.items():
         score, reason = category_scores[category]
+        bounded_score = max(0, min(score, 100))
         breakdown.append(
             ScoreBreakdownItem(
                 category=category,
                 weight=weight,
-                score=max(0, min(score, 100)),
-                weightedScore=round((max(0, min(score, 100)) * weight) / 100, 2),
+                score=bounded_score,
+                weightedScore=round((bounded_score * weight) / 100, 2),
                 reason=reason,
             )
         )
     return breakdown
 
 
-def _extract_skills(text: str) -> set[str]:
-    lowered = text.lower()
-    found = set()
-    for canonical, aliases in SKILL_ALIASES.items():
-        for alias in aliases:
-            if _contains_phrase(lowered, alias.lower()):
-                found.add(canonical)
-                break
-    return found
+def _dynamic_requirement_score(requirement_matches: list[RequirementMatch]) -> int:
+    if not requirement_matches:
+        return 45
+    weighted_total = 0.0
+    total_weight = 0.0
+    for match in requirement_matches:
+        weight = _importance_weight(match.importance)
+        weighted_total += match.score * weight
+        total_weight += weight
+    return round(weighted_total / max(total_weight, 1))
 
 
-def _contains_phrase(text: str, phrase: str) -> bool:
-    escaped = re.escape(phrase).replace("\\ ", r"\s+")
-    return bool(re.search(rf"(?<![a-z0-9+#]){escaped}(?![a-z0-9+#])", text))
+def _category_requirement_score(requirement_matches: list[RequirementMatch], categories: list[str], fallback: int) -> int:
+    matches = [match for match in requirement_matches if match.category in categories]
+    if not matches:
+        return fallback
+    return _dynamic_requirement_score(matches)
 
 
-def _semantic_phrase_overlap(resume_text: str, jd_text: str) -> float:
-    resume_phrases = _important_phrases(resume_text)
-    jd_phrases = _important_phrases(jd_text)
-    if not jd_phrases:
-        return 0
-    overlap = resume_phrases & jd_phrases
-    return len(overlap) / len(jd_phrases)
-
-
-def _important_phrases(text: str) -> set[str]:
-    words = [
-        word
-        for word in re.findall(r"[a-zA-Z][a-zA-Z+#.]{1,}", text.lower())
-        if word not in {"and", "the", "with", "for", "from", "this", "that", "have", "will", "are", "using"}
+def _project_relevance_score(requirement_matches: list[RequirementMatch], ownership_score: int) -> int:
+    project_or_experience = [
+        match.score
+        for match in requirement_matches
+        if match.evidenceSource in {"project", "experience"} and match.score > 0
     ]
-    phrases = set(words)
-    phrases.update(" ".join(words[index : index + 2]) for index in range(max(0, len(words) - 1)))
-    return phrases
+    if not project_or_experience:
+        return round((ownership_score + _dynamic_requirement_score(requirement_matches)) / 2)
+    return round((sum(project_or_experience) / len(project_or_experience) * 0.7) + (ownership_score * 0.3))
+
+
+def _dynamic_requirement_reason(requirement_matches: list[RequirementMatch]) -> str:
+    if not requirement_matches:
+        return "No clear JD requirements were extracted dynamically; score uses a conservative fallback."
+    matched = [match.requirement for match in requirement_matches if match.score >= 55]
+    missing = [match.requirement for match in requirement_matches if match.score < 35]
+    matched_label = ", ".join(matched[:5]) if matched else "no strong dynamic requirement matches"
+    missing_label = ", ".join(missing[:5]) if missing else "no major dynamic requirement gaps"
+    return f"Dynamically extracted JD matches: {matched_label}. Weak or missing: {missing_label}."
+
+
+def _importance_weight(importance: str) -> float:
+    if importance == "high":
+        return 1.25
+    if importance == "low":
+        return 0.75
+    return 1.0
+
+
+def _signal_score(text: str, signals: list[str], fallback: int) -> int:
+    lowered = text.lower()
+    hits = sum(1 for signal in signals if signal in lowered)
+    if hits == 0:
+        return max(30, round(fallback * 0.85))
+    return min(95, max(fallback, 42 + hits * 11))
 
 
 def _experience_score(request: AnalyzeRequest) -> tuple[int, str]:
@@ -240,52 +220,25 @@ def _experience_score(request: AnalyzeRequest) -> tuple[int, str]:
     return 95, f"Candidate experience of {candidate_years} year(s) fits the JD range."
 
 
-def _extract_experience_range(text: str) -> tuple[int | None, int | None]:
+def _extract_experience_range(text: str) -> tuple[float | None, float | None]:
     lowered = text.lower()
-    range_match = re.search(r"(\d+)\s*(?:-|to)\s*(\d+)\s*(?:years?|yrs?)", lowered)
+    range_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)", lowered)
     if range_match:
-        return int(range_match.group(1)), int(range_match.group(2))
-    min_match = re.search(r"(?:minimum|min|at least)\s*(\d+)\s*(?:years?|yrs?)", lowered)
+        return float(range_match.group(1)), float(range_match.group(2))
+    min_match = re.search(r"(?:minimum|min|at least)\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)", lowered)
     if min_match:
-        return int(min_match.group(1)), None
-    single_match = re.search(r"(\d+)\+?\s*(?:years?|yrs?)", lowered)
+        return float(min_match.group(1)), None
+    single_match = re.search(r"(\d+(?:\.\d+)?)\+?\s*(?:years?|yrs?)", lowered)
     if single_match:
-        return int(single_match.group(1)), None
+        return float(single_match.group(1)), None
     return None, None
-
-
-def _skill_reason(matched_skills: list[str], missing_skills: list[str]) -> str:
-    matched = ", ".join(matched_skills[:8]) if matched_skills else "no direct core skill matches"
-    missing = ", ".join(missing_skills[:6]) if missing_skills else "no major extracted JD skills missing"
-    return f"Matched extracted JD skills: {matched}. Missing or weakly evidenced skills: {missing}."
-
-
-def _topic_score(resume: str, jd: str, skills: list[str], fallback: int) -> int:
-    resume_skills = _extract_skills(resume)
-    jd_skills = _extract_skills(jd)
-    relevant = [skill for skill in skills if skill in jd_skills or skill in resume_skills]
-    if not relevant:
-        return fallback
-    matched = [skill for skill in relevant if skill in resume_skills]
-    return round((len(matched) / len(relevant)) * 90) if matched else 30
-
-
-def _ownership_score(resume: str) -> int:
-    signals = ["end-to-end", "delivered", "owned", "maintained", "production", "optimized", "improved", "20+", "requirements"]
-    return _keyword_presence_score(resume, signals)
-
-
-def _keyword_presence_score(text: str, keywords: list[str]) -> int:
-    lowered = text.lower()
-    hits = sum(1 for keyword in keywords if keyword.lower() in lowered)
-    if hits == 0:
-        return 30
-    return min(95, 40 + hits * 12)
 
 
 def _calculate_interview_readiness(technical_score: int, category_scores: dict[str, tuple[int, str]]) -> int:
     weak_topic_penalty = 0
-    for topic in ["cloudDevOps", "systemDesignReadiness", "databaseDepth", "debuggingProduction"]:
+    for topic in ["dynamicRequirementFit", "technicalDepth", "deliveryReadiness", "systemReadiness"]:
+        if topic not in category_scores:
+            continue
         score, _reason = category_scores[topic]
         if score < 50:
             weak_topic_penalty += 4
@@ -344,31 +297,23 @@ def _calculate_shortlisting_score(request: AnalyzeRequest, technical_score: int)
 
 def _location_factor(request: AnalyzeRequest) -> tuple[int, ShortlistingFactor]:
     context = request.candidateContext
-    jd_locations = _extract_locations(request.jobDescriptionText)
+    jd_locations = extract_jd_locations(request.jobDescriptionText)
     candidate_locations = [context.currentLocation or "", *context.preferredLocations]
     candidate_text = " ".join(candidate_locations).lower()
 
     if not jd_locations:
         return 0, ShortlistingFactor(factor="Location", impact="neutral", reason="JD location was not detected.")
-    if any(location in candidate_text for location in jd_locations):
+    if any(location.lower() in candidate_text for location in jd_locations):
         return 8, ShortlistingFactor(factor="Location", impact="positive", reason="Candidate location or preference matches the JD location.")
     if context.relocationOpen:
         return 2, ShortlistingFactor(factor="Location", impact="neutral", reason="Location is not a direct match, but relocation is open.")
     return -8, ShortlistingFactor(factor="Location", impact="negative", reason="JD location does not match candidate location/preferences.")
 
 
-def _extract_locations(text: str) -> list[str]:
-    known = ["mumbai", "navi mumbai", "pune", "bangalore", "bengaluru", "hyderabad", "delhi", "noida", "gurgaon", "remote"]
-    lowered = text.lower()
-    return [location for location in known if location in lowered]
-
-
 def _work_mode_factor(request: AnalyzeRequest) -> tuple[int, ShortlistingFactor]:
     context = request.candidateContext
-    jd = request.jobDescriptionText.lower()
-    modes = ["remote", "hybrid", "onsite", "work from office", "wfo"]
-    jd_modes = [mode for mode in modes if mode in jd]
-    preferences = " ".join(context.workModePreference).lower()
+    jd_modes = extract_work_modes(request.jobDescriptionText)
+    preferences = extract_work_modes("Work mode: " + ", ".join(context.workModePreference))
     if not jd_modes or not preferences:
         return 0, ShortlistingFactor(factor="Work mode", impact="neutral", reason="Work mode was not clear in both JD and candidate preferences.")
     if any(mode in preferences for mode in jd_modes):

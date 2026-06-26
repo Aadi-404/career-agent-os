@@ -170,6 +170,8 @@ type JobOpportunityStatus = "viewed" | "shortlisted" | "applied" | "interview" |
 
 type HistoryJobOpportunityRecord = {
   id: string;
+  resumeId?: string | null;
+  analysisId?: string | null;
   title: string;
   company?: string | null;
   location?: string | null;
@@ -178,6 +180,7 @@ type HistoryJobOpportunityRecord = {
   status: JobOpportunityStatus;
   technicalMatchScore?: number | null;
   fitCategory?: string | null;
+  analysisResponse?: AnalysisResponse | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -1716,6 +1719,9 @@ function HistoryPanel({
   currentResult: AnalysisResponse | null;
   onOpportunityStatusChange: (jobOpportunityId: string, status: JobOpportunityStatus) => void;
 }) {
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(opportunities[0]?.id ?? null);
+  const selectedOpportunity = opportunities.find((item) => item.id === selectedOpportunityId) ?? opportunities[0] ?? null;
+
   return (
     <div className="historyGrid">
       <div className="panel">
@@ -1762,11 +1768,25 @@ function HistoryPanel({
       </div>
 
       <div className="panel historyWide">
-        <h3>Job Opportunities</h3>
+        <div className="panelHeader">
+          <div>
+            <h3>Job Opportunities</h3>
+            <p className="hint">Extension matches and saved job decisions.</p>
+          </div>
+        </div>
         {opportunities.length ? (
           <div className="historyList">
             {opportunities.slice(0, 10).map((opportunity) => (
-              <div className="historyItem opportunityHistoryItem" key={opportunity.id}>
+              <div
+                role="button"
+                tabIndex={0}
+                className={`historyItem opportunityHistoryItem selectableHistoryItem ${selectedOpportunity?.id === opportunity.id ? "active" : ""}`}
+                key={opportunity.id}
+                onClick={() => setSelectedOpportunityId(opportunity.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") setSelectedOpportunityId(opportunity.id);
+                }}
+              >
                 <div>
                   <strong>{opportunity.title}</strong>
                   <small>
@@ -1779,6 +1799,7 @@ function HistoryPanel({
                 <select
                   aria-label={`Status for ${opportunity.title}`}
                   value={opportunity.status}
+                  onClick={(event) => event.stopPropagation()}
                   onChange={(event) => onOpportunityStatusChange(opportunity.id, event.target.value as JobOpportunityStatus)}
                 >
                   {jobOpportunityStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
@@ -1790,6 +1811,13 @@ function HistoryPanel({
           <p className="hint">No saved job opportunities yet. Extension matches will appear here.</p>
         )}
       </div>
+
+      {selectedOpportunity && (
+        <JobOpportunityDetail
+          opportunity={selectedOpportunity}
+          onStatusChange={onOpportunityStatusChange}
+        />
+      )}
 
       <div className="panel">
         <h3>Resume Versions</h3>
@@ -1819,6 +1847,126 @@ function HistoryPanel({
         ) : (
           <p className="hint">No saved preparation sessions yet.</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function JobOpportunityDetail({
+  opportunity,
+  onStatusChange,
+}: {
+  opportunity: HistoryJobOpportunityRecord;
+  onStatusChange: (jobOpportunityId: string, status: JobOpportunityStatus) => void;
+}) {
+  const analysis = opportunity.analysisResponse;
+  const score = opportunity.technicalMatchScore ?? analysis?.technicalMatchScore ?? null;
+  const fitCategory = opportunity.fitCategory ?? analysis?.fitCategory ?? "Not scored";
+  const requirements = analysis?.requirementMatches ?? [];
+  const breakdown = analysis?.scoreBreakdown ?? [];
+  const weakRequirements = requirements.filter((item) => item.score < 60).slice(0, 5);
+
+  return (
+    <div className="panel historyWide opportunityDetailPanel">
+      <div className="opportunityDetailHeader">
+        <div>
+          <p className="eyebrow">Opportunity Detail</p>
+          <h3>{opportunity.title}</h3>
+          <small>{[opportunity.company, opportunity.location, formatDate(opportunity.createdAt)].filter(Boolean).join(" - ")}</small>
+        </div>
+        <div className="opportunityScoreBadge">
+          <strong>{score ?? "--"}%</strong>
+          <span>{fitCategory}</span>
+        </div>
+      </div>
+
+      <div className="opportunityMetaGrid">
+        <label>
+          Status
+          <select
+            value={opportunity.status}
+            onChange={(event) => onStatusChange(opportunity.id, event.target.value as JobOpportunityStatus)}
+          >
+            {jobOpportunityStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+          </select>
+        </label>
+        <div className="metaBlock">
+          <span>Resume</span>
+          <strong>{opportunity.resumeId ? "Saved resume selected" : "Manual resume text"}</strong>
+        </div>
+        <div className="metaBlock">
+          <span>Source</span>
+          {opportunity.url ? <a href={opportunity.url} target="_blank" rel="noreferrer">Open job</a> : <strong>No URL saved</strong>}
+        </div>
+      </div>
+
+      {analysis?.overallSummary && (
+        <p className="recommendation">{analysis.overallSummary}</p>
+      )}
+
+      {analysis?.recommendedAction && (
+        <div className="opportunityCallout">
+          <strong>Recommended action</strong>
+          <p>{analysis.recommendedAction}</p>
+        </div>
+      )}
+
+      <div className="opportunityDetailGrid">
+        <section>
+          <h4>JD Snapshot</h4>
+          <p className="textSnippet">{opportunity.description}</p>
+        </section>
+
+        <section>
+          <h4>Free Score Evidence</h4>
+          {breakdown.length ? (
+            <div className="miniBreakdownList">
+              {breakdown.slice(0, 4).map((item) => (
+                <div className="miniBreakdownItem" key={item.category}>
+                  <span>{formatCategory(item.category)}</span>
+                  <strong>{item.score}%</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="hint">No saved score breakdown is attached yet.</p>
+          )}
+        </section>
+      </div>
+
+      <section>
+        <h4>Requirement Match Preview</h4>
+        {requirements.length ? (
+          <div className="detailRequirementList">
+            {requirements.slice(0, 6).map((item, index) => (
+              <div className="detailRequirementItem" key={`${item.requirement}-${index}`}>
+                <div>
+                  <strong>{item.requirement}</strong>
+                  <small>{item.bestEvidence || item.reason}</small>
+                </div>
+                <span className={`importance ${item.importance}`}>{item.importance}</span>
+                <b>{item.score}%</b>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="hint">Run this opportunity through matching to save requirement-level evidence.</p>
+        )}
+      </section>
+
+      {weakRequirements.length > 0 && (
+        <section>
+          <h4>Top Gaps To Fix</h4>
+          <div className="tags">
+            {weakRequirements.map((item) => <span key={item.requirement}>{item.requirement}</span>)}
+          </div>
+        </section>
+      )}
+
+      <div className="premiumActionGrid">
+        <button type="button" className="secondaryButton premiumButton"><span>Paid</span> Build gap report</button>
+        <button type="button" className="secondaryButton premiumButton"><span>Paid</span> Generate prep plan</button>
+        <button type="button" className="secondaryButton premiumButton"><span>Paid</span> Create interview questions</button>
       </div>
     </div>
   );

@@ -218,7 +218,8 @@ This slice adds:
 - Structured JD parsing models
 - Experience-wise technical scoring weights
 - Score breakdown response fields
-- Requirement match matrix for JD requirement to resume evidence mapping
+- Dynamic requirement match matrix for JD requirement to resume evidence mapping
+- JD requirement extraction from actual JD wording instead of a fixed skill whitelist
 - Provider-backed embedding similarity for meaning-based JD/resume evidence matching
 - Local embedding fallback for mock/offline mode and live provider failures
 - Structured resume editor after normalization for correcting parsed sections before analysis
@@ -246,21 +247,10 @@ Future research agent responsibilities:
 Example:
 
 ```text
-Adobe Software Engineer
--> DSA high priority
--> Operating Systems high priority
--> Concurrency and memory concepts medium-high priority
-```
-
-For .NET enterprise roles:
-
-```text
-ASP.NET Core
-SQL Server
-Entity Framework
-Azure DevOps
-REST APIs
-Production debugging
+Any company or role
+-> extract requirements from the JD text itself
+-> match each requirement to resume evidence
+-> score exact proof, weak proof, semantic proof, and missing proof
 ```
 
 ## Future Level 3: Market Opportunity Score
@@ -294,6 +284,10 @@ PDF and DOCX extraction can break layout. Normalization creates structured secti
 ### Why combine lexical, semantic, and structured scoring?
 
 Lexical matching catches hard requirements. Semantic matching catches meaning and synonyms. Structured rules handle years, location, notice period, and CTC better than free-form LLM reasoning.
+
+### Why remove the fixed skill whitelist?
+
+A fixed list makes the app biased toward one stack. If the code only knows `.NET`, `React`, and `Azure`, it can miss roles asking for `Kafka`, `Salesforce`, `SAP`, `LangChain`, `GraphQL`, `Rust`, or any future technology. The current scorer extracts requirements from the JD text itself and then uses embeddings to match those requirements to resume evidence.
 
 ### Why use a real embedding model?
 

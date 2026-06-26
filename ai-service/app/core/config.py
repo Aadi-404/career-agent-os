@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     embedding_model: str = ""
     embedding_timeout_seconds: int = Field(default=20, ge=3, le=60)
     embedding_fallback_local: bool = True
+    jd_parser_mode: Literal["deterministic", "llm", "auto"] = "deterministic"
 
     model_config = SettingsConfigDict(
         env_file=".env",

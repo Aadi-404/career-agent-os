@@ -2,66 +2,10 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+from app.services.embedding_service import semantic_similarity
+
 
 CertificateLevel = Literal["foundation", "associate", "professional", "specialty", "any"]
-
-
-@dataclass
-class CertificateEvidence:
-    raw_text: str
-    provider: str | None
-    domain: str
-    level: CertificateLevel
-    confidence: float
-
-
-@dataclass
-class CertificationRequirement:
-    raw_text: str
-    provider: str | None
-    domain: str
-    level: CertificateLevel
-    requires_certification: bool
-
-
-@dataclass
-class CertificateMatchResult:
-    requirement: CertificationRequirement
-    best_evidence: CertificateEvidence | None
-    score: int
-    match_type: str
-    reason: str
-
-
-PROVIDER_ALIASES = {
-    "azure": ["azure", "microsoft"],
-    "aws": ["aws", "amazon web services"],
-    "gcp": ["gcp", "google cloud"],
-    "oracle": ["oracle"],
-    "salesforce": ["salesforce"],
-    "kubernetes": ["kubernetes", "cka", "ckad"],
-    "docker": ["docker"],
-    "scrum": ["scrum", "agile"],
-}
-
-DOMAIN_ALIASES = {
-    "cloud": ["cloud", "azure", "aws", "gcp", "google cloud", "cloud practitioner", "digital leader"],
-    "cloud_architecture": ["architect", "architecture", "solutions architect", "cloud architect"],
-    "devops": ["devops", "ci/cd", "pipeline", "deployment", "kubernetes", "docker"],
-    "security": ["security", "cyber", "iam", "identity"],
-    "database": ["database", "sql", "dbms", "oracle", "postgres", "mysql"],
-    "ai_ml": ["ai", "machine learning", "ml", "data science", "tensorflow"],
-    "backend": ["java", ".net", "spring", "api", "backend"],
-    "frontend": ["frontend", "react", "angular", "javascript"],
-    "project_management": ["scrum", "agile", "pmp", "project management"],
-}
-
-LEVEL_ALIASES: list[tuple[CertificateLevel, list[str]]] = [
-    ("specialty", ["specialty", "specialist"]),
-    ("professional", ["professional", "expert", "advanced", "architect"]),
-    ("associate", ["associate", "intermediate", "developer", "administrator", "engineer"]),
-    ("foundation", ["foundation", "fundamentals", "basic", "basics", "beginner", "practitioner", "digital leader"]),
-]
 
 CERTIFICATE_SIGNALS = [
     "certified",
@@ -70,32 +14,58 @@ CERTIFICATE_SIGNALS = [
     "credential",
     "badge",
     "exam",
+    "license",
+    "licensed",
     "course",
-    "fundamentals",
-    "practitioner",
-    "associate",
-    "professional",
-    "specialty",
-    "digital leader",
 ]
+
+LEVEL_ALIASES: list[tuple[CertificateLevel, list[str]]] = [
+    ("specialty", ["specialty", "specialist"]),
+    ("professional", ["professional", "expert", "advanced", "architect"]),
+    ("associate", ["associate", "intermediate", "developer", "administrator", "engineer"]),
+    ("foundation", ["foundation", "fundamentals", "basic", "basics", "beginner", "practitioner", "entry level"]),
+]
+
+
+@dataclass(frozen=True)
+class CertificateEvidence:
+    raw_text: str
+    provider: str | None
+    domain: str
+    level: CertificateLevel
+    confidence: float
+
+
+@dataclass(frozen=True)
+class CertificationRequirement:
+    raw_text: str
+    provider: str | None
+    domain: str
+    level: CertificateLevel
+    requires_certification: bool
+
+
+@dataclass(frozen=True)
+class CertificateMatchResult:
+    requirement: CertificationRequirement
+    best_evidence: CertificateEvidence | None
+    score: int
+    match_type: str
+    reason: str
 
 
 def extract_certificate_evidence(text: str) -> list[CertificateEvidence]:
     evidence = []
-    for line in _candidate_lines(text):
+    for line in _candidate_units(text):
         if not _looks_like_certificate(line):
             continue
-        provider = _infer_provider(line)
-        domain = _infer_domain(line)
-        level = _infer_level(line, default="foundation")
-        confidence = _confidence(line, provider, level)
         evidence.append(
             CertificateEvidence(
                 raw_text=line,
-                provider=provider,
-                domain=domain,
-                level=level,
-                confidence=confidence,
+                provider=_infer_provider_phrase(line),
+                domain=_infer_domain_phrase(line),
+                level=_infer_level(line, default="any"),
+                confidence=_confidence(line),
             )
         )
     return _dedupe_evidence(evidence)
@@ -103,21 +73,19 @@ def extract_certificate_evidence(text: str) -> list[CertificateEvidence]:
 
 def extract_certification_requirements(text: str) -> list[CertificationRequirement]:
     requirements = []
-    for sentence in _sentences(text):
-        lowered = sentence.lower()
-        has_cloud_intent = any(term in lowered for term in ["cloud basic", "cloud basics", "cloud knowledge", "cloud fundamentals"])
-        has_cert_intent = any(signal in lowered for signal in ["certification", "certified", "certificate", "credential"])
-        has_provider_cert = _infer_provider(sentence) is not None and any(signal in lowered for signal in CERTIFICATE_SIGNALS)
-        if not (has_cloud_intent or has_cert_intent or has_provider_cert):
+    for unit in _candidate_units(text):
+        lowered = unit.lower()
+        requires_certification = any(signal in lowered for signal in CERTIFICATE_SIGNALS)
+        learning_or_basics = any(term in lowered for term in ["fundamental", "basic", "beginner", "awareness", "knowledge"])
+        if not (requires_certification or learning_or_basics and _certificate_context(unit)):
             continue
-
         requirements.append(
             CertificationRequirement(
-                raw_text=sentence,
-                provider=_infer_provider(sentence),
-                domain=_infer_domain(sentence),
-                level=_infer_level(sentence, default="any" if has_cert_intent and not has_cloud_intent else "foundation"),
-                requires_certification=has_cert_intent or has_provider_cert,
+                raw_text=_clean_requirement(unit),
+                provider=_infer_provider_phrase(unit),
+                domain=_infer_domain_phrase(unit),
+                level=_infer_level(unit, default="any" if requires_certification else "foundation"),
+                requires_certification=requires_certification,
             )
         )
     return _dedupe_requirements(requirements)
@@ -127,7 +95,6 @@ def best_certificate_match(resume_text: str, jd_text: str) -> CertificateMatchRe
     requirements = extract_certification_requirements(jd_text)
     if not requirements:
         return None
-
     evidence = extract_certificate_evidence(resume_text)
     best: CertificateMatchResult | None = None
     for requirement in requirements:
@@ -142,99 +109,106 @@ def _match_requirement(requirement: CertificationRequirement, evidence: list[Cer
         return CertificateMatchResult(
             requirement=requirement,
             best_evidence=None,
-            score=20 if not requirement.requires_certification else 0,
+            score=0 if requirement.requires_certification else 20,
             match_type="no_certificate_evidence",
-            reason=f"JD asks for {requirement.domain} {requirement.level} certification/knowledge, but no certificate evidence was found in the resume.",
+            reason=f"JD asks for {requirement.raw_text}, but no certificate evidence was found in the resume.",
         )
-
     scored = [(_score_pair(requirement, item), item) for item in evidence]
-    score, best_evidence = max(scored, key=lambda item: item[0][0])
-    match_score, match_type, reason = score
+    (score, match_type, reason), best_evidence = max(scored, key=lambda item: item[0][0])
     return CertificateMatchResult(
         requirement=requirement,
         best_evidence=best_evidence,
-        score=match_score,
+        score=score,
         match_type=match_type,
         reason=reason,
     )
 
 
 def _score_pair(requirement: CertificationRequirement, evidence: CertificateEvidence) -> tuple[int, str, str]:
-    provider_match = requirement.provider is None or requirement.provider == evidence.provider
-    same_domain = requirement.domain == evidence.domain or _compatible_domain(requirement.domain, evidence.domain)
+    similarity = semantic_similarity(requirement.raw_text, evidence.raw_text)
+    overlap = _token_overlap(requirement.raw_text, evidence.raw_text)
     level_fit = _level_fit(requirement.level, evidence.level)
+    provider_overlap = bool(requirement.provider and evidence.provider and requirement.provider.lower() in evidence.raw_text.lower())
 
-    if provider_match and same_domain and level_fit >= 1:
-        return (
-            95 if requirement.provider else 88,
-            "provider_domain_level_match" if requirement.provider else "domain_level_match",
-            f"JD asks for {requirement.raw_text}; resume has {evidence.raw_text}, which matches the expected domain and level.",
-        )
-    if same_domain and level_fit >= 1:
-        return (
-            75,
-            "same_domain_different_provider",
-            f"JD asks for {requirement.raw_text}; resume has {evidence.raw_text}. Domain and level match, but provider differs.",
-        )
-    if provider_match and same_domain and level_fit == 0:
-        return (
-            58,
-            "same_provider_domain_lower_level",
-            f"JD expects a higher level for {requirement.raw_text}; resume has {evidence.raw_text}, which is relevant but lower level.",
-        )
-    if same_domain:
-        return (
-            50,
-            "same_domain_partial_level",
-            f"JD asks for {requirement.raw_text}; resume has {evidence.raw_text}. Domain is related, but level/provider fit is partial.",
-        )
-    if provider_match:
-        return (
-            42,
-            "same_provider_different_domain",
-            f"JD asks for {requirement.raw_text}; resume has {evidence.raw_text}. Provider matches, but certification domain is different.",
-        )
-    return (
-        25,
-        "weak_certificate_relation",
-        f"JD asks for {requirement.raw_text}; resume has {evidence.raw_text}, but the domain/provider/level relation is weak.",
+    base = 0
+    match_type = "weak_certificate_relation"
+    if similarity.score >= 0.78 or overlap >= 0.7:
+        base = 90
+        match_type = "semantic_certificate_match"
+    elif similarity.score >= 0.62 or overlap >= 0.45:
+        base = 75
+        match_type = "partial_semantic_certificate_match"
+    elif provider_overlap:
+        base = 55
+        match_type = "provider_phrase_match"
+    elif not requirement.requires_certification and evidence.confidence >= 0.65:
+        base = 45
+        match_type = "related_certificate_evidence"
+
+    if level_fit == 0 and requirement.level != "any":
+        base = min(base, 58)
+        match_type = "lower_level_certificate_match"
+
+    score = round(base * evidence.confidence)
+    reason = (
+        f"JD asks for {requirement.raw_text}; resume has {evidence.raw_text}. "
+        f"Certificate match used dynamic text similarity with {similarity.provider}/{similarity.model}."
     )
+    if similarity.fallbackReason:
+        reason += f" Fallback reason: {similarity.fallbackReason}"
+    return max(0, min(score, 100)), match_type, reason
 
 
-def _candidate_lines(text: str) -> list[str]:
-    lines = []
-    for raw_line in text.splitlines():
-        line = re.sub(r"\s+", " ", raw_line).strip(" ,-")
-        if line:
-            lines.append(line)
-    if len(lines) <= 1:
-        lines = _sentences(text)
-    return lines
+def _candidate_units(text: str) -> list[str]:
+    units = []
+    for line in text.replace("\u00a0", " ").splitlines():
+        cleaned = re.sub(r"\s+", " ", line).strip(" ,-•\t")
+        if cleaned:
+            units.extend(_split_units(cleaned))
+    if not units:
+        units = _split_units(text)
+    return [unit for unit in units if unit]
+
+
+def _split_units(text: str) -> list[str]:
+    pieces = []
+    for sentence in re.split(r"(?:[.!?]\s+|[\n;])", text):
+        pieces.extend(re.split(r"\s*,\s+|\s+\|\s+", sentence))
+    return [piece.strip(" .:-•\t") for piece in pieces if piece.strip(" .:-•\t")]
 
 
 def _looks_like_certificate(text: str) -> bool:
     lowered = text.lower()
     if any(signal in lowered for signal in CERTIFICATE_SIGNALS):
         return True
-    if re.search(r"\b(?:az|ai|dp|pl|sc|ms)-\d{3}\b", lowered):
+    if re.search(r"\b[a-z]{1,4}[-_ ]?\d{2,4}\b", lowered):
         return True
-    return bool(_infer_provider(text) and _infer_level(text, default="any") != "any")
+    return _infer_level(text, default="any") != "any" and _certificate_context(text)
 
 
-def _infer_provider(text: str) -> str | None:
+def _certificate_context(text: str) -> bool:
     lowered = text.lower()
-    for provider, aliases in PROVIDER_ALIASES.items():
-        if any(alias in lowered for alias in aliases):
-            return provider
+    return any(term in lowered for term in ["cloud", "security", "data", "ai", "ml", "devops", "project", "agile", "platform", "engineer", "architect"])
+
+
+def _infer_provider_phrase(text: str) -> str | None:
+    code_match = re.search(r"\b([a-z]{1,4})[-_ ]?\d{2,4}\b", text, flags=re.IGNORECASE)
+    if code_match:
+        return code_match.group(1).upper()
+    cert_match = re.search(r"\b([A-Z][A-Za-z0-9&.+-]{1,}(?:\s+[A-Z][A-Za-z0-9&.+-]{1,}){0,2})\s+(?:certified|certification|certificate|credential|exam)", text)
+    if cert_match:
+        return cert_match.group(1).strip()
     return None
 
 
-def _infer_domain(text: str) -> str:
-    lowered = text.lower()
-    for domain, aliases in DOMAIN_ALIASES.items():
-        if any(alias in lowered for alias in aliases):
-            return domain
-    return "general"
+def _infer_domain_phrase(text: str) -> str:
+    cleaned = _clean_requirement(text)
+    tokens = [
+        token
+        for token in re.findall(r"[a-zA-Z0-9][a-zA-Z0-9+#.\-]{1,}", cleaned)
+        if token.lower() not in {"certified", "certification", "certificate", "credential", "exam", "required", "preferred"}
+    ]
+    return " ".join(tokens[:6]) if tokens else "general"
 
 
 def _infer_level(text: str, default: CertificateLevel) -> CertificateLevel:
@@ -246,33 +220,47 @@ def _infer_level(text: str, default: CertificateLevel) -> CertificateLevel:
 
 
 def _level_fit(required: CertificateLevel, actual: CertificateLevel) -> int:
-    if required == "any":
+    if required == "any" or actual == "any":
         return 1
     order = {"foundation": 1, "associate": 2, "professional": 3, "specialty": 3}
     return 1 if order.get(actual, 0) >= order.get(required, 0) else 0
 
 
-def _compatible_domain(required: str, actual: str) -> bool:
-    if required == "cloud" and actual in {"cloud_architecture", "devops", "security"}:
-        return True
-    if required == "cloud_architecture" and actual == "cloud":
-        return True
-    return False
+def _token_overlap(left: str, right: str) -> float:
+    left_tokens = set(_tokens(left))
+    right_tokens = set(_tokens(right))
+    if not left_tokens:
+        return 0
+    return len(left_tokens & right_tokens) / len(left_tokens)
 
 
-def _confidence(text: str, provider: str | None, level: CertificateLevel) -> float:
+def _tokens(text: str) -> list[str]:
+    return [
+        token
+        for token in re.findall(r"[a-zA-Z0-9][a-zA-Z0-9+#.\-]{1,}", text.lower())
+        if token not in {"the", "and", "for", "with", "certification", "certificate", "certified", "required", "preferred"}
+    ]
+
+
+def _clean_requirement(text: str) -> str:
+    return re.sub(
+        r"^(required|mandatory|preferred|good to have|nice to have|must have|should have)\s*[:\-]?\s*",
+        "",
+        re.sub(r"\s+", " ", text).strip(" .:-"),
+        flags=re.IGNORECASE,
+    )
+
+
+def _confidence(text: str) -> float:
     score = 0.55
-    if provider:
+    lowered = text.lower()
+    if any(signal in lowered for signal in CERTIFICATE_SIGNALS):
         score += 0.2
-    if level != "any":
+    if re.search(r"\b[a-z]{1,4}[-_ ]?\d{2,4}\b", lowered):
         score += 0.15
-    if any(signal in text.lower() for signal in ["certified", "certification", "certificate", "credential"]):
+    if _infer_level(text, default="any") != "any":
         score += 0.1
     return min(score, 0.98)
-
-
-def _sentences(text: str) -> list[str]:
-    return [part.strip() for part in re.split(r"(?:[.!?]\s+|[\n;])", text) if part.strip()]
 
 
 def _dedupe_evidence(items: list[CertificateEvidence]) -> list[CertificateEvidence]:
@@ -280,9 +268,10 @@ def _dedupe_evidence(items: list[CertificateEvidence]) -> list[CertificateEviden
     result = []
     for item in items:
         key = item.raw_text.lower()
-        if key not in seen:
-            seen.add(key)
-            result.append(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
     return result
 
 
@@ -290,8 +279,9 @@ def _dedupe_requirements(items: list[CertificationRequirement]) -> list[Certific
     seen = set()
     result = []
     for item in items:
-        key = (item.provider, item.domain, item.level, item.raw_text.lower())
-        if key not in seen:
-            seen.add(key)
-            result.append(item)
+        key = item.raw_text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
     return result

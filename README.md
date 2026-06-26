@@ -215,7 +215,7 @@ Input:
 }
 ```
 
-It returns normalized JD text, extracted skills, experience range, location, work mode, responsibilities, and warnings.
+It returns normalized JD text, dynamically extracted skill/requirement phrases, experience range, location, work mode, responsibilities, and warnings.
 
 ## Level 2 Scoring
 
@@ -236,7 +236,15 @@ The score is calculated by the explainable scoring engine. LLM mode still genera
 
 `requirementMatches` is the requirement-level evidence matrix. It maps extracted JD requirements to the strongest resume evidence, evidence source, match type, and score.
 
-Requirement matching uses exact aliases, category evidence, evidence-source strength, and provider-backed embedding similarity for meaning-based phrase matches. If no embedding provider is configured, it falls back to the local deterministic vectorizer.
+Requirement matching no longer depends on a fixed skill whitelist. The scorer first extracts requirement phrases from the actual JD, including comma-separated skills and responsibility statements, then matches those dynamic requirements against resume evidence. It uses phrase overlap, evidence-source strength, and provider-backed embedding similarity for meaning-based matches. If no embedding provider is configured, it falls back to the local deterministic vectorizer.
+
+Example:
+
+```text
+JD: Required Skills: Kafka, Redis, GraphQL, LangChain, vector databases.
+Resume: Built event streaming workers with Kafka and improved Redis cache latency.
+Result: Kafka and Redis become dynamic requirements and are matched without being prelisted in code.
+```
 
 After resume normalization, the frontend also exposes a structured resume editor for profile, experience, projects, skills, education, achievements, and certifications. Edits regenerate the resume text used for analysis.
 
