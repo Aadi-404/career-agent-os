@@ -77,6 +77,7 @@ type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
 type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history";
+type CostMode = "free" | "standard" | "premium";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
 
 type AnalyzeRequestPayload = {
@@ -310,6 +311,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [artifactLoading, setArtifactLoading] = useState("");
+  const [costMode, setCostMode] = useState<CostMode>("free");
+  const [costModeInfo, setCostModeInfo] = useState("");
   const [error, setError] = useState("");
   const [preparationInfo, setPreparationInfo] = useState("");
   const [historyInfo, setHistoryInfo] = useState("");
@@ -551,6 +554,8 @@ function App() {
     setError("");
     setPreparationInfo("");
     setProgressInfo("");
+    setCostMode("free");
+    setCostModeInfo("Running score-only mode. Optional artifacts stay off until requested.");
     setResult(null);
     setActivePreparationSession(null);
 
@@ -601,10 +606,10 @@ function App() {
     }
   }
 
-  async function buildPreparation() {
+  async function buildPreparation(): Promise<boolean> {
     if (!result || !lastAnalysisRequest) {
       setError("Run resume matching before building the preparation plan.");
-      return;
+      return false;
     }
 
     setPreparing(true);
@@ -637,8 +642,10 @@ function App() {
       } catch (historyError) {
         setPreparationInfo(`Built a ${preparation.dailyPlan.length}-day preparation plan, but history save failed.`);
       }
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preparation build failed");
+      return false;
     } finally {
       setPreparing(false);
     }
@@ -648,14 +655,15 @@ function App() {
     label: string,
     endpoint: string,
     applyResult: (current: AnalysisResponse, payload: unknown) => AnalysisResponse,
-  ) {
+  ): Promise<boolean> {
     if (!result || !lastAnalysisRequest) {
       setError("Run resume matching before generating optional artifacts.");
-      return;
+      return false;
     }
 
     setArtifactLoading(label);
     setError("");
+    setCostModeInfo(`Running ${label} as a separate optional call.`);
 
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -674,12 +682,62 @@ function App() {
       }
 
       const payload = await response.json();
-      setResult(applyResult(result, payload));
+      setResult((current) => current ? applyResult(current, payload) : current);
+      setCostModeInfo(`Completed ${label}.`);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : `${label} generation failed`);
+      return false;
     } finally {
       setArtifactLoading("");
     }
+  }
+
+  async function runCostModeBundle(mode: Exclude<CostMode, "free">) {
+    if (!result || !lastAnalysisRequest) {
+      setError("Run score-only matching before generating paid artifacts.");
+      return;
+    }
+    setCostMode(mode);
+    setCostModeInfo(mode === "standard" ? "Standard runs two small optional calls one at a time." : "Premium runs optional calls one at a time, including preparation.");
+
+    const standardSteps = [
+      () => buildOptionalArtifact(
+        "Resume improvements",
+        "/ai/resume-improvements",
+        (current, payload) => ({ ...current, resumeImprovements: payload as AnalysisResponse["resumeImprovements"] }),
+      ),
+      () => buildOptionalArtifact(
+        "Interview questions",
+        "/ai/interview/questions",
+        (current, payload) => ({ ...current, interviewQuestions: payload as AnalysisResponse["interviewQuestions"] }),
+      ),
+    ];
+    const premiumSteps = [
+      ...standardSteps,
+      () => buildOptionalArtifact(
+        "Cross questions",
+        "/ai/cross-questions",
+        (current, payload) => ({ ...current, crossQuestions: payload as AnalysisResponse["crossQuestions"] }),
+      ),
+    ];
+    const steps = mode === "standard" ? standardSteps : premiumSteps;
+
+    for (const step of steps) {
+      const ok = await step();
+      if (!ok) {
+        setCostModeInfo("Stopped because one optional call failed.");
+        return;
+      }
+    }
+    if (mode === "premium") {
+      const ok = await buildPreparation();
+      if (!ok) {
+        setCostModeInfo("Optional artifacts completed, but preparation plan failed.");
+        return;
+      }
+    }
+    setCostModeInfo(mode === "standard" ? "Standard artifacts completed with separate calls." : "Premium artifacts completed with separate calls.");
   }
 
   async function updatePreparationProgress(nextProgress: PreparationProgress, nextStatus?: HistoryPreparationRecord["status"]) {
@@ -1200,11 +1258,58 @@ function App() {
             >
               {historyInfo && <p className="hint">{historyInfo}</p>}
               {result && (
+                <div className="costModePanel">
+                  <div className="panelHeader">
+                    <div>
+                      <p className="eyebrow">AI Usage Mode</p>
+                      <h3>Score-only by default</h3>
+                      <p className="hint">The score is already generated. Run extra artifacts only when needed.</p>
+                    </div>
+                    <span className="costModeBadge">{costMode}</span>
+                  </div>
+                  <div className="costModeGrid">
+                    <button
+                      type="button"
+                      className={costMode === "free" ? "costModeCard active" : "costModeCard"}
+                      onClick={() => {
+                        setCostMode("free");
+                        setCostModeInfo("Free mode uses only the saved score and requirement matrix.");
+                      }}
+                    >
+                      <strong>Free</strong>
+                      <span>0 extra calls</span>
+                      <small>Score, breakdown, requirement matrix, shortlisting factors.</small>
+                    </button>
+                    <button
+                      type="button"
+                      className={costMode === "standard" ? "costModeCard active" : "costModeCard"}
+                      disabled={Boolean(artifactLoading) || preparing}
+                      onClick={() => runCostModeBundle("standard")}
+                    >
+                      <strong>Standard</strong>
+                      <span>2 extra calls</span>
+                      <small>Resume improvements, then interview questions.</small>
+                    </button>
+                    <button
+                      type="button"
+                      className={costMode === "premium" ? "costModeCard active" : "costModeCard"}
+                      disabled={Boolean(artifactLoading) || preparing}
+                      onClick={() => runCostModeBundle("premium")}
+                    >
+                      <strong>Premium</strong>
+                      <span>4 extra calls</span>
+                      <small>Standard plus cross questions and preparation plan.</small>
+                    </button>
+                  </div>
+                  {costModeInfo && <p className="hint">{costModeInfo}</p>}
+                </div>
+              )}
+              {result && (
                 <div className="actionBar">
                   <button
                     type="button"
                     className="secondaryButton premiumButton"
-                    disabled={Boolean(artifactLoading)}
+                    disabled={Boolean(artifactLoading) || preparing}
                     onClick={() => buildOptionalArtifact(
                       "Resume improvements",
                       "/ai/resume-improvements",
@@ -1217,7 +1322,7 @@ function App() {
                   <button
                     type="button"
                     className="secondaryButton premiumButton"
-                    disabled={Boolean(artifactLoading)}
+                    disabled={Boolean(artifactLoading) || preparing}
                     onClick={() => buildOptionalArtifact(
                       "Interview questions",
                       "/ai/interview/questions",
@@ -1230,7 +1335,7 @@ function App() {
                   <button
                     type="button"
                     className="secondaryButton premiumButton"
-                    disabled={Boolean(artifactLoading)}
+                    disabled={Boolean(artifactLoading) || preparing}
                     onClick={() => buildOptionalArtifact(
                       "Cross questions",
                       "/ai/cross-questions",
@@ -1258,7 +1363,7 @@ function App() {
                   Preparation plan days
                   <input type="number" min={1} max={30} value={preparationPlanDays} onChange={(event) => setPreparationPlanDays(Math.max(1, Math.min(30, Number(event.target.value) || 7)))} />
                 </label>
-                <button type="button" className="premiumButton" disabled={!result || preparing} onClick={buildPreparation}>
+                <button type="button" className="premiumButton" disabled={!result || preparing || Boolean(artifactLoading)} onClick={buildPreparation}>
                   <span>Pro</span>
                   {preparing ? "Building Plan..." : preparation ? "Rebuild Preparation Plan" : "Build Preparation Plan"}
                 </button>

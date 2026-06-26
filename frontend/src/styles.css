@@ -943,6 +943,65 @@ button.premiumButton:not(.secondaryButton) span {
   color: #ffffff;
 }
 
+.costModePanel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d4e5e2;
+  border-radius: 8px;
+  background: #f7fbfb;
+  padding: 16px;
+}
+
+.costModeBadge {
+  border-radius: 999px;
+  background: var(--brand);
+  color: #ffffff;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.costModeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.costModeCard {
+  display: grid;
+  gap: 6px;
+  min-height: 126px;
+  align-content: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  padding: 14px;
+  text-align: left;
+}
+
+.costModeCard strong {
+  font-size: 18px;
+}
+
+.costModeCard span {
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.costModeCard small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.costModeCard.active {
+  border-color: var(--brand-2);
+  background: #eefaf8;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
 .checkRow {
   display: flex;
   align-items: center;
@@ -1637,7 +1696,8 @@ pre {
   .historyGrid,
   .opportunityMetaGrid,
   .opportunityDetailGrid,
-  .premiumActionGrid {
+  .premiumActionGrid,
+  .costModeGrid {
     grid-template-columns: 1fr;
   }
 
