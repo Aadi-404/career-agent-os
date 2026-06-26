@@ -2,6 +2,7 @@ const API_BASE_URL = "http://127.0.0.1:8001";
 
 const state = {
   anonymousSessionId: null,
+  sessionToken: null,
   jobDraft: null,
 };
 
@@ -27,18 +28,25 @@ els.matchJob.addEventListener("click", matchJob);
 
 async function bootstrap() {
   setStatus("Connecting...");
-  const saved = await chrome.storage.local.get(["anonymousSessionId", "userId"]);
+  const saved = await chrome.storage.local.get(["anonymousSessionId", "userId", "sessionToken"]);
   if (saved.userId) els.userId.value = saved.userId;
   const userId = els.userId.value.trim() || null;
   const response = await post("/extension/bootstrap", {
     userId,
+    sessionToken: saved.sessionToken || null,
     anonymousSessionId: saved.anonymousSessionId || null,
   });
   state.anonymousSessionId = response.anonymousSession.id;
-  await chrome.storage.local.set({ anonymousSessionId: state.anonymousSessionId, userId: userId || "" });
+  state.sessionToken = response.userSession?.sessionToken || saved.sessionToken || null;
+  if (response.userSession?.userId) els.userId.value = response.userSession.userId;
+  await chrome.storage.local.set({
+    anonymousSessionId: state.anonymousSessionId,
+    sessionToken: state.sessionToken || "",
+    userId: response.userSession?.userId || userId || "",
+  });
   renderResumes(response.resumes);
-  els.sessionInfo.textContent = userId
-    ? `Connected as ${userId}. Anonymous session ${state.anonymousSessionId} is linked when claimed.`
+  els.sessionInfo.textContent = response.userSession
+    ? `Connected as ${response.userSession.displayName}. Session token active.`
     : `Anonymous session ${state.anonymousSessionId}. Connect a user to load saved resumes.`;
   setStatus(response.resumes.length ? "Ready" : "Connect user or paste resume/JD in app first");
 }
@@ -56,7 +64,8 @@ async function claimSession() {
     displayName: userId,
   });
   state.anonymousSessionId = response.anonymousSession.id;
-  await chrome.storage.local.set({ anonymousSessionId: state.anonymousSessionId, userId });
+  state.sessionToken = response.userSession.sessionToken;
+  await chrome.storage.local.set({ anonymousSessionId: state.anonymousSessionId, userId, sessionToken: state.sessionToken });
   renderResumes(response.resumes);
   els.sessionInfo.textContent = `Connected as ${userId}. Migrated ${response.migratedOpportunityCount} saved job(s).`;
   setStatus(response.resumes.length ? "Ready" : "No saved resumes");
@@ -90,6 +99,7 @@ async function matchJob() {
   try {
     const analysis = await post("/extension/jobs/match", {
       userId: els.userId.value.trim(),
+      sessionToken: state.sessionToken,
       anonymousSessionId: state.anonymousSessionId,
       resumeId,
       job: {

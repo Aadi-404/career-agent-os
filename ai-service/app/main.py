@@ -27,6 +27,7 @@ from app.models.extension import (
     ExtensionResumeOption,
     ExtensionSessionClaimRequest,
     ExtensionSessionClaimResponse,
+    ExtensionUserSession,
 )
 from app.models.history import (
     AnonymousSessionCreateRequest,
@@ -57,10 +58,12 @@ from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.history_store import (
     create_or_touch_anonymous_session,
     claim_anonymous_session,
+    create_user_session,
     create_or_update_user,
     get_resume,
     get_preparation_session,
     get_workspace_summary,
+    resolve_user_session,
     list_analyses,
     list_job_descriptions,
     list_job_opportunities_for_anonymous_session,
@@ -139,9 +142,12 @@ def bootstrap_extension(request: ExtensionBootstrapRequest) -> ExtensionBootstra
     anonymous_session = create_or_touch_anonymous_session(
         AnonymousSessionCreateRequest(anonymousSessionId=request.anonymousSessionId)
     )
-    resumes = list_extension_resumes(request.userId) if request.userId else []
+    user_session = _extension_user_session_from_token(request.sessionToken) if request.sessionToken else None
+    user_id = user_session.userId if user_session else request.userId
+    resumes = list_extension_resumes(user_id) if user_id else []
     return ExtensionBootstrapResponse(
         anonymousSession=anonymous_session,
+        userSession=user_session,
         resumes=resumes,
         manualPasteRequired=not bool(resumes),
         defaultCandidateContext=(
@@ -160,14 +166,21 @@ def bootstrap_extension(request: ExtensionBootstrapRequest) -> ExtensionBootstra
 
 @app.post("/extension/session/claim", response_model=ExtensionSessionClaimResponse)
 def claim_extension_session(request: ExtensionSessionClaimRequest) -> ExtensionSessionClaimResponse:
+    create_or_touch_anonymous_session(AnonymousSessionCreateRequest(anonymousSessionId=request.anonymousSessionId))
     anonymous_session, migrated_count = claim_anonymous_session(
         request.anonymousSessionId,
         request.userId,
         request.displayName,
         request.email,
     )
+    token = create_user_session(request.userId, source="extension")
     return ExtensionSessionClaimResponse(
         anonymousSession=anonymous_session,
+        userSession=ExtensionUserSession(
+            userId=request.userId,
+            displayName=request.displayName or request.userId,
+            sessionToken=token,
+        ),
         resumes=list_extension_resumes(request.userId),
         migratedOpportunityCount=migrated_count,
     )
@@ -206,11 +219,13 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
     if request.anonymousSessionId:
         create_or_touch_anonymous_session(AnonymousSessionCreateRequest(anonymousSessionId=request.anonymousSessionId))
 
+    session_user = resolve_user_session(request.sessionToken) if request.sessionToken else None
+    user_id = session_user.id if session_user else request.userId
     resume_text = request.resumeText
     if request.resumeId:
-        if not request.userId:
-            raise HTTPException(status_code=400, detail="userId is required when resumeId is provided")
-        resume = get_resume(request.userId, request.resumeId)
+        if not user_id:
+            raise HTTPException(status_code=400, detail="userId or sessionToken is required when resumeId is provided")
+        resume = get_resume(user_id, request.resumeId)
         resume_text = resume.normalizedText or resume.rawText
 
     if not resume_text:
@@ -225,10 +240,10 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
     )
     analysis = match_resume_jd(analysis_request)
     analysis_record = None
-    if request.userId:
+    if user_id:
         analysis_record = save_analysis(
             AnalysisSaveRequest(
-                userId=request.userId,
+                userId=user_id,
                 title=f"{request.job.title} - {analysis.technicalMatchScore}%",
                 resumeId=request.resumeId,
                 request=analysis_request,
@@ -239,7 +254,7 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
     if request.saveOpportunity:
         opportunity = save_job_opportunity(
             JobOpportunitySaveRequest(
-                userId=request.userId,
+                userId=user_id,
                 anonymousSessionId=request.anonymousSessionId,
                 resumeId=request.resumeId,
                 analysisId=analysis_record.id if analysis_record else None,
@@ -483,6 +498,15 @@ def _extension_resume_option(resume: ResumeRecord) -> ExtensionResumeOption:
         updatedAt=resume.updatedAt,
         summary=summary,
         isStructured=bool(structured),
+    )
+
+
+def _extension_user_session_from_token(token: str) -> ExtensionUserSession:
+    user = resolve_user_session(token)
+    return ExtensionUserSession(
+        userId=user.id,
+        displayName=user.displayName,
+        sessionToken=token,
     )
 
 

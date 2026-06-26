@@ -1002,6 +1002,47 @@ button.premiumButton:not(.secondaryButton) span {
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
+.extensionSetupGrid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+}
+
+.extensionSetupHero {
+  display: grid;
+  gap: 16px;
+  grid-row: span 2;
+}
+
+.extensionSetupHero h3 {
+  margin-bottom: 8px;
+}
+
+.extensionSetupHero p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.extensionStatusGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.setupSteps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.setupSteps code {
+  border-radius: 6px;
+  background: #eef2f7;
+  color: var(--brand);
+  padding: 2px 5px;
+}
+
 .checkRow {
   display: flex;
   align-items: center;
@@ -1697,7 +1738,9 @@ pre {
   .opportunityMetaGrid,
   .opportunityDetailGrid,
   .premiumActionGrid,
-  .costModeGrid {
+  .costModeGrid,
+  .extensionSetupGrid,
+  .extensionStatusGrid {
     grid-template-columns: 1fr;
   }
 

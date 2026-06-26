@@ -92,6 +92,17 @@ def _postgres_schema() -> str:
             CREATE INDEX IF NOT EXISTS idx_anonymous_sessions_last_seen
             ON anonymous_sessions(last_seen_at DESC);
 
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                source TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_user_sessions_user_seen
+            ON user_sessions(user_id, last_seen_at DESC);
+
             CREATE TABLE IF NOT EXISTS resumes (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

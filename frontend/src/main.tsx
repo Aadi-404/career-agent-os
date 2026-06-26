@@ -76,7 +76,7 @@ type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
-type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history";
+type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "extension";
 type CostMode = "free" | "standard" | "premium";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
 
@@ -319,6 +319,9 @@ function App() {
   const [preparationInfo, setPreparationInfo] = useState("");
   const [historyInfo, setHistoryInfo] = useState("");
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [extensionSetupInfo, setExtensionSetupInfo] = useState("");
+  const [extensionChecking, setExtensionChecking] = useState(false);
+  const [extensionResumeCount, setExtensionResumeCount] = useState<number | null>(null);
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
   const [resumeHistory, setResumeHistory] = useState<HistoryResumeRecord[]>([]);
@@ -581,6 +584,37 @@ function App() {
     const updated = await updateResponse.json() as HistoryJobOpportunityRecord;
     setJobOpportunityHistory((items) => items.map((item) => item.id === updated.id ? updated : item));
     return updated;
+  }
+
+  async function checkExtensionSetup() {
+    setExtensionChecking(true);
+    setExtensionSetupInfo("");
+    try {
+      const healthResponse = await fetch(`${API_BASE_URL}/health`);
+      if (!healthResponse.ok) throw new Error("Backend health check failed");
+      await ensureLocalUser();
+      const bootstrapResponse = await fetch(`${API_BASE_URL}/extension/bootstrap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: defaultUserId,
+          anonymousSessionId: null,
+        }),
+      });
+      if (!bootstrapResponse.ok) throw new Error("Extension bootstrap check failed");
+      const bootstrap = await bootstrapResponse.json() as { resumes: unknown[]; manualPasteRequired: boolean };
+      setExtensionResumeCount(bootstrap.resumes.length);
+      setExtensionSetupInfo(
+        bootstrap.resumes.length
+          ? `Backend is ready. ${bootstrap.resumes.length} saved resume(s) are available for extension matching.`
+          : "Backend is ready, but no saved resumes are available. Run a score once or save a resume first.",
+      );
+    } catch (err) {
+      setExtensionResumeCount(null);
+      setExtensionSetupInfo(err instanceof Error ? err.message : "Extension setup check failed");
+    } finally {
+      setExtensionChecking(false);
+    }
   }
 
   async function analyze() {
@@ -1536,6 +1570,23 @@ function App() {
               />
             </TaskPanel>
           )}
+
+          {activeTask === "extension" && (
+            <TaskPanel
+              eyebrow="Task 5"
+              title="Extension Setup"
+              description="Install and connect the browser extension for job-page scoring with saved resumes."
+            >
+              <ExtensionSetupPanel
+                backendUrl={API_BASE_URL}
+                defaultUserId={defaultUserId}
+                checking={extensionChecking}
+                setupInfo={extensionSetupInfo}
+                resumeCount={extensionResumeCount}
+                onCheck={checkExtensionSetup}
+              />
+            </TaskPanel>
+          )}
         </section>
       </section>
     </main>
@@ -1612,7 +1663,13 @@ function TaskNav({
       id: "history",
       label: "User History",
       description: "Saved resumes and reports",
-      status: "Next backend",
+      status: "PostgreSQL",
+    },
+    {
+      id: "extension",
+      label: "Extension Setup",
+      description: "Install and connect",
+      status: "Ready",
     },
   ];
 
@@ -1660,6 +1717,73 @@ function TaskPanel({
       </div>
       {children}
     </section>
+  );
+}
+
+function ExtensionSetupPanel({
+  backendUrl,
+  defaultUserId,
+  checking,
+  setupInfo,
+  resumeCount,
+  onCheck,
+}: {
+  backendUrl: string;
+  defaultUserId: string;
+  checking: boolean;
+  setupInfo: string;
+  resumeCount: number | null;
+  onCheck: () => void;
+}) {
+  return (
+    <div className="extensionSetupGrid">
+      <div className="panel extensionSetupHero">
+        <div>
+          <p className="eyebrow">Browser Extension</p>
+          <h3>Score jobs from LinkedIn, Naukri, Indeed, or pasted JD text</h3>
+          <p>The extension uses the same score-first API. It parses the page, lets you review/paste JD text, then matches only when you click the match button.</p>
+        </div>
+        <div className="extensionStatusGrid">
+          <div className="metaBlock">
+            <span>Backend</span>
+            <strong>{backendUrl}</strong>
+          </div>
+          <div className="metaBlock">
+            <span>Default user</span>
+            <strong>{defaultUserId}</strong>
+          </div>
+          <div className="metaBlock">
+            <span>Saved resumes</span>
+            <strong>{resumeCount === null ? "Check needed" : resumeCount}</strong>
+          </div>
+        </div>
+        <button type="button" className="secondaryButton" disabled={checking} onClick={onCheck}>
+          {checking ? "Checking..." : "Check Extension Readiness"}
+        </button>
+        {setupInfo && <p className="hint">{setupInfo}</p>}
+      </div>
+
+      <div className="panel">
+        <h3>Install Steps</h3>
+        <ol className="setupSteps">
+          <li>Open Chrome or Edge extensions page.</li>
+          <li>Enable Developer mode.</li>
+          <li>Choose Load unpacked.</li>
+          <li>Select <code>C:\Code\AI\career-agent-os\extension</code>.</li>
+          <li>Open a job page, click the extension, then connect with <code>{defaultUserId}</code>.</li>
+        </ol>
+      </div>
+
+      <div className="panel">
+        <h3>How Connection Works</h3>
+        <ul>
+          <li>The extension starts with an anonymous session.</li>
+          <li>Connect creates a server-issued session token and stores it in browser extension storage.</li>
+          <li>Future matches use that token to load saved resumes and save job history under the user.</li>
+          <li>Manual JD paste remains available when page parsing is weak.</li>
+        </ul>
+      </div>
+    </div>
   );
 }
 

@@ -49,11 +49,19 @@ class ExtensionResumeOption(BaseModel):
 
 class ExtensionBootstrapRequest(BaseModel):
     userId: str | None = Field(default=None, min_length=2, max_length=80)
+    sessionToken: str | None = Field(default=None, min_length=20, max_length=240)
     anonymousSessionId: str | None = Field(default=None, min_length=8, max_length=120)
+
+
+class ExtensionUserSession(BaseModel):
+    userId: str
+    displayName: str
+    sessionToken: str
 
 
 class ExtensionBootstrapResponse(BaseModel):
     anonymousSession: AnonymousSessionRecord
+    userSession: ExtensionUserSession | None = None
     resumes: list[ExtensionResumeOption] = Field(default_factory=list)
     manualPasteRequired: bool = False
     defaultCandidateContext: CandidateContext | None = None
@@ -68,12 +76,14 @@ class ExtensionSessionClaimRequest(BaseModel):
 
 class ExtensionSessionClaimResponse(BaseModel):
     anonymousSession: AnonymousSessionRecord
+    userSession: ExtensionUserSession
     resumes: list[ExtensionResumeOption] = Field(default_factory=list)
     migratedOpportunityCount: int = Field(ge=0)
 
 
 class ExtensionMatchRequest(BaseModel):
     userId: str | None = Field(default=None, min_length=2, max_length=80)
+    sessionToken: str | None = Field(default=None, min_length=20, max_length=240)
     anonymousSessionId: str | None = Field(default=None, min_length=8, max_length=120)
     resumeId: str | None = Field(default=None, min_length=2, max_length=80)
     resumeText: str | None = Field(default=None, min_length=50)
@@ -86,10 +96,10 @@ class ExtensionMatchRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_match_inputs(self):
-        if not self.userId and not self.anonymousSessionId:
-            raise ValueError("Either userId or anonymousSessionId is required")
-        if self.resumeId and not self.userId:
-            raise ValueError("userId is required when matching by resumeId")
+        if not self.userId and not self.sessionToken and not self.anonymousSessionId:
+            raise ValueError("Either userId, sessionToken, or anonymousSessionId is required")
+        if self.resumeId and not self.userId and not self.sessionToken:
+            raise ValueError("userId or sessionToken is required when matching by resumeId")
         if not self.resumeId and not self.resumeText:
             raise ValueError("Either resumeId or resumeText is required")
         return self

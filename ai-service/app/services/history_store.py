@@ -1,4 +1,5 @@
 import json
+import secrets
 from datetime import UTC, datetime
 from sqlite3 import IntegrityError
 from typing import Any
@@ -115,6 +116,42 @@ def claim_anonymous_session(
         row = connection.execute("SELECT * FROM anonymous_sessions WHERE id = ?", (anonymous_session_id,)).fetchone()
     migrated_count = getattr(update_result, "rowcount", 0) or 0
     return _anonymous_session_from_row(_require_row(row, "Anonymous session not found after claim")), migrated_count
+
+
+def create_user_session(user_id: str, source: str = "extension") -> str:
+    now = _now()
+    token = f"cas_{secrets.token_urlsafe(32)}"
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        connection.execute(
+            """
+            INSERT INTO user_sessions (token, user_id, source, created_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (token, user_id, source, now, now),
+        )
+    return token
+
+
+def resolve_user_session(token: str) -> UserRecord:
+    now = _now()
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT users.*
+            FROM user_sessions
+            JOIN users ON users.id = user_sessions.user_id
+            WHERE user_sessions.token = ?
+            """,
+            (token,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="Invalid or expired session token")
+        connection.execute(
+            "UPDATE user_sessions SET last_seen_at = ? WHERE token = ?",
+            (now, token),
+        )
+    return _user_from_row(row)
 
 
 def get_workspace_summary(user_id: str) -> WorkspaceSummary:
