@@ -31,6 +31,8 @@ Current Phase 6 groundwork:
 - Score feedback labels: `POST /evaluation/match-feedback`.
 - Tuning summary: `GET /evaluation/users/{user_id}/summary`.
 - Frontend task: `Score Evaluation`.
+- Calibration dashboard signals: accuracy rate, bias direction, outcome counts, and average score buckets.
+- Extension popup parser feedback: save page parsing quality directly from the browser extension.
 
 ## Run AI Service
 

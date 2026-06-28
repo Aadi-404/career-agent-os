@@ -32,5 +32,9 @@ class MatchFeedbackSummary(BaseModel):
     accurateCount: int
     tooHighCount: int
     tooLowCount: int
+    accuracyRate: float | None = None
+    averageScoreByAccuracy: dict[str, float] = Field(default_factory=dict)
+    outcomeCounts: dict[str, int] = Field(default_factory=dict)
+    calibrationRecommendation: str
     averageAlgorithmScore: float | None = None
     latestFeedback: list[MatchFeedbackRecord] = Field(default_factory=list)

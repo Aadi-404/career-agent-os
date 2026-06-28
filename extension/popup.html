@@ -39,6 +39,41 @@
       <textarea id="manualJd" placeholder="Paste role, company, and full job description when page parsing is weak."></textarea>
     </label>
 
+    <section class="feedbackBox">
+      <div>
+        <strong>Parser feedback</strong>
+        <small>Save this after testing a real job page.</small>
+      </div>
+      <div class="feedbackGrid">
+        <label>
+          Site
+          <select id="feedbackSite">
+            <option>LinkedIn</option>
+            <option>Naukri</option>
+            <option>Indeed</option>
+            <option>Company career page</option>
+            <option>Other</option>
+          </select>
+        </label>
+        <label>
+          Result
+          <select id="parserRating">
+            <option value="pass">Pass</option>
+            <option value="partial" selected>Partial</option>
+            <option value="fail">Fail</option>
+          </select>
+        </label>
+      </div>
+      <div class="checkGrid">
+        <label><input id="titleFound" type="checkbox" checked /> Role</label>
+        <label><input id="companyFound" type="checkbox" checked /> Company</label>
+        <label><input id="descriptionFound" type="checkbox" /> JD</label>
+        <label><input id="manualPasteUsed" type="checkbox" /> Manual paste</label>
+      </div>
+      <textarea id="feedbackNotes" class="smallText" placeholder="Example: company parsed, JD body missed, manual paste used."></textarea>
+      <button id="saveParserFeedback" type="button">Save Parser Feedback</button>
+    </section>
+
     <button id="matchJob" type="button">Match Saved Resume</button>
 
     <section id="result" class="result empty">No score yet.</section>

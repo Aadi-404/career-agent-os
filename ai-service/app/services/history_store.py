@@ -670,14 +670,45 @@ def get_match_feedback_summary(user_id: str) -> MatchFeedbackSummary:
         ).fetchall()
     records = [_match_feedback_from_row(row) for row in rows]
     scores = [record.algorithmScore for record in records if record.algorithmScore is not None]
+    average_score_by_accuracy: dict[str, float] = {}
+    for accuracy in ("accurate", "too_high", "too_low"):
+        accuracy_scores = [
+            record.algorithmScore
+            for record in records
+            if record.scoreAccuracy == accuracy and record.algorithmScore is not None
+        ]
+        if accuracy_scores:
+            average_score_by_accuracy[accuracy] = round(sum(accuracy_scores) / len(accuracy_scores), 1)
+    outcome_counts: dict[str, int] = {}
+    for record in records:
+        outcome_counts[record.outcome] = outcome_counts.get(record.outcome, 0) + 1
+    accurate_count = sum(1 for record in records if record.scoreAccuracy == "accurate")
+    too_high_count = sum(1 for record in records if record.scoreAccuracy == "too_high")
+    too_low_count = sum(1 for record in records if record.scoreAccuracy == "too_low")
     return MatchFeedbackSummary(
         feedbackCount=len(records),
-        accurateCount=sum(1 for record in records if record.scoreAccuracy == "accurate"),
-        tooHighCount=sum(1 for record in records if record.scoreAccuracy == "too_high"),
-        tooLowCount=sum(1 for record in records if record.scoreAccuracy == "too_low"),
+        accurateCount=accurate_count,
+        tooHighCount=too_high_count,
+        tooLowCount=too_low_count,
+        accuracyRate=round((accurate_count / len(records)) * 100, 1) if records else None,
+        averageScoreByAccuracy=average_score_by_accuracy,
+        outcomeCounts=outcome_counts,
+        calibrationRecommendation=_calibration_recommendation(accurate_count, too_high_count, too_low_count, len(records)),
         averageAlgorithmScore=round(sum(scores) / len(scores), 1) if scores else None,
         latestFeedback=records[:10],
     )
+
+
+def _calibration_recommendation(accurate_count: int, too_high_count: int, too_low_count: int, total_count: int) -> str:
+    if total_count < 10:
+        return "Collect at least 10 labelled matches before changing scoring weights."
+    if too_low_count > accurate_count and too_low_count >= too_high_count * 1.5:
+        return "Scores are trending low. Review semantic evidence, certification equivalence, and project evidence weights."
+    if too_high_count > accurate_count and too_high_count >= too_low_count * 1.5:
+        return "Scores are trending high. Tighten seniority, depth, and must-have requirement penalties."
+    if accurate_count >= max(too_high_count, too_low_count):
+        return "Current scoring looks stable. Keep collecting labels before large weight changes."
+    return "Feedback is mixed. Segment by role family, experience level, and JD source before tuning."
 
 
 def _get_user(connection, user_id: str) -> UserRecord:

@@ -1118,6 +1118,68 @@ button.premiumButton:not(.secondaryButton) span {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
 }
 
+.calibrationCallout {
+  display: grid;
+  gap: 5px;
+  margin-top: 14px;
+  border: 1px solid #cde5df;
+  border-radius: 8px;
+  background: #f1fbf8;
+  padding: 12px;
+}
+
+.calibrationCallout strong {
+  color: var(--brand);
+}
+
+.calibrationCallout span {
+  color: #43615e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.calibrationGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.calibrationGrid > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 10px;
+}
+
+.calibrationGrid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.calibrationGrid strong {
+  color: var(--brand);
+}
+
+.outcomeStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.outcomeStrip span {
+  border-radius: 999px;
+  background: #fff4d8;
+  color: #785d17;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .checkRow {
   display: flex;
   align-items: center;
@@ -1818,7 +1880,8 @@ pre {
   .extensionStatusGrid,
   .diagnosticGrid,
   .checkGrid,
-  .evaluationGrid {
+  .evaluationGrid,
+  .calibrationGrid {
     grid-template-columns: 1fr;
   }
 

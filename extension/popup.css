@@ -15,7 +15,8 @@ body {
 
 header,
 .jobBox,
-.result {
+.result,
+.feedbackBox {
   background: #ffffff;
   border: 1px solid #dbe3ef;
   border-radius: 8px;
@@ -48,6 +49,34 @@ label {
   grid-template-columns: 1fr auto;
 }
 
+.feedbackGrid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.checkGrid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.checkGrid label {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: row;
+  font-size: 12px;
+  gap: 6px;
+  padding: 7px;
+}
+
+.checkGrid input {
+  width: 14px;
+}
+
 input,
 select,
 textarea,
@@ -61,6 +90,10 @@ button {
 textarea {
   min-height: 130px;
   resize: vertical;
+}
+
+.smallText {
+  min-height: 64px;
 }
 
 button {

@@ -236,6 +236,8 @@ Started:
 - Score feedback labels are stored without making another LLM call.
 - Feedback tracks expected fit, score accuracy, application outcome, algorithm score, and fit category.
 - The frontend has a dedicated Score Evaluation task.
+- The Score Evaluation task now shows calibration signals: accuracy rate, average score by feedback type, outcome counts, and a tuning recommendation.
+- The extension popup can save parser quality feedback after real job-page testing.
 
 Why this matters:
 

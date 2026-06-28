@@ -18,6 +18,14 @@ const els = {
   jobTitle: document.getElementById("jobTitle"),
   jobMeta: document.getElementById("jobMeta"),
   result: document.getElementById("result"),
+  feedbackSite: document.getElementById("feedbackSite"),
+  parserRating: document.getElementById("parserRating"),
+  titleFound: document.getElementById("titleFound"),
+  companyFound: document.getElementById("companyFound"),
+  descriptionFound: document.getElementById("descriptionFound"),
+  manualPasteUsed: document.getElementById("manualPasteUsed"),
+  feedbackNotes: document.getElementById("feedbackNotes"),
+  saveParserFeedback: document.getElementById("saveParserFeedback"),
 };
 
 bootstrap();
@@ -25,6 +33,7 @@ bootstrap();
 els.claimSession.addEventListener("click", claimSession);
 els.parsePage.addEventListener("click", parseCurrentPage);
 els.matchJob.addEventListener("click", matchJob);
+els.saveParserFeedback.addEventListener("click", saveParserFeedback);
 
 async function bootstrap() {
   setStatus("Connecting...");
@@ -80,7 +89,41 @@ async function parseCurrentPage() {
   els.manualJd.value = draft.description || "";
   els.jobTitle.textContent = draft.title || "Job parsed";
   els.jobMeta.textContent = `${draft.company || "Company unknown"} | ${draft.location || "Location unknown"} | ${draft.parseConfidence} confidence`;
+  els.titleFound.checked = Boolean(draft.title);
+  els.companyFound.checked = Boolean(draft.company);
+  els.descriptionFound.checked = Boolean(draft.description && draft.description.length >= 50);
+  els.parserRating.value = draft.parseConfidence === "high" ? "pass" : draft.parseConfidence === "medium" ? "partial" : "fail";
   setStatus(draft.warnings?.length ? "Review JD text" : "Page parsed");
+}
+
+async function saveParserFeedback() {
+  const userId = els.userId.value.trim();
+  if (!userId || !state.sessionToken) {
+    setStatus("Connect user before saving feedback");
+    return;
+  }
+  const description = els.manualJd.value.trim();
+  setStatus("Saving parser feedback...");
+  els.saveParserFeedback.disabled = true;
+  try {
+    await post("/extension/validation-results", {
+      userId,
+      site: els.feedbackSite.value,
+      url: state.jobDraft?.url || null,
+      parserRating: els.parserRating.value,
+      autoParsed: Boolean(state.jobDraft),
+      manualPasteUsed: els.manualPasteUsed.checked || description !== (state.jobDraft?.description || ""),
+      titleFound: els.titleFound.checked,
+      companyFound: els.companyFound.checked,
+      descriptionFound: els.descriptionFound.checked || description.length >= 50,
+      notes: els.feedbackNotes.value.trim() || null,
+    });
+    setStatus("Parser feedback saved");
+  } catch (error) {
+    setStatus(error.message || "Feedback save failed");
+  } finally {
+    els.saveParserFeedback.disabled = false;
+  }
 }
 
 async function matchJob() {

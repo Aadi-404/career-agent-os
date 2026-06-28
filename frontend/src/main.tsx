@@ -218,6 +218,10 @@ type MatchFeedbackSummary = {
   accurateCount: number;
   tooHighCount: number;
   tooLowCount: number;
+  accuracyRate?: number | null;
+  averageScoreByAccuracy: Record<string, number>;
+  outcomeCounts: Record<string, number>;
+  calibrationRecommendation: string;
   averageAlgorithmScore?: number | null;
   latestFeedback: Array<{
     id: string;
@@ -2144,7 +2148,33 @@ function EvaluationPanel({
           <div className="scoreTile"><span>Too high</span><strong>{summary?.tooHighCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Too low</span><strong>{summary?.tooLowCount ?? 0}</strong></div>
         </div>
-        <p className="hint">Average stored algorithm score: {summary?.averageAlgorithmScore ?? "No data yet"}</p>
+        <div className="calibrationCallout">
+          <strong>{summary?.accuracyRate === null || summary?.accuracyRate === undefined ? "No accuracy rate yet" : `${summary.accuracyRate}% labelled accurate`}</strong>
+          <span>{summary?.calibrationRecommendation ?? "Collect labels from real resume/JD matches to start calibration."}</span>
+        </div>
+        <div className="calibrationGrid">
+          <div>
+            <span>Average score</span>
+            <strong>{summary?.averageAlgorithmScore ?? "No data"}</strong>
+          </div>
+          <div>
+            <span>Accurate avg</span>
+            <strong>{summary?.averageScoreByAccuracy?.accurate ?? "n/a"}</strong>
+          </div>
+          <div>
+            <span>Too high avg</span>
+            <strong>{summary?.averageScoreByAccuracy?.too_high ?? "n/a"}</strong>
+          </div>
+          <div>
+            <span>Too low avg</span>
+            <strong>{summary?.averageScoreByAccuracy?.too_low ?? "n/a"}</strong>
+          </div>
+        </div>
+        {summary && Object.keys(summary.outcomeCounts).length > 0 && (
+          <div className="outcomeStrip">
+            {Object.entries(summary.outcomeCounts).map(([key, value]) => <span key={key}>{key}: {value}</span>)}
+          </div>
+        )}
         <div className="compactList">
           {(summary?.latestFeedback ?? []).map((item) => (
             <div key={item.id}>
