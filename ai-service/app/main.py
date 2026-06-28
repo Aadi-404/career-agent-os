@@ -66,7 +66,12 @@ from app.models.jd_parse import JdParseRequest, JdParseResponse
 from app.models.prep_memory import PrepMemoryResponse
 from app.models.resume_extract import ResumeExtractResponse
 from app.models.resume_normalize import ResumeNormalizeRequest, ResumeNormalizeResponse
-from app.models.scoring_config import ScoringCalibrationConfig, ScoringCalibrationListResponse, ScoringCalibrationUpdateRequest
+from app.models.scoring_config import (
+    ScoringCalibrationConfig,
+    ScoringCalibrationListResponse,
+    ScoringCalibrationRecommendation,
+    ScoringCalibrationUpdateRequest,
+)
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.history_store import (
     create_or_touch_anonymous_session,
@@ -110,7 +115,7 @@ from app.services.preparation_service import build_preparation_intelligence
 from app.services.prep_memory_service import build_prep_memory
 from app.services.resume_extractor import extract_resume
 from app.services.resume_normalizer import normalize_resume
-from app.services.scoring_config_service import list_scoring_calibrations, save_scoring_calibration
+from app.services.scoring_config_service import list_scoring_calibrations, recommend_scoring_calibration, save_scoring_calibration
 
 app = FastAPI(title="Career Agent OS AI Service", version="0.1.0")
 settings = get_settings()
@@ -559,6 +564,11 @@ def get_scoring_calibration_settings(user_id: str) -> ScoringCalibrationListResp
 @app.put("/settings/scoring-calibration", response_model=ScoringCalibrationConfig)
 def update_scoring_calibration_settings(request: ScoringCalibrationUpdateRequest) -> ScoringCalibrationConfig:
     return save_scoring_calibration(request)
+
+
+@app.get("/settings/users/{user_id}/scoring-calibration/{role_family}/recommendation", response_model=ScoringCalibrationRecommendation)
+def get_scoring_calibration_recommendation(user_id: str, role_family: str) -> ScoringCalibrationRecommendation:
+    return recommend_scoring_calibration(user_id, role_family)
 
 
 def _default_extension_candidate_context(request: ExtensionMatchRequest) -> CandidateContext:

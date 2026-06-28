@@ -37,6 +37,8 @@ Current Phase 6 groundwork:
 - Role-family calibration: segment labels by `.NET`, Java, Python, Frontend, Data/AI, Cloud/DevOps, or General Software.
 - Scoring calibration settings: edit role-family category weights from the Admin settings UI.
 - Calibrated scoring: match requests can use saved user calibration without extra LLM calls.
+- Calibration recommendations: propose weight changes from labelled feedback.
+- Approval flow: suggestions apply to a draft first; admins must explicitly save before scoring changes.
 
 ## Run AI Service
 

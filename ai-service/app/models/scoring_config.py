@@ -35,3 +35,14 @@ class ScoringCalibrationUpdateRequest(BaseModel):
 class ScoringCalibrationListResponse(BaseModel):
     userId: str
     configs: list[ScoringCalibrationConfig] = Field(default_factory=list)
+
+
+class ScoringCalibrationRecommendation(BaseModel):
+    userId: str
+    roleFamily: str
+    currentWeights: dict[str, int] = Field(default_factory=dict)
+    suggestedWeights: dict[str, int] = Field(default_factory=dict)
+    confidence: str
+    sampleSize: int
+    reason: str
+    changes: list[str] = Field(default_factory=list)

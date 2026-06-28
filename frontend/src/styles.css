@@ -1253,6 +1253,40 @@ button.premiumButton:not(.secondaryButton) span {
   font-weight: 850;
 }
 
+.recommendationPanel {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+  border: 1px solid #d4e5e2;
+  border-radius: 8px;
+  background: #f5fbfa;
+  padding: 12px;
+}
+
+.recommendationPanel > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.recommendationPanel strong {
+  color: var(--brand);
+  text-transform: capitalize;
+}
+
+.recommendationPanel span,
+.recommendationPanel p,
+.recommendationPanel li {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.recommendationPanel ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .checkRow {
   display: flex;
   align-items: center;

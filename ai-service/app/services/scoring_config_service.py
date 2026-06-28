@@ -3,7 +3,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.db import get_connection
-from app.models.scoring_config import ROLE_FAMILIES, ScoringCalibrationConfig, ScoringCalibrationListResponse, ScoringCalibrationUpdateRequest
+from app.models.scoring_config import (
+    ROLE_FAMILIES,
+    ScoringCalibrationConfig,
+    ScoringCalibrationListResponse,
+    ScoringCalibrationRecommendation,
+    ScoringCalibrationUpdateRequest,
+)
 
 
 BASE_WEIGHTS_2_TO_4 = {
@@ -114,6 +120,69 @@ def save_scoring_calibration(request: ScoringCalibrationUpdateRequest) -> Scorin
     return _config_from_row(row)
 
 
+def recommend_scoring_calibration(user_id: str, role_family: str) -> ScoringCalibrationRecommendation:
+    family = normalize_role_family(role_family)
+    current = _current_or_default_weights(user_id, family)
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT score_accuracy, expected_fit, outcome, algorithm_score
+            FROM match_feedback
+            WHERE user_id = ? AND COALESCE(role_family, 'General Software') = ?
+            ORDER BY created_at DESC
+            LIMIT 100
+            """,
+            (user_id, family),
+        ).fetchall()
+    total = len(rows)
+    too_low = sum(1 for row in rows if row["score_accuracy"] == "too_low")
+    too_high = sum(1 for row in rows if row["score_accuracy"] == "too_high")
+    accurate = sum(1 for row in rows if row["score_accuracy"] == "accurate")
+    suggested = dict(current)
+    changes: list[str] = []
+
+    if total < 8:
+        return ScoringCalibrationRecommendation(
+            userId=user_id,
+            roleFamily=family,
+            currentWeights=current,
+            suggestedWeights=suggested,
+            confidence="low",
+            sampleSize=total,
+            reason="Collect at least 8 labelled matches in this role family before applying weight recommendations.",
+            changes=[],
+        )
+
+    if too_low > max(accurate, too_high) and too_low >= 3:
+        _move_weight(suggested, "experienceFit", "dynamicRequirementFit", 2, changes)
+        _move_weight(suggested, "problemSolving", "projectRelevance", 1, changes)
+        _move_weight(suggested, "systemReadiness", "technicalDepth", 1, changes)
+        reason = "Feedback says scores are often too low, so the suggestion gives more credit to semantic requirement fit, project proof, and technical depth."
+    elif too_high > max(accurate, too_low) and too_high >= 3:
+        _move_weight(suggested, "dynamicRequirementFit", "experienceFit", 2, changes)
+        _move_weight(suggested, "projectRelevance", "deliveryReadiness", 1, changes)
+        _move_weight(suggested, "technicalDepth", "systemReadiness", 1, changes)
+        reason = "Feedback says scores are often too high, so the suggestion increases experience, delivery, and system-readiness pressure."
+    else:
+        reason = "Feedback is balanced or mostly accurate; no major weight shift is recommended yet."
+
+    suggested = _align_weights(suggested, current)
+    confidence = "high" if total >= 25 else "medium"
+    if not changes:
+        confidence = "medium" if total >= 25 else "low"
+
+    return ScoringCalibrationRecommendation(
+        userId=user_id,
+        roleFamily=family,
+        currentWeights=current,
+        suggestedWeights=suggested,
+        confidence=confidence,
+        sampleSize=total,
+        reason=reason,
+        changes=changes,
+    )
+
+
 def get_effective_weights(user_id: str | None, role_family: str | None, fallback_weights: dict[str, int]) -> dict[str, int]:
     if not user_id:
         return fallback_weights
@@ -127,6 +196,25 @@ def get_effective_weights(user_id: str | None, role_family: str | None, fallback
         default = DEFAULT_ROLE_WEIGHTS.get(family)
         return _align_weights(default or fallback_weights, fallback_weights)
     return _align_weights(json.loads(row["category_weights_json"]), fallback_weights)
+
+
+def _current_or_default_weights(user_id: str, role_family: str) -> dict[str, int]:
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM scoring_calibration_configs WHERE user_id = ? AND role_family = ?",
+            (user_id, role_family),
+        ).fetchone()
+    if row:
+        return json.loads(row["category_weights_json"])
+    return DEFAULT_ROLE_WEIGHTS.get(role_family, DEFAULT_ROLE_WEIGHTS["General Software"])
+
+
+def _move_weight(weights: dict[str, int], source: str, target: str, amount: int, changes: list[str]) -> None:
+    if source not in weights or target not in weights or weights[source] < amount:
+        return
+    weights[source] -= amount
+    weights[target] += amount
+    changes.append(f"Move {amount}% from {source} to {target}.")
 
 
 def normalize_role_family(role_family: str | None) -> str:

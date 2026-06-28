@@ -242,6 +242,8 @@ Started:
 - Calibration is segmented by role family so `.NET`, Java, Python, Frontend, Data/AI, and Cloud/DevOps can be tuned separately.
 - Scoring calibration settings are now editable from the Admin settings UI.
 - The matching engine can apply saved role-family weights while keeping score breakdowns explainable.
+- Calibration recommendations can propose role-family weight changes from labelled feedback.
+- Recommended weights are applied to a draft first and require explicit admin save approval.
 
 Why this matters:
 

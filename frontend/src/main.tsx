@@ -114,6 +114,17 @@ type ScoringCalibrationConfig = {
   updatedAt?: string | null;
 };
 
+type ScoringCalibrationRecommendation = {
+  userId: string;
+  roleFamily: string;
+  currentWeights: Record<string, number>;
+  suggestedWeights: Record<string, number>;
+  confidence: string;
+  sampleSize: number;
+  reason: string;
+  changes: string[];
+};
+
 type HistoryAnalysisRecord = {
   id: string;
   title: string;
@@ -412,6 +423,7 @@ function App() {
   const [evaluationSummary, setEvaluationSummary] = useState<MatchFeedbackSummary | null>(null);
   const [evaluationInfo, setEvaluationInfo] = useState("");
   const [scoringConfigs, setScoringConfigs] = useState<ScoringCalibrationConfig[]>([]);
+  const [scoringRecommendation, setScoringRecommendation] = useState<ScoringCalibrationRecommendation | null>(null);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
@@ -893,6 +905,21 @@ function App() {
       setSettingsInfo(`Saved scoring weights for ${saved.roleFamily}. New scores will use this calibration.`);
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "Scoring calibration save failed");
+    }
+  }
+
+  async function loadScoringRecommendation(roleFamily: string) {
+    setSettingsInfo("");
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration/${encodeURIComponent(roleFamily)}/recommendation`);
+      if (!response.ok) throw new Error("Scoring recommendation unavailable");
+      const recommendation = await response.json() as ScoringCalibrationRecommendation;
+      setScoringRecommendation(recommendation);
+      setSettingsInfo(`Loaded ${recommendation.confidence}-confidence recommendation from ${recommendation.sampleSize} label(s).`);
+    } catch (err) {
+      setScoringRecommendation(null);
+      setSettingsInfo(err instanceof Error ? err.message : "Scoring recommendation unavailable");
     }
   }
 
@@ -1898,9 +1925,11 @@ function App() {
             >
               <ScoringSettingsPanel
                 configs={scoringConfigs}
+                recommendation={scoringRecommendation}
                 info={settingsInfo}
                 onRefresh={loadScoringConfigs}
                 onSave={saveScoringConfig}
+                onRecommend={loadScoringRecommendation}
               />
             </TaskPanel>
           )}
@@ -2387,14 +2416,18 @@ function EvaluationPanel({
 
 function ScoringSettingsPanel({
   configs,
+  recommendation,
   info,
   onRefresh,
   onSave,
+  onRecommend,
 }: {
   configs: ScoringCalibrationConfig[];
+  recommendation: ScoringCalibrationRecommendation | null;
   info: string;
   onRefresh: () => void;
   onSave: (config: ScoringCalibrationConfig) => void;
+  onRecommend: (roleFamily: string) => void;
 }) {
   const [selectedFamily, setSelectedFamily] = useState(".NET");
   const activeConfig = configs.find((config) => config.roleFamily === selectedFamily) ?? configs[0];
@@ -2455,6 +2488,33 @@ function ScoringSettingsPanel({
             </label>
           ))}
         </div>
+        <div className="actionBar">
+          <button type="button" className="secondaryButton" onClick={() => activeConfig && onRecommend(activeConfig.roleFamily)}>
+            Generate Suggestion
+          </button>
+          <button
+            type="button"
+            className="secondaryButton"
+            disabled={!recommendation || recommendation.roleFamily !== activeConfig?.roleFamily}
+            onClick={() => recommendation && setDraftWeights(recommendation.suggestedWeights)}
+          >
+            Apply Suggestion to Draft
+          </button>
+        </div>
+        {recommendation && recommendation.roleFamily === activeConfig?.roleFamily && (
+          <div className="recommendationPanel">
+            <div>
+              <strong>{recommendation.confidence} confidence</strong>
+              <span>{recommendation.sampleSize} labelled match(es)</span>
+            </div>
+            <p>{recommendation.reason}</p>
+            {recommendation.changes.length > 0 ? (
+              <ul>{recommendation.changes.map((change) => <li key={change}>{change}</li>)}</ul>
+            ) : (
+              <p className="hint">No weight movement is recommended yet.</p>
+            )}
+          </div>
+        )}
         <button
           type="button"
           disabled={!activeConfig || total !== 100}
