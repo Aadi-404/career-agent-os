@@ -5,6 +5,7 @@ from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import initialize_database
+from app.core.config import get_settings
 from app.models.analysis import (
     AnalyzeRequest,
     AnalysisResponse,
@@ -20,6 +21,8 @@ from app.models.analysis import (
 from app.models.extension import (
     ExtensionBootstrapRequest,
     ExtensionBootstrapResponse,
+    ExtensionDiagnosticsRequest,
+    ExtensionDiagnosticsResponse,
     ExtensionJobDraft,
     ExtensionMatchRequest,
     ExtensionMatchResponse,
@@ -93,10 +96,11 @@ from app.services.resume_extractor import extract_resume
 from app.services.resume_normalizer import normalize_resume
 
 app = FastAPI(title="Career Agent OS AI Service", version="0.1.0")
+settings = get_settings()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[origin.strip() for origin in settings.cors_allow_origins.split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -111,6 +115,16 @@ def startup() -> None:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready() -> dict[str, str]:
+    initialize_database()
+    return {
+        "status": "ready",
+        "environment": settings.environment,
+        "corsOrigins": settings.cors_allow_origins,
+    }
 
 
 @app.post("/ai/resume-jd/analyze", response_model=AnalysisResponse)
@@ -161,6 +175,53 @@ def bootstrap_extension(request: ExtensionBootstrapRequest) -> ExtensionBootstra
             if not resumes
             else None
         ),
+    )
+
+
+@app.post("/extension/diagnostics", response_model=ExtensionDiagnosticsResponse)
+def extension_diagnostics(request: ExtensionDiagnosticsRequest) -> ExtensionDiagnosticsResponse:
+    checks = ["Backend API reachable", "PostgreSQL schema initialized"]
+    warnings = []
+    user_id = request.userId
+    session_ok = False
+    if request.sessionToken:
+        try:
+            user_session = _extension_user_session_from_token(request.sessionToken)
+            user_id = user_session.userId
+            session_ok = True
+            checks.append("Extension session token resolved")
+        except HTTPException:
+            warnings.append("Session token is invalid or expired. Reconnect from the extension.")
+    elif user_id:
+        checks.append("Development user id provided")
+    else:
+        warnings.append("No user id or session token provided. Extension can parse pages but cannot load saved resumes.")
+
+    resume_count = 0
+    if user_id:
+        try:
+            resume_count = len(list_extension_resumes(user_id))
+            if resume_count:
+                checks.append("Saved resumes available")
+            else:
+                warnings.append("No saved resumes found. Save a resume from the web app before matching from the extension.")
+        except HTTPException:
+            warnings.append("User was not found. Create or connect the user before extension matching.")
+            user_id = None
+
+    if request.anonymousSessionId:
+        create_or_touch_anonymous_session(AnonymousSessionCreateRequest(anonymousSessionId=request.anonymousSessionId))
+        checks.append("Anonymous session available for pre-login tracking")
+
+    return ExtensionDiagnosticsResponse(
+        backendOk=True,
+        sessionOk=session_ok,
+        userId=user_id,
+        resumeCount=resume_count,
+        canMatchSavedResume=bool(user_id and resume_count),
+        manualPasteRequired=not bool(resume_count),
+        checks=checks,
+        warnings=warnings,
     )
 
 

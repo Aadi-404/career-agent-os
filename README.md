@@ -19,6 +19,12 @@ The step-by-step product direction is documented in:
 docs/CAREER_AGENT_OS_ROADMAP.md
 ```
 
+Phase 5 deployment and extension validation details are documented in:
+
+```text
+docs/PHASE_5_PRODUCTION_READINESS.md
+```
+
 ## Run AI Service
 
 ```powershell
@@ -35,6 +41,12 @@ Swagger:
 http://localhost:8000/docs
 ```
 
+Readiness:
+
+```text
+http://localhost:8000/ready
+```
+
 ## Run Frontend
 
 ```powershell
@@ -47,6 +59,35 @@ Frontend:
 
 ```text
 http://localhost:5173
+```
+
+## Docker Compose
+
+```powershell
+cd C:\Code\AI\career-agent-os
+docker compose up --build
+```
+
+Services:
+
+```text
+Frontend: http://localhost:8080
+AI service: http://localhost:8001
+PostgreSQL: localhost:5432
+```
+
+## Browser Extension
+
+Load the unpacked extension from:
+
+```text
+C:\Code\AI\career-agent-os\extension
+```
+
+Then open the web app and use:
+
+```text
+Task 5 -> Extension Setup -> Check Extension Readiness
 ```
 
 ## Level 1 Request Shape

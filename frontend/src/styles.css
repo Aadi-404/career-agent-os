@@ -1043,6 +1043,20 @@ button.premiumButton:not(.secondaryButton) span {
   padding: 2px 5px;
 }
 
+.diagnosticGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.diagnosticGrid h4 {
+  margin: 0 0 10px;
+}
+
 .checkRow {
   display: flex;
   align-items: center;
@@ -1740,7 +1754,8 @@ pre {
   .premiumActionGrid,
   .costModeGrid,
   .extensionSetupGrid,
-  .extensionStatusGrid {
+  .extensionStatusGrid,
+  .diagnosticGrid {
     grid-template-columns: 1fr;
   }
 

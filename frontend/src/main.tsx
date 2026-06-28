@@ -188,6 +188,17 @@ type HistoryJobOpportunityRecord = {
   updatedAt: string;
 };
 
+type ExtensionDiagnostics = {
+  backendOk: boolean;
+  sessionOk: boolean;
+  userId?: string | null;
+  resumeCount: number;
+  canMatchSavedResume: boolean;
+  manualPasteRequired: boolean;
+  checks: string[];
+  warnings: string[];
+};
+
 type WorkspaceSummary = {
   resumeCount: number;
   jobDescriptionCount: number;
@@ -322,6 +333,7 @@ function App() {
   const [extensionSetupInfo, setExtensionSetupInfo] = useState("");
   const [extensionChecking, setExtensionChecking] = useState(false);
   const [extensionResumeCount, setExtensionResumeCount] = useState<number | null>(null);
+  const [extensionDiagnostics, setExtensionDiagnostics] = useState<ExtensionDiagnostics | null>(null);
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
   const [resumeHistory, setResumeHistory] = useState<HistoryResumeRecord[]>([]);
@@ -590,10 +602,10 @@ function App() {
     setExtensionChecking(true);
     setExtensionSetupInfo("");
     try {
-      const healthResponse = await fetch(`${API_BASE_URL}/health`);
+      const healthResponse = await fetch(`${API_BASE_URL}/ready`);
       if (!healthResponse.ok) throw new Error("Backend health check failed");
       await ensureLocalUser();
-      const bootstrapResponse = await fetch(`${API_BASE_URL}/extension/bootstrap`, {
+      const diagnosticsResponse = await fetch(`${API_BASE_URL}/extension/diagnostics`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -601,15 +613,17 @@ function App() {
           anonymousSessionId: null,
         }),
       });
-      if (!bootstrapResponse.ok) throw new Error("Extension bootstrap check failed");
-      const bootstrap = await bootstrapResponse.json() as { resumes: unknown[]; manualPasteRequired: boolean };
-      setExtensionResumeCount(bootstrap.resumes.length);
+      if (!diagnosticsResponse.ok) throw new Error("Extension diagnostics check failed");
+      const diagnostics = await diagnosticsResponse.json() as ExtensionDiagnostics;
+      setExtensionDiagnostics(diagnostics);
+      setExtensionResumeCount(diagnostics.resumeCount);
       setExtensionSetupInfo(
-        bootstrap.resumes.length
-          ? `Backend is ready. ${bootstrap.resumes.length} saved resume(s) are available for extension matching.`
+        diagnostics.canMatchSavedResume
+          ? `Backend is ready. ${diagnostics.resumeCount} saved resume(s) are available for extension matching.`
           : "Backend is ready, but no saved resumes are available. Run a score once or save a resume first.",
       );
     } catch (err) {
+      setExtensionDiagnostics(null);
       setExtensionResumeCount(null);
       setExtensionSetupInfo(err instanceof Error ? err.message : "Extension setup check failed");
     } finally {
@@ -1583,6 +1597,7 @@ function App() {
                 checking={extensionChecking}
                 setupInfo={extensionSetupInfo}
                 resumeCount={extensionResumeCount}
+                diagnostics={extensionDiagnostics}
                 onCheck={checkExtensionSetup}
               />
             </TaskPanel>
@@ -1726,6 +1741,7 @@ function ExtensionSetupPanel({
   checking,
   setupInfo,
   resumeCount,
+  diagnostics,
   onCheck,
 }: {
   backendUrl: string;
@@ -1733,6 +1749,7 @@ function ExtensionSetupPanel({
   checking: boolean;
   setupInfo: string;
   resumeCount: number | null;
+  diagnostics: ExtensionDiagnostics | null;
   onCheck: () => void;
 }) {
   return (
@@ -1761,6 +1778,22 @@ function ExtensionSetupPanel({
           {checking ? "Checking..." : "Check Extension Readiness"}
         </button>
         {setupInfo && <p className="hint">{setupInfo}</p>}
+        {diagnostics && (
+          <div className="diagnosticGrid">
+            <div>
+              <h4>Checks</h4>
+              <ul>{diagnostics.checks.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+            <div>
+              <h4>Warnings</h4>
+              {diagnostics.warnings.length ? (
+                <ul>{diagnostics.warnings.map((item) => <li key={item}>{item}</li>)}</ul>
+              ) : (
+                <p className="hint">No warnings. Extension matching is ready for saved resumes.</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="panel">

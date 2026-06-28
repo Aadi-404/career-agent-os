@@ -108,3 +108,20 @@ class ExtensionMatchRequest(BaseModel):
 class ExtensionMatchResponse(BaseModel):
     analysis: AnalysisResponse
     jobOpportunity: JobOpportunityRecord | None = None
+
+
+class ExtensionDiagnosticsRequest(BaseModel):
+    userId: str | None = Field(default=None, min_length=2, max_length=80)
+    sessionToken: str | None = Field(default=None, min_length=20, max_length=240)
+    anonymousSessionId: str | None = Field(default=None, min_length=8, max_length=120)
+
+
+class ExtensionDiagnosticsResponse(BaseModel):
+    backendOk: bool
+    sessionOk: bool
+    userId: str | None = None
+    resumeCount: int = Field(ge=0)
+    canMatchSavedResume: bool
+    manualPasteRequired: bool
+    checks: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
