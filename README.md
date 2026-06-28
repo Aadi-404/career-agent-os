@@ -25,6 +25,13 @@ Phase 5 deployment and extension validation details are documented in:
 docs/PHASE_5_PRODUCTION_READINESS.md
 ```
 
+Current Phase 6 groundwork:
+
+- Extension validation records: `POST /extension/validation-results`.
+- Score feedback labels: `POST /evaluation/match-feedback`.
+- Tuning summary: `GET /evaluation/users/{user_id}/summary`.
+- Frontend task: `Score Evaluation`.
+
 ## Run AI Service
 
 ```powershell

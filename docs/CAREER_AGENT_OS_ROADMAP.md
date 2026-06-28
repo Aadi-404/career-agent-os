@@ -218,6 +218,30 @@ This slice adds:
 - Structured JD parsing models
 - Experience-wise technical scoring weights
 - Score breakdown response fields
+
+## Phase 5: Extension and Production Readiness
+
+Completed:
+
+- Docker-ready frontend and backend setup.
+- PostgreSQL-only persistence path.
+- Browser extension setup and session-token flow.
+- Extension diagnostics from the web app.
+- Real-site extension validation records for LinkedIn, Naukri, Indeed, company pages, or manual paste fallback.
+
+## Phase 6: Evaluation and Tuning Groundwork
+
+Started:
+
+- Score feedback labels are stored without making another LLM call.
+- Feedback tracks expected fit, score accuracy, application outcome, algorithm score, and fit category.
+- The frontend has a dedicated Score Evaluation task.
+
+Why this matters:
+
+- Parser bugs can be tracked per website.
+- Scoring can later be tuned from real examples instead of guesswork.
+- It creates the dataset needed for calibration, regression tests, and future ML refinement.
 - Dynamic requirement match matrix for JD requirement to resume evidence mapping
 - JD requirement extraction from actual JD wording instead of a fixed skill whitelist
 - Provider-backed embedding similarity for meaning-based JD/resume evidence matching

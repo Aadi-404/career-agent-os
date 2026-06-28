@@ -18,6 +18,7 @@ from app.models.analysis import (
     RequirementMatch,
     ResumeImprovement,
 )
+from app.models.evaluation import MatchFeedbackRecord, MatchFeedbackSaveRequest, MatchFeedbackSummary
 from app.models.extension import (
     ExtensionBootstrapRequest,
     ExtensionBootstrapResponse,
@@ -31,6 +32,8 @@ from app.models.extension import (
     ExtensionSessionClaimRequest,
     ExtensionSessionClaimResponse,
     ExtensionUserSession,
+    ExtensionValidationRecord,
+    ExtensionValidationSaveRequest,
 )
 from app.models.history import (
     AnonymousSessionCreateRequest,
@@ -83,6 +86,10 @@ from app.services.history_store import (
     update_preparation_session_progress,
     update_job_opportunity_status,
     update_job_opportunity_optional_artifact,
+    save_extension_validation,
+    list_extension_validations,
+    save_match_feedback,
+    get_match_feedback_summary,
 )
 from app.services.jd_parser import parse_jd
 from app.services.optional_artifact_service import (
@@ -502,6 +509,26 @@ def update_job_opportunity_optional_artifact_record(
     request: OptionalArtifactUsageUpdateRequest,
 ) -> JobOpportunityRecord:
     return update_job_opportunity_optional_artifact(job_opportunity_id, request)
+
+
+@app.post("/extension/validation-results", response_model=ExtensionValidationRecord)
+def create_extension_validation_result(request: ExtensionValidationSaveRequest) -> ExtensionValidationRecord:
+    return save_extension_validation(request)
+
+
+@app.get("/extension/users/{user_id}/validation-results", response_model=list[ExtensionValidationRecord])
+def get_extension_validation_results(user_id: str) -> list[ExtensionValidationRecord]:
+    return list_extension_validations(user_id)
+
+
+@app.post("/evaluation/match-feedback", response_model=MatchFeedbackRecord)
+def create_match_feedback(request: MatchFeedbackSaveRequest) -> MatchFeedbackRecord:
+    return save_match_feedback(request)
+
+
+@app.get("/evaluation/users/{user_id}/summary", response_model=MatchFeedbackSummary)
+def get_evaluation_summary(user_id: str) -> MatchFeedbackSummary:
+    return get_match_feedback_summary(user_id)
 
 
 def _default_extension_candidate_context(request: ExtensionMatchRequest) -> CandidateContext:

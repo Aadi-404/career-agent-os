@@ -76,7 +76,7 @@ type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
-type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "extension";
+type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "extension" | "evaluation";
 type CostMode = "free" | "standard" | "premium";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
 
@@ -197,6 +197,38 @@ type ExtensionDiagnostics = {
   manualPasteRequired: boolean;
   checks: string[];
   warnings: string[];
+};
+
+type ExtensionValidationRecord = {
+  id: string;
+  site: string;
+  url?: string | null;
+  parserRating: "pass" | "partial" | "fail";
+  autoParsed: boolean;
+  manualPasteUsed: boolean;
+  titleFound: boolean;
+  companyFound: boolean;
+  descriptionFound: boolean;
+  notes?: string | null;
+  createdAt: string;
+};
+
+type MatchFeedbackSummary = {
+  feedbackCount: number;
+  accurateCount: number;
+  tooHighCount: number;
+  tooLowCount: number;
+  averageAlgorithmScore?: number | null;
+  latestFeedback: Array<{
+    id: string;
+    expectedFit: string;
+    scoreAccuracy: string;
+    outcome: string;
+    algorithmScore?: number | null;
+    fitCategory?: string | null;
+    notes?: string | null;
+    createdAt: string;
+  }>;
 };
 
 type WorkspaceSummary = {
@@ -334,6 +366,10 @@ function App() {
   const [extensionChecking, setExtensionChecking] = useState(false);
   const [extensionResumeCount, setExtensionResumeCount] = useState<number | null>(null);
   const [extensionDiagnostics, setExtensionDiagnostics] = useState<ExtensionDiagnostics | null>(null);
+  const [extensionValidations, setExtensionValidations] = useState<ExtensionValidationRecord[]>([]);
+  const [extensionValidationInfo, setExtensionValidationInfo] = useState("");
+  const [evaluationSummary, setEvaluationSummary] = useState<MatchFeedbackSummary | null>(null);
+  const [evaluationInfo, setEvaluationInfo] = useState("");
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
   const [resumeHistory, setResumeHistory] = useState<HistoryResumeRecord[]>([]);
@@ -350,6 +386,12 @@ function App() {
   useEffect(() => {
     if (activeTask === "history") {
       loadHistory();
+    }
+    if (activeTask === "extension") {
+      loadExtensionValidations();
+    }
+    if (activeTask === "evaluation") {
+      loadEvaluationSummary();
     }
   }, [activeTask]);
 
@@ -628,6 +670,90 @@ function App() {
       setExtensionSetupInfo(err instanceof Error ? err.message : "Extension setup check failed");
     } finally {
       setExtensionChecking(false);
+    }
+  }
+
+  async function loadExtensionValidations() {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/extension/users/${defaultUserId}/validation-results`);
+      if (!response.ok) throw new Error("Extension validation history unavailable");
+      setExtensionValidations(await response.json() as ExtensionValidationRecord[]);
+    } catch (err) {
+      setExtensionValidationInfo(err instanceof Error ? err.message : "Extension validation history unavailable");
+    }
+  }
+
+  async function saveExtensionValidation(payload: {
+    site: string;
+    url: string;
+    parserRating: "pass" | "partial" | "fail";
+    autoParsed: boolean;
+    manualPasteUsed: boolean;
+    titleFound: boolean;
+    companyFound: boolean;
+    descriptionFound: boolean;
+    notes: string;
+  }) {
+    setExtensionValidationInfo("");
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/extension/validation-results`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: defaultUserId,
+          ...payload,
+          url: payload.url.trim() || null,
+          notes: payload.notes.trim() || null,
+        }),
+      });
+      if (!response.ok) throw new Error("Extension validation save failed");
+      const saved = await response.json() as ExtensionValidationRecord;
+      setExtensionValidations((items) => [saved, ...items].slice(0, 25));
+      setExtensionValidationInfo(`Saved ${saved.site} validation as ${saved.parserRating}.`);
+    } catch (err) {
+      setExtensionValidationInfo(err instanceof Error ? err.message : "Extension validation save failed");
+    }
+  }
+
+  async function loadEvaluationSummary() {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/evaluation/users/${defaultUserId}/summary`);
+      if (!response.ok) throw new Error("Evaluation summary unavailable");
+      setEvaluationSummary(await response.json() as MatchFeedbackSummary);
+    } catch (err) {
+      setEvaluationInfo(err instanceof Error ? err.message : "Evaluation summary unavailable");
+    }
+  }
+
+  async function saveMatchFeedback(payload: {
+    expectedFit: "strong" | "good" | "partial" | "weak";
+    scoreAccuracy: "accurate" | "too_high" | "too_low";
+    outcome: "not_applied" | "applied" | "shortlisted" | "interview" | "rejected" | "offer" | "no_response";
+    notes: string;
+  }) {
+    setEvaluationInfo("");
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/evaluation/match-feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: defaultUserId,
+          analysisId: lastSavedAnalysisId,
+          expectedFit: payload.expectedFit,
+          scoreAccuracy: payload.scoreAccuracy,
+          outcome: payload.outcome,
+          notes: payload.notes.trim() || null,
+        }),
+      });
+      if (!response.ok) throw new Error("Match feedback save failed");
+      setEvaluationInfo("Saved feedback for the latest analysis.");
+      await loadEvaluationSummary();
+    } catch (err) {
+      setEvaluationInfo(err instanceof Error ? err.message : "Match feedback save failed");
     }
   }
 
@@ -1598,7 +1724,27 @@ function App() {
                 setupInfo={extensionSetupInfo}
                 resumeCount={extensionResumeCount}
                 diagnostics={extensionDiagnostics}
+                validations={extensionValidations}
+                validationInfo={extensionValidationInfo}
                 onCheck={checkExtensionSetup}
+                onSaveValidation={saveExtensionValidation}
+              />
+            </TaskPanel>
+          )}
+
+          {activeTask === "evaluation" && (
+            <TaskPanel
+              eyebrow="Phase 6"
+              title="Score Evaluation"
+              description="Label real analysis results so the scoring weights can be tuned from evidence instead of assumptions."
+            >
+              <EvaluationPanel
+                result={result}
+                lastSavedAnalysisId={lastSavedAnalysisId}
+                summary={evaluationSummary}
+                info={evaluationInfo}
+                onRefresh={loadEvaluationSummary}
+                onSaveFeedback={saveMatchFeedback}
               />
             </TaskPanel>
           )}
@@ -1686,6 +1832,12 @@ function TaskNav({
       description: "Install and connect",
       status: "Ready",
     },
+    {
+      id: "evaluation",
+      label: "Score Evaluation",
+      description: "Label score quality",
+      status: hasResult ? "Ready" : "Collect data",
+    },
   ];
 
   return (
@@ -1742,7 +1894,10 @@ function ExtensionSetupPanel({
   setupInfo,
   resumeCount,
   diagnostics,
+  validations,
+  validationInfo,
   onCheck,
+  onSaveValidation,
 }: {
   backendUrl: string;
   defaultUserId: string;
@@ -1750,8 +1905,31 @@ function ExtensionSetupPanel({
   setupInfo: string;
   resumeCount: number | null;
   diagnostics: ExtensionDiagnostics | null;
+  validations: ExtensionValidationRecord[];
+  validationInfo: string;
   onCheck: () => void;
+  onSaveValidation: (payload: {
+    site: string;
+    url: string;
+    parserRating: "pass" | "partial" | "fail";
+    autoParsed: boolean;
+    manualPasteUsed: boolean;
+    titleFound: boolean;
+    companyFound: boolean;
+    descriptionFound: boolean;
+    notes: string;
+  }) => void;
 }) {
+  const [site, setSite] = useState("LinkedIn");
+  const [url, setUrl] = useState("");
+  const [parserRating, setParserRating] = useState<"pass" | "partial" | "fail">("partial");
+  const [autoParsed, setAutoParsed] = useState(true);
+  const [manualPasteUsed, setManualPasteUsed] = useState(false);
+  const [titleFound, setTitleFound] = useState(true);
+  const [companyFound, setCompanyFound] = useState(true);
+  const [descriptionFound, setDescriptionFound] = useState(false);
+  const [notes, setNotes] = useState("");
+
   return (
     <div className="extensionSetupGrid">
       <div className="panel extensionSetupHero">
@@ -1815,6 +1993,166 @@ function ExtensionSetupPanel({
           <li>Future matches use that token to load saved resumes and save job history under the user.</li>
           <li>Manual JD paste remains available when page parsing is weak.</li>
         </ul>
+      </div>
+
+      <div className="panel validationPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Real Site Validation</p>
+            <h3>Record parser quality</h3>
+          </div>
+          <span>{validations.length} saved</span>
+        </div>
+        <div className="gridTwo">
+          <label>
+            Site
+            <select value={site} onChange={(event) => setSite(event.target.value)}>
+              <option>LinkedIn</option>
+              <option>Naukri</option>
+              <option>Indeed</option>
+              <option>Company career page</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label>
+            Parser result
+            <select value={parserRating} onChange={(event) => setParserRating(event.target.value as "pass" | "partial" | "fail")}>
+              <option value="pass">Pass</option>
+              <option value="partial">Partial</option>
+              <option value="fail">Fail</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Page URL
+          <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." />
+        </label>
+        <div className="checkGrid">
+          <label><input type="checkbox" checked={autoParsed} onChange={(event) => setAutoParsed(event.target.checked)} /> Auto parsed</label>
+          <label><input type="checkbox" checked={manualPasteUsed} onChange={(event) => setManualPasteUsed(event.target.checked)} /> Manual paste used</label>
+          <label><input type="checkbox" checked={titleFound} onChange={(event) => setTitleFound(event.target.checked)} /> Role found</label>
+          <label><input type="checkbox" checked={companyFound} onChange={(event) => setCompanyFound(event.target.checked)} /> Company found</label>
+          <label><input type="checkbox" checked={descriptionFound} onChange={(event) => setDescriptionFound(event.target.checked)} /> JD found</label>
+        </div>
+        <label>
+          Notes
+          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} placeholder="Example: title and company worked, but JD body needed manual paste." />
+        </label>
+        <button
+          type="button"
+          className="secondaryButton"
+          onClick={() => onSaveValidation({ site, url, parserRating, autoParsed, manualPasteUsed, titleFound, companyFound, descriptionFound, notes })}
+        >
+          Save Validation
+        </button>
+        {validationInfo && <p className="hint">{validationInfo}</p>}
+        <div className="compactList">
+          {validations.slice(0, 5).map((item) => (
+            <div key={item.id}>
+              <strong>{item.site}</strong>
+              <span>{item.parserRating} | role {item.titleFound ? "yes" : "no"} | company {item.companyFound ? "yes" : "no"} | JD {item.descriptionFound ? "yes" : "no"}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EvaluationPanel({
+  result,
+  lastSavedAnalysisId,
+  summary,
+  info,
+  onRefresh,
+  onSaveFeedback,
+}: {
+  result: AnalysisResponse | null;
+  lastSavedAnalysisId: string | null;
+  summary: MatchFeedbackSummary | null;
+  info: string;
+  onRefresh: () => void;
+  onSaveFeedback: (payload: {
+    expectedFit: "strong" | "good" | "partial" | "weak";
+    scoreAccuracy: "accurate" | "too_high" | "too_low";
+    outcome: "not_applied" | "applied" | "shortlisted" | "interview" | "rejected" | "offer" | "no_response";
+    notes: string;
+  }) => void;
+}) {
+  const [expectedFit, setExpectedFit] = useState<"strong" | "good" | "partial" | "weak">("good");
+  const [scoreAccuracy, setScoreAccuracy] = useState<"accurate" | "too_high" | "too_low">("accurate");
+  const [outcome, setOutcome] = useState<"not_applied" | "applied" | "shortlisted" | "interview" | "rejected" | "offer" | "no_response">("not_applied");
+  const [notes, setNotes] = useState("");
+
+  return (
+    <div className="evaluationGrid">
+      <div className="panel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Latest Score</p>
+            <h3>{result ? `${result.technicalMatchScore}% ${result.fitCategory}` : "No active score"}</h3>
+            <p className="hint">{lastSavedAnalysisId ? `Analysis ${lastSavedAnalysisId}` : "Run and save a match before attaching feedback."}</p>
+          </div>
+          <button type="button" className="secondaryButton" onClick={onRefresh}>Refresh</button>
+        </div>
+        <div className="gridTwo">
+          <label>
+            Expected fit
+            <select value={expectedFit} onChange={(event) => setExpectedFit(event.target.value as "strong" | "good" | "partial" | "weak")}>
+              <option value="strong">Strong</option>
+              <option value="good">Good</option>
+              <option value="partial">Partial</option>
+              <option value="weak">Weak</option>
+            </select>
+          </label>
+          <label>
+            Score accuracy
+            <select value={scoreAccuracy} onChange={(event) => setScoreAccuracy(event.target.value as "accurate" | "too_high" | "too_low")}>
+              <option value="accurate">Accurate</option>
+              <option value="too_high">Too high</option>
+              <option value="too_low">Too low</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Outcome
+          <select value={outcome} onChange={(event) => setOutcome(event.target.value as "not_applied" | "applied" | "shortlisted" | "interview" | "rejected" | "offer" | "no_response")}>
+            <option value="not_applied">Not applied</option>
+            <option value="applied">Applied</option>
+            <option value="shortlisted">Shortlisted</option>
+            <option value="interview">Interview</option>
+            <option value="rejected">Rejected</option>
+            <option value="offer">Offer</option>
+            <option value="no_response">No response</option>
+          </select>
+        </label>
+        <label>
+          Notes
+          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={5} placeholder="Example: score missed cloud certification relevance, should be slightly higher." />
+        </label>
+        <button type="button" disabled={!lastSavedAnalysisId} onClick={() => onSaveFeedback({ expectedFit, scoreAccuracy, outcome, notes })}>
+          Save Score Feedback
+        </button>
+        {info && <p className="hint">{info}</p>}
+      </div>
+
+      <div className="panel">
+        <h3>Tuning Dataset</h3>
+        <div className="scoreGrid">
+          <div className="scoreTile"><span>Labels</span><strong>{summary?.feedbackCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Accurate</span><strong>{summary?.accurateCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Too high</span><strong>{summary?.tooHighCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Too low</span><strong>{summary?.tooLowCount ?? 0}</strong></div>
+        </div>
+        <p className="hint">Average stored algorithm score: {summary?.averageAlgorithmScore ?? "No data yet"}</p>
+        <div className="compactList">
+          {(summary?.latestFeedback ?? []).map((item) => (
+            <div key={item.id}>
+              <strong>{item.scoreAccuracy} | {item.expectedFit}</strong>
+              <span>{item.algorithmScore ?? "n/a"}% {item.fitCategory ?? ""} | {item.outcome}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

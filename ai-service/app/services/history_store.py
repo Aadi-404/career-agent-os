@@ -11,6 +11,8 @@ from pydantic_core import from_json
 
 from app.db import get_connection
 from app.models.analysis import AnalysisResponse, AnalyzeRequest, PreparationIntelligence
+from app.models.evaluation import MatchFeedbackRecord, MatchFeedbackSaveRequest, MatchFeedbackSummary
+from app.models.extension import ExtensionValidationRecord, ExtensionValidationSaveRequest
 from app.models.history import (
     AnonymousSessionCreateRequest,
     AnonymousSessionRecord,
@@ -566,6 +568,118 @@ def update_job_opportunity_optional_artifact(record_id: str, request: OptionalAr
     return _job_opportunity_from_row(_require_row(row, "Job opportunity not found after artifact update"))
 
 
+def save_extension_validation(request: ExtensionValidationSaveRequest) -> ExtensionValidationRecord:
+    now = _now()
+    record_id = _id()
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        connection.execute(
+            """
+            INSERT INTO extension_validation_runs (
+                id, user_id, site, url, parser_rating, auto_parsed, manual_paste_used,
+                title_found, company_found, description_found, notes, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record_id,
+                request.userId,
+                request.site,
+                request.url,
+                request.parserRating,
+                request.autoParsed,
+                request.manualPasteUsed,
+                request.titleFound,
+                request.companyFound,
+                request.descriptionFound,
+                request.notes,
+                now,
+            ),
+        )
+        row = connection.execute("SELECT * FROM extension_validation_runs WHERE id = ?", (record_id,)).fetchone()
+    return _extension_validation_from_row(_require_row(row, "Extension validation not found after save"))
+
+
+def list_extension_validations(user_id: str) -> list[ExtensionValidationRecord]:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        rows = connection.execute(
+            "SELECT * FROM extension_validation_runs WHERE user_id = ? ORDER BY created_at DESC LIMIT 25",
+            (user_id,),
+        ).fetchall()
+    return [_extension_validation_from_row(row) for row in rows]
+
+
+def save_match_feedback(request: MatchFeedbackSaveRequest) -> MatchFeedbackRecord:
+    now = _now()
+    record_id = _id()
+    algorithm_score: int | None = None
+    fit_category: str | None = None
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        if request.analysisId:
+            analysis = connection.execute(
+                "SELECT * FROM analyses WHERE id = ? AND user_id = ?",
+                (request.analysisId, request.userId),
+            ).fetchone()
+            _require_row(analysis, "Analysis record not found for this user")
+            algorithm_score = int(analysis["technical_match_score"])
+            fit_category = analysis["fit_category"]
+        if request.jobOpportunityId:
+            opportunity = connection.execute(
+                "SELECT * FROM job_opportunities WHERE id = ? AND user_id = ?",
+                (request.jobOpportunityId, request.userId),
+            ).fetchone()
+            _require_row(opportunity, "Job opportunity not found for this user")
+            if algorithm_score is None and opportunity["technical_match_score"] is not None:
+                algorithm_score = int(opportunity["technical_match_score"])
+            if fit_category is None:
+                fit_category = opportunity["fit_category"]
+        connection.execute(
+            """
+            INSERT INTO match_feedback (
+                id, user_id, analysis_id, job_opportunity_id, expected_fit, score_accuracy,
+                outcome, algorithm_score, fit_category, notes, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record_id,
+                request.userId,
+                request.analysisId,
+                request.jobOpportunityId,
+                request.expectedFit,
+                request.scoreAccuracy,
+                request.outcome,
+                algorithm_score,
+                fit_category,
+                request.notes,
+                now,
+            ),
+        )
+        row = connection.execute("SELECT * FROM match_feedback WHERE id = ?", (record_id,)).fetchone()
+    return _match_feedback_from_row(_require_row(row, "Match feedback not found after save"))
+
+
+def get_match_feedback_summary(user_id: str) -> MatchFeedbackSummary:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        rows = connection.execute(
+            "SELECT * FROM match_feedback WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+    records = [_match_feedback_from_row(row) for row in rows]
+    scores = [record.algorithmScore for record in records if record.algorithmScore is not None]
+    return MatchFeedbackSummary(
+        feedbackCount=len(records),
+        accurateCount=sum(1 for record in records if record.scoreAccuracy == "accurate"),
+        tooHighCount=sum(1 for record in records if record.scoreAccuracy == "too_high"),
+        tooLowCount=sum(1 for record in records if record.scoreAccuracy == "too_low"),
+        averageAlgorithmScore=round(sum(scores) / len(scores), 1) if scores else None,
+        latestFeedback=records[:10],
+    )
+
+
 def _get_user(connection, user_id: str) -> UserRecord:
     row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if not row:
@@ -699,6 +813,39 @@ def _job_opportunity_from_row(row: Any) -> JobOpportunityRecord:
         optionalArtifacts=_json_load(_row_value(row, "optional_artifacts_json")) if _row_value(row, "optional_artifacts_json") else {},
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
+    )
+
+
+def _extension_validation_from_row(row: Any) -> ExtensionValidationRecord:
+    return ExtensionValidationRecord(
+        id=row["id"],
+        userId=row["user_id"],
+        site=row["site"],
+        url=row["url"],
+        parserRating=row["parser_rating"],
+        autoParsed=bool(row["auto_parsed"]),
+        manualPasteUsed=bool(row["manual_paste_used"]),
+        titleFound=bool(row["title_found"]),
+        companyFound=bool(row["company_found"]),
+        descriptionFound=bool(row["description_found"]),
+        notes=row["notes"],
+        createdAt=row["created_at"],
+    )
+
+
+def _match_feedback_from_row(row: Any) -> MatchFeedbackRecord:
+    return MatchFeedbackRecord(
+        id=row["id"],
+        userId=row["user_id"],
+        analysisId=row["analysis_id"],
+        jobOpportunityId=row["job_opportunity_id"],
+        expectedFit=row["expected_fit"],
+        scoreAccuracy=row["score_accuracy"],
+        outcome=row["outcome"],
+        algorithmScore=row["algorithm_score"],
+        fitCategory=row["fit_category"],
+        notes=row["notes"],
+        createdAt=row["created_at"],
     )
 
 

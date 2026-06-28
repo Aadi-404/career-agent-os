@@ -1057,6 +1057,67 @@ button.premiumButton:not(.secondaryButton) span {
   margin: 0 0 10px;
 }
 
+.validationPanel {
+  grid-column: 1 / -1;
+}
+
+.checkGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.checkGrid label {
+  display: flex;
+  min-height: 44px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 10px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.checkGrid input {
+  width: 16px;
+  height: 16px;
+}
+
+.compactList {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.compactList > div {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.compactList strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.compactList span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.evaluationGrid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+}
+
 .checkRow {
   display: flex;
   align-items: center;
@@ -1755,7 +1816,9 @@ pre {
   .costModeGrid,
   .extensionSetupGrid,
   .extensionStatusGrid,
-  .diagnosticGrid {
+  .diagnosticGrid,
+  .checkGrid,
+  .evaluationGrid {
     grid-template-columns: 1fr;
   }
 

@@ -125,3 +125,31 @@ class ExtensionDiagnosticsResponse(BaseModel):
     manualPasteRequired: bool
     checks: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class ExtensionValidationSaveRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    site: str = Field(min_length=2, max_length=80)
+    url: str | None = Field(default=None, max_length=1000)
+    parserRating: Literal["pass", "partial", "fail"]
+    autoParsed: bool = True
+    manualPasteUsed: bool = False
+    titleFound: bool = False
+    companyFound: bool = False
+    descriptionFound: bool = False
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class ExtensionValidationRecord(BaseModel):
+    id: str
+    userId: str
+    site: str
+    url: str | None = None
+    parserRating: Literal["pass", "partial", "fail"]
+    autoParsed: bool
+    manualPasteUsed: bool
+    titleFound: bool
+    companyFound: bool
+    descriptionFound: bool
+    notes: str | None = None
+    createdAt: str

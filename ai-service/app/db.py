@@ -206,4 +206,39 @@ def _postgres_schema() -> str:
 
             ALTER TABLE job_opportunities
             ADD COLUMN IF NOT EXISTS optional_artifacts_json TEXT;
+
+            CREATE TABLE IF NOT EXISTS extension_validation_runs (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                site TEXT NOT NULL,
+                url TEXT,
+                parser_rating TEXT NOT NULL,
+                auto_parsed BOOLEAN NOT NULL,
+                manual_paste_used BOOLEAN NOT NULL,
+                title_found BOOLEAN NOT NULL,
+                company_found BOOLEAN NOT NULL,
+                description_found BOOLEAN NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_extension_validation_user_created
+            ON extension_validation_runs(user_id, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS match_feedback (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                analysis_id TEXT REFERENCES analyses(id) ON DELETE SET NULL,
+                job_opportunity_id TEXT REFERENCES job_opportunities(id) ON DELETE SET NULL,
+                expected_fit TEXT NOT NULL,
+                score_accuracy TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                algorithm_score INTEGER,
+                fit_category TEXT,
+                notes TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_match_feedback_user_created
+            ON match_feedback(user_id, created_at DESC);
             """
