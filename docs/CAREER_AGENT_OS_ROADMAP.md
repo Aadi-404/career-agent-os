@@ -238,6 +238,8 @@ Started:
 - The frontend has a dedicated Score Evaluation task.
 - The Score Evaluation task now shows calibration signals: accuracy rate, average score by feedback type, outcome counts, and a tuning recommendation.
 - The extension popup can save parser quality feedback after real job-page testing.
+- Evaluation labels can be exported/imported as JSON datasets.
+- Calibration is segmented by role family so `.NET`, Java, Python, Frontend, Data/AI, and Cloud/DevOps can be tuned separately.
 
 Why this matters:
 

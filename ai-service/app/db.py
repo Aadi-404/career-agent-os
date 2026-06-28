@@ -241,4 +241,10 @@ def _postgres_schema() -> str:
 
             CREATE INDEX IF NOT EXISTS idx_match_feedback_user_created
             ON match_feedback(user_id, created_at DESC);
+
+            ALTER TABLE match_feedback
+            ADD COLUMN IF NOT EXISTS role_family TEXT;
+
+            CREATE INDEX IF NOT EXISTS idx_match_feedback_user_role
+            ON match_feedback(user_id, role_family, created_at DESC);
             """

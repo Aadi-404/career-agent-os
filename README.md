@@ -33,6 +33,8 @@ Current Phase 6 groundwork:
 - Frontend task: `Score Evaluation`.
 - Calibration dashboard signals: accuracy rate, bias direction, outcome counts, and average score buckets.
 - Extension popup parser feedback: save page parsing quality directly from the browser extension.
+- Dataset export/import: move labelled match feedback as JSON for tuning review.
+- Role-family calibration: segment labels by `.NET`, Java, Python, Frontend, Data/AI, Cloud/DevOps, or General Software.
 
 ## Run AI Service
 

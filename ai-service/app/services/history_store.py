@@ -11,7 +11,14 @@ from pydantic_core import from_json
 
 from app.db import get_connection
 from app.models.analysis import AnalysisResponse, AnalyzeRequest, PreparationIntelligence
-from app.models.evaluation import MatchFeedbackRecord, MatchFeedbackSaveRequest, MatchFeedbackSummary
+from app.models.evaluation import (
+    MatchFeedbackDataset,
+    MatchFeedbackImportRequest,
+    MatchFeedbackRecord,
+    MatchFeedbackSaveRequest,
+    MatchFeedbackSegmentSummary,
+    MatchFeedbackSummary,
+)
 from app.models.extension import ExtensionValidationRecord, ExtensionValidationSaveRequest
 from app.models.history import (
     AnonymousSessionCreateRequest,
@@ -613,8 +620,9 @@ def list_extension_validations(user_id: str) -> list[ExtensionValidationRecord]:
 def save_match_feedback(request: MatchFeedbackSaveRequest) -> MatchFeedbackRecord:
     now = _now()
     record_id = _id()
-    algorithm_score: int | None = None
-    fit_category: str | None = None
+    algorithm_score = request.algorithmScore
+    fit_category = request.fitCategory
+    role_family = request.roleFamily
     with get_connection() as connection:
         _get_user(connection, request.userId)
         if request.analysisId:
@@ -625,6 +633,8 @@ def save_match_feedback(request: MatchFeedbackSaveRequest) -> MatchFeedbackRecor
             _require_row(analysis, "Analysis record not found for this user")
             algorithm_score = int(analysis["technical_match_score"])
             fit_category = analysis["fit_category"]
+            if not role_family:
+                role_family = _infer_role_family_from_text(analysis["request_json"])
         if request.jobOpportunityId:
             opportunity = connection.execute(
                 "SELECT * FROM job_opportunities WHERE id = ? AND user_id = ?",
@@ -635,19 +645,25 @@ def save_match_feedback(request: MatchFeedbackSaveRequest) -> MatchFeedbackRecor
                 algorithm_score = int(opportunity["technical_match_score"])
             if fit_category is None:
                 fit_category = opportunity["fit_category"]
+            if not role_family:
+                role_family = _infer_role_family_from_text(" ".join([
+                    opportunity["title"] or "",
+                    opportunity["description"] or "",
+                ]))
         connection.execute(
             """
             INSERT INTO match_feedback (
-                id, user_id, analysis_id, job_opportunity_id, expected_fit, score_accuracy,
+                id, user_id, analysis_id, job_opportunity_id, role_family, expected_fit, score_accuracy,
                 outcome, algorithm_score, fit_category, notes, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record_id,
                 request.userId,
                 request.analysisId,
                 request.jobOpportunityId,
+                role_family or "General Software",
                 request.expectedFit,
                 request.scoreAccuracy,
                 request.outcome,
@@ -695,7 +711,56 @@ def get_match_feedback_summary(user_id: str) -> MatchFeedbackSummary:
         outcomeCounts=outcome_counts,
         calibrationRecommendation=_calibration_recommendation(accurate_count, too_high_count, too_low_count, len(records)),
         averageAlgorithmScore=round(sum(scores) / len(scores), 1) if scores else None,
+        roleFamilyBreakdown=_role_family_breakdown(records),
         latestFeedback=records[:10],
+    )
+
+
+def export_match_feedback_dataset(user_id: str) -> MatchFeedbackDataset:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        rows = connection.execute(
+            "SELECT * FROM match_feedback WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+    return MatchFeedbackDataset(
+        userId=user_id,
+        exportedAt=_now(),
+        records=[_match_feedback_from_row(row) for row in rows],
+    )
+
+
+def import_match_feedback_dataset(request: MatchFeedbackImportRequest) -> MatchFeedbackDataset:
+    imported: list[MatchFeedbackRecord] = []
+    for record in request.records:
+        imported.append(save_match_feedback(record.model_copy(update={
+            "userId": request.userId,
+            "analysisId": None,
+            "jobOpportunityId": None,
+        })))
+    return MatchFeedbackDataset(userId=request.userId, exportedAt=_now(), records=imported)
+
+
+def _role_family_breakdown(records: list[MatchFeedbackRecord]) -> dict[str, MatchFeedbackSegmentSummary]:
+    grouped: dict[str, list[MatchFeedbackRecord]] = {}
+    for record in records:
+        grouped.setdefault(record.roleFamily or "General Software", []).append(record)
+    return {family: _segment_summary(items) for family, items in sorted(grouped.items())}
+
+
+def _segment_summary(records: list[MatchFeedbackRecord]) -> MatchFeedbackSegmentSummary:
+    accurate_count = sum(1 for record in records if record.scoreAccuracy == "accurate")
+    too_high_count = sum(1 for record in records if record.scoreAccuracy == "too_high")
+    too_low_count = sum(1 for record in records if record.scoreAccuracy == "too_low")
+    scores = [record.algorithmScore for record in records if record.algorithmScore is not None]
+    return MatchFeedbackSegmentSummary(
+        feedbackCount=len(records),
+        accurateCount=accurate_count,
+        tooHighCount=too_high_count,
+        tooLowCount=too_low_count,
+        accuracyRate=round((accurate_count / len(records)) * 100, 1) if records else None,
+        averageAlgorithmScore=round(sum(scores) / len(scores), 1) if scores else None,
+        calibrationRecommendation=_calibration_recommendation(accurate_count, too_high_count, too_low_count, len(records)),
     )
 
 
@@ -709,6 +774,23 @@ def _calibration_recommendation(accurate_count: int, too_high_count: int, too_lo
     if accurate_count >= max(too_high_count, too_low_count):
         return "Current scoring looks stable. Keep collecting labels before large weight changes."
     return "Feedback is mixed. Segment by role family, experience level, and JD source before tuning."
+
+
+def _infer_role_family_from_text(text: str) -> str:
+    lowered = text.lower()
+    families = [
+        ("Data/AI", ["machine learning", " ai ", "genai", "llm", "data engineer", "power bi", "snowflake", "etl"]),
+        (".NET", [".net", "asp.net", "c#", "entity framework"]),
+        ("Java", ["java", "spring", "hibernate", "microservices"]),
+        ("Python", ["python", "django", "fastapi", "flask"]),
+        ("Frontend", ["react", "angular", "vue", "typescript", "javascript"]),
+        ("Cloud/DevOps", ["aws", "azure", "gcp", "kubernetes", "docker", "devops", "ci/cd"]),
+    ]
+    padded = f" {lowered} "
+    for family, terms in families:
+        if any(term in padded for term in terms):
+            return family
+    return "General Software"
 
 
 def _get_user(connection, user_id: str) -> UserRecord:
@@ -870,6 +952,7 @@ def _match_feedback_from_row(row: Any) -> MatchFeedbackRecord:
         userId=row["user_id"],
         analysisId=row["analysis_id"],
         jobOpportunityId=row["job_opportunity_id"],
+        roleFamily=_row_value(row, "role_family") or "General Software",
         expectedFit=row["expected_fit"],
         scoreAccuracy=row["score_accuracy"],
         outcome=row["outcome"],

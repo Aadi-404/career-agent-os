@@ -223,8 +223,18 @@ type MatchFeedbackSummary = {
   outcomeCounts: Record<string, number>;
   calibrationRecommendation: string;
   averageAlgorithmScore?: number | null;
+  roleFamilyBreakdown: Record<string, {
+    feedbackCount: number;
+    accurateCount: number;
+    tooHighCount: number;
+    tooLowCount: number;
+    accuracyRate?: number | null;
+    averageAlgorithmScore?: number | null;
+    calibrationRecommendation: string;
+  }>;
   latestFeedback: Array<{
     id: string;
+    roleFamily?: string | null;
     expectedFit: string;
     scoreAccuracy: string;
     outcome: string;
@@ -232,6 +242,23 @@ type MatchFeedbackSummary = {
     fitCategory?: string | null;
     notes?: string | null;
     createdAt: string;
+  }>;
+};
+
+type MatchFeedbackDataset = {
+  userId: string;
+  exportedAt: string;
+  records: Array<{
+    id?: string;
+    analysisId?: string | null;
+    jobOpportunityId?: string | null;
+    roleFamily?: string | null;
+    expectedFit: "strong" | "good" | "partial" | "weak";
+    scoreAccuracy: "accurate" | "too_high" | "too_low";
+    outcome: "not_applied" | "applied" | "shortlisted" | "interview" | "rejected" | "offer" | "no_response";
+    algorithmScore?: number | null;
+    fitCategory?: string | null;
+    notes?: string | null;
   }>;
 };
 
@@ -733,6 +760,7 @@ function App() {
   }
 
   async function saveMatchFeedback(payload: {
+    roleFamily: string;
     expectedFit: "strong" | "good" | "partial" | "weak";
     scoreAccuracy: "accurate" | "too_high" | "too_low";
     outcome: "not_applied" | "applied" | "shortlisted" | "interview" | "rejected" | "offer" | "no_response";
@@ -747,6 +775,7 @@ function App() {
         body: JSON.stringify({
           userId: defaultUserId,
           analysisId: lastSavedAnalysisId,
+          roleFamily: payload.roleFamily.trim() || null,
           expectedFit: payload.expectedFit,
           scoreAccuracy: payload.scoreAccuracy,
           outcome: payload.outcome,
@@ -758,6 +787,60 @@ function App() {
       await loadEvaluationSummary();
     } catch (err) {
       setEvaluationInfo(err instanceof Error ? err.message : "Match feedback save failed");
+    }
+  }
+
+  async function exportEvaluationDataset() {
+    setEvaluationInfo("");
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/evaluation/users/${defaultUserId}/dataset`);
+      if (!response.ok) throw new Error("Evaluation export failed");
+      const dataset = await response.json() as MatchFeedbackDataset;
+      const blob = new Blob([JSON.stringify(dataset, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `career-agent-evaluation-${defaultUserId}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setEvaluationInfo(`Exported ${dataset.records.length} feedback record(s).`);
+    } catch (err) {
+      setEvaluationInfo(err instanceof Error ? err.message : "Evaluation export failed");
+    }
+  }
+
+  async function importEvaluationDataset(file: File | null) {
+    if (!file) return;
+    setEvaluationInfo("");
+    try {
+      await ensureLocalUser();
+      const text = await file.text();
+      const dataset = JSON.parse(text) as MatchFeedbackDataset;
+      const response = await fetch(`${API_BASE_URL}/evaluation/dataset/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: defaultUserId,
+          records: dataset.records.map((record) => ({
+            analysisId: record.analysisId ?? null,
+            jobOpportunityId: record.jobOpportunityId ?? null,
+            roleFamily: record.roleFamily ?? null,
+            algorithmScore: record.algorithmScore ?? null,
+            fitCategory: record.fitCategory ?? null,
+            expectedFit: record.expectedFit,
+            scoreAccuracy: record.scoreAccuracy,
+            outcome: record.outcome,
+            notes: record.notes ?? null,
+          })),
+        }),
+      });
+      if (!response.ok) throw new Error("Evaluation import failed");
+      const imported = await response.json() as MatchFeedbackDataset;
+      setEvaluationInfo(`Imported ${imported.records.length} feedback record(s).`);
+      await loadEvaluationSummary();
+    } catch (err) {
+      setEvaluationInfo(err instanceof Error ? err.message : "Evaluation import failed");
     }
   }
 
@@ -1749,6 +1832,8 @@ function App() {
                 info={evaluationInfo}
                 onRefresh={loadEvaluationSummary}
                 onSaveFeedback={saveMatchFeedback}
+                onExportDataset={exportEvaluationDataset}
+                onImportDataset={importEvaluationDataset}
               />
             </TaskPanel>
           )}
@@ -2070,6 +2155,8 @@ function EvaluationPanel({
   info,
   onRefresh,
   onSaveFeedback,
+  onExportDataset,
+  onImportDataset,
 }: {
   result: AnalysisResponse | null;
   lastSavedAnalysisId: string | null;
@@ -2077,12 +2164,16 @@ function EvaluationPanel({
   info: string;
   onRefresh: () => void;
   onSaveFeedback: (payload: {
+    roleFamily: string;
     expectedFit: "strong" | "good" | "partial" | "weak";
     scoreAccuracy: "accurate" | "too_high" | "too_low";
     outcome: "not_applied" | "applied" | "shortlisted" | "interview" | "rejected" | "offer" | "no_response";
     notes: string;
   }) => void;
+  onExportDataset: () => void;
+  onImportDataset: (file: File | null) => void;
 }) {
+  const [roleFamily, setRoleFamily] = useState(".NET");
   const [expectedFit, setExpectedFit] = useState<"strong" | "good" | "partial" | "weak">("good");
   const [scoreAccuracy, setScoreAccuracy] = useState<"accurate" | "too_high" | "too_low">("accurate");
   const [outcome, setOutcome] = useState<"not_applied" | "applied" | "shortlisted" | "interview" | "rejected" | "offer" | "no_response">("not_applied");
@@ -2100,6 +2191,18 @@ function EvaluationPanel({
           <button type="button" className="secondaryButton" onClick={onRefresh}>Refresh</button>
         </div>
         <div className="gridTwo">
+          <label>
+            Role family
+            <select value={roleFamily} onChange={(event) => setRoleFamily(event.target.value)}>
+              <option>.NET</option>
+              <option>Java</option>
+              <option>Python</option>
+              <option>Frontend</option>
+              <option>Data/AI</option>
+              <option>Cloud/DevOps</option>
+              <option>General Software</option>
+            </select>
+          </label>
           <label>
             Expected fit
             <select value={expectedFit} onChange={(event) => setExpectedFit(event.target.value as "strong" | "good" | "partial" | "weak")}>
@@ -2134,14 +2237,24 @@ function EvaluationPanel({
           Notes
           <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={5} placeholder="Example: score missed cloud certification relevance, should be slightly higher." />
         </label>
-        <button type="button" disabled={!lastSavedAnalysisId} onClick={() => onSaveFeedback({ expectedFit, scoreAccuracy, outcome, notes })}>
+        <button type="button" disabled={!lastSavedAnalysisId} onClick={() => onSaveFeedback({ roleFamily, expectedFit, scoreAccuracy, outcome, notes })}>
           Save Score Feedback
         </button>
         {info && <p className="hint">{info}</p>}
       </div>
 
       <div className="panel">
-        <h3>Tuning Dataset</h3>
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Dataset</p>
+            <h3>Tuning Dataset</h3>
+          </div>
+          <button type="button" className="secondaryButton" onClick={onExportDataset}>Export JSON</button>
+        </div>
+        <label className="importControl">
+          Import JSON
+          <input type="file" accept="application/json,.json" onChange={(event) => onImportDataset(event.target.files?.[0] ?? null)} />
+        </label>
         <div className="scoreGrid">
           <div className="scoreTile"><span>Labels</span><strong>{summary?.feedbackCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Accurate</span><strong>{summary?.accurateCount ?? 0}</strong></div>
@@ -2175,10 +2288,21 @@ function EvaluationPanel({
             {Object.entries(summary.outcomeCounts).map(([key, value]) => <span key={key}>{key}: {value}</span>)}
           </div>
         )}
+        {summary && Object.keys(summary.roleFamilyBreakdown).length > 0 && (
+          <div className="segmentGrid">
+            {Object.entries(summary.roleFamilyBreakdown).map(([family, segment]) => (
+              <div key={family}>
+                <strong>{family}</strong>
+                <span>{segment.feedbackCount} labels | {segment.accuracyRate ?? "n/a"}% accurate</span>
+                <small>{segment.calibrationRecommendation}</small>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="compactList">
           {(summary?.latestFeedback ?? []).map((item) => (
             <div key={item.id}>
-              <strong>{item.scoreAccuracy} | {item.expectedFit}</strong>
+              <strong>{item.roleFamily ?? "General Software"} | {item.scoreAccuracy} | {item.expectedFit}</strong>
               <span>{item.algorithmScore ?? "n/a"}% {item.fitCategory ?? ""} | {item.outcome}</span>
             </div>
           ))}

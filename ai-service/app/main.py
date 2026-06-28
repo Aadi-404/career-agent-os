@@ -18,7 +18,13 @@ from app.models.analysis import (
     RequirementMatch,
     ResumeImprovement,
 )
-from app.models.evaluation import MatchFeedbackRecord, MatchFeedbackSaveRequest, MatchFeedbackSummary
+from app.models.evaluation import (
+    MatchFeedbackDataset,
+    MatchFeedbackImportRequest,
+    MatchFeedbackRecord,
+    MatchFeedbackSaveRequest,
+    MatchFeedbackSummary,
+)
 from app.models.extension import (
     ExtensionBootstrapRequest,
     ExtensionBootstrapResponse,
@@ -90,6 +96,8 @@ from app.services.history_store import (
     list_extension_validations,
     save_match_feedback,
     get_match_feedback_summary,
+    export_match_feedback_dataset,
+    import_match_feedback_dataset,
 )
 from app.services.jd_parser import parse_jd
 from app.services.optional_artifact_service import (
@@ -529,6 +537,16 @@ def create_match_feedback(request: MatchFeedbackSaveRequest) -> MatchFeedbackRec
 @app.get("/evaluation/users/{user_id}/summary", response_model=MatchFeedbackSummary)
 def get_evaluation_summary(user_id: str) -> MatchFeedbackSummary:
     return get_match_feedback_summary(user_id)
+
+
+@app.get("/evaluation/users/{user_id}/dataset", response_model=MatchFeedbackDataset)
+def export_evaluation_dataset(user_id: str) -> MatchFeedbackDataset:
+    return export_match_feedback_dataset(user_id)
+
+
+@app.post("/evaluation/dataset/import", response_model=MatchFeedbackDataset)
+def import_evaluation_dataset(request: MatchFeedbackImportRequest) -> MatchFeedbackDataset:
+    return import_match_feedback_dataset(request)
 
 
 def _default_extension_candidate_context(request: ExtensionMatchRequest) -> CandidateContext:

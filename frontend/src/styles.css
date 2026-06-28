@@ -1180,6 +1180,36 @@ button.premiumButton:not(.secondaryButton) span {
   font-weight: 850;
 }
 
+.importControl {
+  margin: 12px 0;
+}
+
+.segmentGrid {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.segmentGrid > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #d4e5e2;
+  border-radius: 8px;
+  background: #f8fffd;
+  padding: 11px;
+}
+
+.segmentGrid strong {
+  color: var(--brand);
+}
+
+.segmentGrid span,
+.segmentGrid small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .checkRow {
   display: flex;
   align-items: center;
