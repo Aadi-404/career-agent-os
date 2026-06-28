@@ -35,6 +35,8 @@ Current Phase 6 groundwork:
 - Extension popup parser feedback: save page parsing quality directly from the browser extension.
 - Dataset export/import: move labelled match feedback as JSON for tuning review.
 - Role-family calibration: segment labels by `.NET`, Java, Python, Frontend, Data/AI, Cloud/DevOps, or General Software.
+- Scoring calibration settings: edit role-family category weights from the Admin settings UI.
+- Calibrated scoring: match requests can use saved user calibration without extra LLM calls.
 
 ## Run AI Service
 

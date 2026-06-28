@@ -32,6 +32,8 @@ class AnalyzeRequest(BaseModel):
     candidateContext: CandidateContext
     llmOptions: LlmOptions | None = None
     preparationPlanDays: int = Field(default=7, ge=1, le=30)
+    scoringCalibrationUserId: str | None = Field(default=None, min_length=2, max_length=80)
+    roleFamily: str | None = Field(default=None, max_length=80)
 
 
 class PreparationBuildRequest(BaseModel):

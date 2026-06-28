@@ -66,6 +66,7 @@ from app.models.jd_parse import JdParseRequest, JdParseResponse
 from app.models.prep_memory import PrepMemoryResponse
 from app.models.resume_extract import ResumeExtractResponse
 from app.models.resume_normalize import ResumeNormalizeRequest, ResumeNormalizeResponse
+from app.models.scoring_config import ScoringCalibrationConfig, ScoringCalibrationListResponse, ScoringCalibrationUpdateRequest
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.history_store import (
     create_or_touch_anonymous_session,
@@ -109,6 +110,7 @@ from app.services.preparation_service import build_preparation_intelligence
 from app.services.prep_memory_service import build_prep_memory
 from app.services.resume_extractor import extract_resume
 from app.services.resume_normalizer import normalize_resume
+from app.services.scoring_config_service import list_scoring_calibrations, save_scoring_calibration
 
 app = FastAPI(title="Career Agent OS AI Service", version="0.1.0")
 settings = get_settings()
@@ -547,6 +549,16 @@ def export_evaluation_dataset(user_id: str) -> MatchFeedbackDataset:
 @app.post("/evaluation/dataset/import", response_model=MatchFeedbackDataset)
 def import_evaluation_dataset(request: MatchFeedbackImportRequest) -> MatchFeedbackDataset:
     return import_match_feedback_dataset(request)
+
+
+@app.get("/settings/users/{user_id}/scoring-calibration", response_model=ScoringCalibrationListResponse)
+def get_scoring_calibration_settings(user_id: str) -> ScoringCalibrationListResponse:
+    return list_scoring_calibrations(user_id)
+
+
+@app.put("/settings/scoring-calibration", response_model=ScoringCalibrationConfig)
+def update_scoring_calibration_settings(request: ScoringCalibrationUpdateRequest) -> ScoringCalibrationConfig:
+    return save_scoring_calibration(request)
 
 
 def _default_extension_candidate_context(request: ExtensionMatchRequest) -> CandidateContext:

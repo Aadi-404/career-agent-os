@@ -6,6 +6,7 @@ from app.services.certificate_matcher import best_certificate_match
 from app.services.jd_parser import _extract_locations as extract_jd_locations
 from app.services.jd_parser import _extract_work_modes as extract_work_modes
 from app.services.requirement_matcher import build_requirement_matches
+from app.services.scoring_config_service import get_effective_weights, normalize_role_family
 
 
 @dataclass
@@ -23,6 +24,12 @@ class ScoringResult:
 def score_resume_against_jd(request: AnalyzeRequest) -> ScoringResult:
     requirement_matches = build_requirement_matches(request)
     weights = _weights_for_experience(request.candidateContext.experienceYears)
+    if request.scoringCalibrationUserId:
+        weights = get_effective_weights(
+            request.scoringCalibrationUserId,
+            request.roleFamily or _infer_role_family(request),
+            weights,
+        )
     category_scores = _category_scores(request, requirement_matches)
     breakdown = _build_breakdown(weights, category_scores)
     technical_score = round(sum(item.weightedScore for item in breakdown))
@@ -40,6 +47,24 @@ def score_resume_against_jd(request: AnalyzeRequest) -> ScoringResult:
         requirement_matches=requirement_matches,
         recommended_action=_recommended_action(technical_score, shortlisting_score, interview_readiness),
     )
+
+
+def _infer_role_family(request: AnalyzeRequest) -> str:
+    text = f"{request.candidateContext.targetRole} {' '.join(request.candidateContext.currentStack)} {request.jobDescriptionText}".lower()
+    padded = f" {text} "
+    if any(term in padded for term in [".net", "asp.net", "c#", "entity framework"]):
+        return ".NET"
+    if any(term in padded for term in [" java", "spring", "hibernate"]):
+        return "Java"
+    if any(term in padded for term in [" python", "django", "fastapi", "flask"]):
+        return "Python"
+    if any(term in padded for term in ["react", "angular", "vue", "typescript", "javascript"]):
+        return "Frontend"
+    if any(term in padded for term in [" ai ", "llm", "machine learning", "data engineer", "etl", "power bi"]):
+        return "Data/AI"
+    if any(term in padded for term in ["aws", "azure", "gcp", "docker", "kubernetes", "devops"]):
+        return "Cloud/DevOps"
+    return normalize_role_family(None)
 
 
 def _weights_for_experience(experience_years: int) -> dict[str, int]:

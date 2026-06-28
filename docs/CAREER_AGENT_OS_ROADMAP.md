@@ -240,6 +240,8 @@ Started:
 - The extension popup can save parser quality feedback after real job-page testing.
 - Evaluation labels can be exported/imported as JSON datasets.
 - Calibration is segmented by role family so `.NET`, Java, Python, Frontend, Data/AI, and Cloud/DevOps can be tuned separately.
+- Scoring calibration settings are now editable from the Admin settings UI.
+- The matching engine can apply saved role-family weights while keeping score breakdowns explainable.
 
 Why this matters:
 

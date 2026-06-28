@@ -1210,6 +1210,49 @@ button.premiumButton:not(.secondaryButton) span {
   line-height: 1.4;
 }
 
+.settingsGrid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
+}
+
+.settingsMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.settingsMeta span {
+  border-radius: 999px;
+  background: #eef6f5;
+  color: #305f5a;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.weightEditor {
+  display: grid;
+  gap: 10px;
+}
+
+.weightEditor label {
+  display: grid;
+  grid-template-columns: 1fr 96px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 10px;
+}
+
+.weightEditor span {
+  color: var(--ink);
+  font-weight: 850;
+}
+
 .checkRow {
   display: flex;
   align-items: center;
@@ -1911,7 +1954,9 @@ pre {
   .diagnosticGrid,
   .checkGrid,
   .evaluationGrid,
-  .calibrationGrid {
+  .calibrationGrid,
+  .settingsGrid,
+  .weightEditor label {
     grid-template-columns: 1fr;
   }
 

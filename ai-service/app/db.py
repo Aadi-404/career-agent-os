@@ -247,4 +247,12 @@ def _postgres_schema() -> str:
 
             CREATE INDEX IF NOT EXISTS idx_match_feedback_user_role
             ON match_feedback(user_id, role_family, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS scoring_calibration_configs (
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role_family TEXT NOT NULL,
+                category_weights_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, role_family)
+            );
             """

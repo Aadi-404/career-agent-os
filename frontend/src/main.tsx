@@ -76,7 +76,7 @@ type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
-type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "extension" | "evaluation";
+type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "extension" | "evaluation" | "settings";
 type CostMode = "free" | "standard" | "premium";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
 
@@ -102,6 +102,16 @@ type AnalyzeRequestPayload = {
     model: string;
   };
   preparationPlanDays: number;
+  scoringCalibrationUserId?: string | null;
+  roleFamily?: string | null;
+};
+
+type ScoringCalibrationConfig = {
+  userId: string;
+  roleFamily: string;
+  categoryWeights: Record<string, number>;
+  isDefault: boolean;
+  updatedAt?: string | null;
 };
 
 type HistoryAnalysisRecord = {
@@ -401,6 +411,8 @@ function App() {
   const [extensionValidationInfo, setExtensionValidationInfo] = useState("");
   const [evaluationSummary, setEvaluationSummary] = useState<MatchFeedbackSummary | null>(null);
   const [evaluationInfo, setEvaluationInfo] = useState("");
+  const [scoringConfigs, setScoringConfigs] = useState<ScoringCalibrationConfig[]>([]);
+  const [settingsInfo, setSettingsInfo] = useState("");
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
   const [resumeHistory, setResumeHistory] = useState<HistoryResumeRecord[]>([]);
@@ -423,6 +435,9 @@ function App() {
     }
     if (activeTask === "evaluation") {
       loadEvaluationSummary();
+    }
+    if (activeTask === "settings") {
+      loadScoringConfigs();
     }
   }, [activeTask]);
 
@@ -449,6 +464,8 @@ function App() {
         model: llmModel,
       },
       preparationPlanDays,
+      scoringCalibrationUserId: defaultUserId,
+      roleFamily: inferRoleFamily(`${targetRole} ${currentStack} ${jobDescriptionText}`),
     };
   }
 
@@ -841,6 +858,41 @@ function App() {
       await loadEvaluationSummary();
     } catch (err) {
       setEvaluationInfo(err instanceof Error ? err.message : "Evaluation import failed");
+    }
+  }
+
+  async function loadScoringConfigs() {
+    setSettingsInfo("");
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration`);
+      if (!response.ok) throw new Error("Scoring calibration settings unavailable");
+      const payload = await response.json() as { configs: ScoringCalibrationConfig[] };
+      setScoringConfigs(payload.configs);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Scoring calibration settings unavailable");
+    }
+  }
+
+  async function saveScoringConfig(config: ScoringCalibrationConfig) {
+    setSettingsInfo("");
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/settings/scoring-calibration`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: defaultUserId,
+          roleFamily: config.roleFamily,
+          categoryWeights: config.categoryWeights,
+        }),
+      });
+      if (!response.ok) throw new Error("Scoring calibration save failed. Check that weights total 100.");
+      const saved = await response.json() as ScoringCalibrationConfig;
+      setScoringConfigs((items) => items.map((item) => item.roleFamily === saved.roleFamily ? saved : item));
+      setSettingsInfo(`Saved scoring weights for ${saved.roleFamily}. New scores will use this calibration.`);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Scoring calibration save failed");
     }
   }
 
@@ -1837,6 +1889,21 @@ function App() {
               />
             </TaskPanel>
           )}
+
+          {activeTask === "settings" && (
+            <TaskPanel
+              eyebrow="Admin"
+              title="Scoring Settings"
+              description="View and safely edit role-family scoring weights. Weights must total 100 before saving."
+            >
+              <ScoringSettingsPanel
+                configs={scoringConfigs}
+                info={settingsInfo}
+                onRefresh={loadScoringConfigs}
+                onSave={saveScoringConfig}
+              />
+            </TaskPanel>
+          )}
         </section>
       </section>
     </main>
@@ -1926,6 +1993,12 @@ function TaskNav({
       label: "Score Evaluation",
       description: "Label score quality",
       status: hasResult ? "Ready" : "Collect data",
+    },
+    {
+      id: "settings",
+      label: "Scoring Settings",
+      description: "Role-family weights",
+      status: "Admin",
     },
   ];
 
@@ -2310,6 +2383,126 @@ function EvaluationPanel({
       </div>
     </div>
   );
+}
+
+function ScoringSettingsPanel({
+  configs,
+  info,
+  onRefresh,
+  onSave,
+}: {
+  configs: ScoringCalibrationConfig[];
+  info: string;
+  onRefresh: () => void;
+  onSave: (config: ScoringCalibrationConfig) => void;
+}) {
+  const [selectedFamily, setSelectedFamily] = useState(".NET");
+  const activeConfig = configs.find((config) => config.roleFamily === selectedFamily) ?? configs[0];
+  const [draftWeights, setDraftWeights] = useState<Record<string, number>>(activeConfig?.categoryWeights ?? {});
+
+  useEffect(() => {
+    setDraftWeights(activeConfig?.categoryWeights ?? {});
+  }, [activeConfig?.roleFamily]);
+
+  const total = Object.values(draftWeights).reduce((sum, value) => sum + Number(value || 0), 0);
+
+  if (!configs.length) {
+    return (
+      <div className="panel empty">
+        <h2>No scoring settings loaded</h2>
+        <p>Refresh settings to load default role-family calibration weights.</p>
+        <button type="button" className="secondaryButton" onClick={onRefresh}>Refresh Settings</button>
+        {info && <p className="hint">{info}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="settingsGrid">
+      <div className="panel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Calibration</p>
+            <h3>Role-family weights</h3>
+          </div>
+          <button type="button" className="secondaryButton" onClick={onRefresh}>Refresh</button>
+        </div>
+        <label>
+          Role family
+          <select value={selectedFamily} onChange={(event) => setSelectedFamily(event.target.value)}>
+            {configs.map((config) => <option key={config.roleFamily}>{config.roleFamily}</option>)}
+          </select>
+        </label>
+        <div className="settingsMeta">
+          <span>{activeConfig?.isDefault ? "Default weights" : "Custom saved weights"}</span>
+          <span>Total: {total}</span>
+          <span>{activeConfig?.updatedAt ? `Updated ${formatDate(activeConfig.updatedAt)}` : "Not saved yet"}</span>
+        </div>
+        <div className="weightEditor">
+          {Object.entries(draftWeights).map(([category, weight]) => (
+            <label key={category}>
+              <span>{formatCategory(category)}</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={weight}
+                onChange={(event) => setDraftWeights((current) => ({
+                  ...current,
+                  [category]: Math.max(0, Math.min(100, Number(event.target.value) || 0)),
+                }))}
+              />
+            </label>
+          ))}
+        </div>
+        <button
+          type="button"
+          disabled={!activeConfig || total !== 100}
+          onClick={() => activeConfig && onSave({ ...activeConfig, categoryWeights: draftWeights })}
+        >
+          Save Weights
+        </button>
+        {total !== 100 && <p className="error">Weights must total 100 before saving.</p>}
+        {info && <p className="hint">{info}</p>}
+      </div>
+
+      <div className="panel">
+        <h3>How These Weights Affect Scores</h3>
+        <div className="compactList">
+          {Object.entries(draftWeights).map(([category, weight]) => (
+            <div key={category}>
+              <strong>{formatCategory(category)}: {weight}%</strong>
+              <span>{scoringCategoryHelp(category)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function inferRoleFamily(text: string) {
+  const lowered = ` ${text.toLowerCase()} `;
+  if ([".net", "asp.net", "c#", "entity framework"].some((term) => lowered.includes(term))) return ".NET";
+  if ([" java", "spring", "hibernate"].some((term) => lowered.includes(term))) return "Java";
+  if ([" python", "django", "fastapi", "flask"].some((term) => lowered.includes(term))) return "Python";
+  if (["react", "angular", "vue", "typescript", "javascript"].some((term) => lowered.includes(term))) return "Frontend";
+  if ([" ai ", "llm", "machine learning", "data engineer", "etl", "power bi"].some((term) => lowered.includes(term))) return "Data/AI";
+  if (["aws", "azure", "gcp", "docker", "kubernetes", "devops"].some((term) => lowered.includes(term))) return "Cloud/DevOps";
+  return "General Software";
+}
+
+function scoringCategoryHelp(category: string) {
+  const descriptions: Record<string, string> = {
+    experienceFit: "Candidate years versus JD range.",
+    dynamicRequirementFit: "Semantic requirement matrix against JD must-haves.",
+    projectRelevance: "Project and experience evidence against the JD.",
+    technicalDepth: "Depth of concrete tools, frameworks, and implementation proof.",
+    deliveryReadiness: "Production, debugging, release, support, cloud, and certification proof.",
+    systemReadiness: "Architecture, scalability, reliability, and design evidence.",
+    problemSolving: "Optimization, debugging, algorithms, and analytical problem solving.",
+  };
+  return descriptions[category] ?? "Scoring category used by the matching engine.";
 }
 
 function AISpendPanel({
