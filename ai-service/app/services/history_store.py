@@ -69,6 +69,14 @@ def create_or_update_user(request: UserCreateRequest) -> UserRecord:
     return UserRecord(id=request.userId, displayName=request.displayName, email=request.email, createdAt=now)
 
 
+def list_users() -> list[UserRecord]:
+    with get_connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM users ORDER BY created_at DESC LIMIT 100"
+        ).fetchall()
+    return [_user_from_row(row) for row in rows]
+
+
 def create_or_touch_anonymous_session(request: AnonymousSessionCreateRequest) -> AnonymousSessionRecord:
     now = _now()
     session_id = request.anonymousSessionId or f"anon_{_id()}"

@@ -45,6 +45,7 @@ Current Phase 6 groundwork:
 - Admin runtime panel: Settings page shows operational diagnostics without making AI calls.
 - Optional user auth enforcement: set `REQUIRE_USER_AUTH=true` to require `X-Session-Token` on user-scoped history, evaluation, settings, diagnostics, and extension validation APIs.
 - Web session claim: frontend uses `/auth/session/claim` and stores a session token for guarded requests.
+- Admin user visibility: `/admin/users` and the Settings page show known users for deployment checks.
 
 ## Run AI Service
 

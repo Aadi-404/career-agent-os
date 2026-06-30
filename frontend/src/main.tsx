@@ -152,6 +152,13 @@ type SystemDiagnostics = {
   warnings: string[];
 };
 
+type AdminUserRecord = {
+  id: string;
+  displayName: string;
+  email?: string | null;
+  createdAt: string;
+};
+
 type HistoryAnalysisRecord = {
   id: string;
   title: string;
@@ -462,6 +469,7 @@ function App() {
   const [scoringRecommendation, setScoringRecommendation] = useState<ScoringCalibrationRecommendation | null>(null);
   const [scoringAudit, setScoringAudit] = useState<ScoringCalibrationAuditRecord[]>([]);
   const [systemDiagnostics, setSystemDiagnostics] = useState<SystemDiagnostics | null>(null);
+  const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
@@ -489,6 +497,7 @@ function App() {
     if (activeTask === "settings") {
       loadScoringConfigs();
       loadSystemDiagnostics();
+      loadAdminUsers();
     }
   }, [activeTask]);
 
@@ -951,6 +960,17 @@ function App() {
       setSystemDiagnostics(await response.json() as SystemDiagnostics);
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "System diagnostics unavailable");
+    }
+  }
+
+  async function loadAdminUsers() {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/admin/users`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error("User list unavailable");
+      setAdminUsers(await response.json() as AdminUserRecord[]);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "User list unavailable");
     }
   }
 
@@ -2016,6 +2036,7 @@ function App() {
                 recommendation={scoringRecommendation}
                 audit={scoringAudit}
                 diagnostics={systemDiagnostics}
+                users={adminUsers}
                 info={settingsInfo}
                 onRefresh={loadScoringConfigs}
                 onSave={saveScoringConfig}
@@ -2023,6 +2044,7 @@ function App() {
                 onLoadAudit={loadScoringAudit}
                 onRestore={restoreScoringConfig}
                 onRefreshDiagnostics={loadSystemDiagnostics}
+                onRefreshUsers={loadAdminUsers}
               />
             </TaskPanel>
           )}
@@ -2512,6 +2534,7 @@ function ScoringSettingsPanel({
   recommendation,
   audit,
   diagnostics,
+  users,
   info,
   onRefresh,
   onSave,
@@ -2519,11 +2542,13 @@ function ScoringSettingsPanel({
   onLoadAudit,
   onRestore,
   onRefreshDiagnostics,
+  onRefreshUsers,
 }: {
   configs: ScoringCalibrationConfig[];
   recommendation: ScoringCalibrationRecommendation | null;
   audit: ScoringCalibrationAuditRecord[];
   diagnostics: SystemDiagnostics | null;
+  users: AdminUserRecord[];
   info: string;
   onRefresh: () => void;
   onSave: (config: ScoringCalibrationConfig) => void;
@@ -2531,6 +2556,7 @@ function ScoringSettingsPanel({
   onLoadAudit: (roleFamily?: string) => void;
   onRestore: (auditId: string) => void;
   onRefreshDiagnostics: () => void;
+  onRefreshUsers: () => void;
 }) {
   const [selectedFamily, setSelectedFamily] = useState(".NET");
   const activeConfig = configs.find((config) => config.roleFamily === selectedFamily) ?? configs[0];
@@ -2675,6 +2701,29 @@ function ScoringSettingsPanel({
         ) : (
           <p className="hint">Diagnostics have not been loaded yet.</p>
         )}
+      </div>
+
+      <div className="panel diagnosticsPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Admin</p>
+            <h3>Known Users</h3>
+          </div>
+          <button type="button" className="secondaryButton" onClick={onRefreshUsers}>Refresh Users</button>
+        </div>
+        <div className="compactList">
+          {users.length ? users.map((user) => (
+            <div key={user.id}>
+              <strong>{user.displayName}</strong>
+              <span>{user.id} | {user.email ?? "no email"} | {formatDate(user.createdAt)}</span>
+            </div>
+          )) : (
+            <div>
+              <strong>No users loaded</strong>
+              <span>Create or claim a session to populate users.</span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="panel auditPanel">

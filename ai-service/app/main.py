@@ -85,6 +85,7 @@ from app.services.history_store import (
     get_resume,
     get_preparation_session,
     get_workspace_summary,
+    list_users,
     resolve_user_session,
     list_analyses,
     list_job_descriptions,
@@ -485,6 +486,15 @@ def claim_user_session(request: UserCreateRequest) -> UserSessionResponse:
 @app.post("/auth/anonymous", response_model=AnonymousSessionRecord)
 def create_anonymous_session(request: AnonymousSessionCreateRequest | None = None) -> AnonymousSessionRecord:
     return create_or_touch_anonymous_session(request or AnonymousSessionCreateRequest())
+
+
+@app.get("/admin/users", response_model=list[UserRecord])
+def get_admin_users(session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[UserRecord]:
+    if settings.require_user_auth and not session_token:
+        raise HTTPException(status_code=401, detail="Session token is required")
+    if settings.require_user_auth and session_token:
+        resolve_user_session(session_token)
+    return list_users()
 
 
 @app.get("/history/users/{user_id}/workspace", response_model=WorkspaceSummary)
