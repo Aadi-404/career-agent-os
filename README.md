@@ -41,6 +41,8 @@ Current Phase 6 groundwork:
 - Approval flow: suggestions apply to a draft first; admins must explicitly save before scoring changes.
 - Scoring audit history: every saved calibration change stores before/after weights.
 - Rollback: admins can restore previous scoring weights from the audit trail.
+- System diagnostics: `/diagnostics/system` reports database, AI config, embedding config, parser mode, CORS, and workspace counts.
+- Admin runtime panel: Settings page shows operational diagnostics without making AI calls.
 
 ## Run AI Service
 

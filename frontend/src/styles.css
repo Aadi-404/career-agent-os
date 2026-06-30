@@ -1220,6 +1220,43 @@ button.premiumButton:not(.secondaryButton) span {
   grid-column: 1 / -1;
 }
 
+.diagnosticsPanel {
+  grid-column: 1 / -1;
+}
+
+.diagnosticTiles {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.diagnosticTiles > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 10px;
+}
+
+.diagnosticTiles span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.diagnosticTiles strong {
+  color: var(--brand);
+}
+
+.diagnosticWarnings {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .settingsMeta {
   display: flex;
   flex-wrap: wrap;
@@ -1994,6 +2031,7 @@ pre {
   .evaluationGrid,
   .calibrationGrid,
   .settingsGrid,
+  .diagnosticTiles,
   .weightEditor label {
     grid-template-columns: 1fr;
   }

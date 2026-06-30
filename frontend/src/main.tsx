@@ -135,6 +135,23 @@ type ScoringCalibrationAuditRecord = {
   createdAt: string;
 };
 
+type SystemDiagnostics = {
+  status: string;
+  environment: string;
+  databaseOk: boolean;
+  llmMode: string;
+  llmProvider: string;
+  llmModel: string;
+  llmKeyConfigured: boolean;
+  embeddingProvider: string;
+  embeddingModel: string;
+  embeddingFallbackLocal: boolean;
+  jdParserMode: string;
+  corsOrigins: string[];
+  workspaceCounts: Record<string, number>;
+  warnings: string[];
+};
+
 type HistoryAnalysisRecord = {
   id: string;
   title: string;
@@ -435,6 +452,7 @@ function App() {
   const [scoringConfigs, setScoringConfigs] = useState<ScoringCalibrationConfig[]>([]);
   const [scoringRecommendation, setScoringRecommendation] = useState<ScoringCalibrationRecommendation | null>(null);
   const [scoringAudit, setScoringAudit] = useState<ScoringCalibrationAuditRecord[]>([]);
+  const [systemDiagnostics, setSystemDiagnostics] = useState<SystemDiagnostics | null>(null);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
@@ -461,6 +479,7 @@ function App() {
     }
     if (activeTask === "settings") {
       loadScoringConfigs();
+      loadSystemDiagnostics();
     }
   }, [activeTask]);
 
@@ -907,6 +926,17 @@ function App() {
       setScoringAudit(await response.json() as ScoringCalibrationAuditRecord[]);
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "Scoring calibration audit unavailable");
+    }
+  }
+
+  async function loadSystemDiagnostics() {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/diagnostics/system?userId=${encodeURIComponent(defaultUserId)}`);
+      if (!response.ok) throw new Error("System diagnostics unavailable");
+      setSystemDiagnostics(await response.json() as SystemDiagnostics);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "System diagnostics unavailable");
     }
   }
 
@@ -1971,12 +2001,14 @@ function App() {
                 configs={scoringConfigs}
                 recommendation={scoringRecommendation}
                 audit={scoringAudit}
+                diagnostics={systemDiagnostics}
                 info={settingsInfo}
                 onRefresh={loadScoringConfigs}
                 onSave={saveScoringConfig}
                 onRecommend={loadScoringRecommendation}
                 onLoadAudit={loadScoringAudit}
                 onRestore={restoreScoringConfig}
+                onRefreshDiagnostics={loadSystemDiagnostics}
               />
             </TaskPanel>
           )}
@@ -2465,22 +2497,26 @@ function ScoringSettingsPanel({
   configs,
   recommendation,
   audit,
+  diagnostics,
   info,
   onRefresh,
   onSave,
   onRecommend,
   onLoadAudit,
   onRestore,
+  onRefreshDiagnostics,
 }: {
   configs: ScoringCalibrationConfig[];
   recommendation: ScoringCalibrationRecommendation | null;
   audit: ScoringCalibrationAuditRecord[];
+  diagnostics: SystemDiagnostics | null;
   info: string;
   onRefresh: () => void;
   onSave: (config: ScoringCalibrationConfig) => void;
   onRecommend: (roleFamily: string) => void;
   onLoadAudit: (roleFamily?: string) => void;
   onRestore: (auditId: string) => void;
+  onRefreshDiagnostics: () => void;
 }) {
   const [selectedFamily, setSelectedFamily] = useState(".NET");
   const activeConfig = configs.find((config) => config.roleFamily === selectedFamily) ?? configs[0];
@@ -2591,6 +2627,40 @@ function ScoringSettingsPanel({
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="panel diagnosticsPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Runtime</p>
+            <h3>System Diagnostics</h3>
+          </div>
+          <button type="button" className="secondaryButton" onClick={onRefreshDiagnostics}>Refresh Diagnostics</button>
+        </div>
+        {diagnostics ? (
+          <>
+            <div className="diagnosticTiles">
+              <div><span>Status</span><strong>{diagnostics.status}</strong></div>
+              <div><span>Database</span><strong>{diagnostics.databaseOk ? "ok" : "failed"}</strong></div>
+              <div><span>LLM</span><strong>{diagnostics.llmMode} / {diagnostics.llmProvider}</strong></div>
+              <div><span>LLM key</span><strong>{diagnostics.llmKeyConfigured ? "configured" : "missing"}</strong></div>
+              <div><span>Embeddings</span><strong>{diagnostics.embeddingProvider}</strong></div>
+              <div><span>JD parser</span><strong>{diagnostics.jdParserMode}</strong></div>
+            </div>
+            {Object.keys(diagnostics.workspaceCounts).length > 0 && (
+              <div className="outcomeStrip">
+                {Object.entries(diagnostics.workspaceCounts).map(([key, value]) => <span key={key}>{key}: {value}</span>)}
+              </div>
+            )}
+            {diagnostics.warnings.length > 0 && (
+              <ul className="diagnosticWarnings">
+                {diagnostics.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            )}
+          </>
+        ) : (
+          <p className="hint">Diagnostics have not been loaded yet.</p>
+        )}
       </div>
 
       <div className="panel auditPanel">

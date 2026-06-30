@@ -74,6 +74,7 @@ from app.models.scoring_config import (
     ScoringCalibrationRestoreRequest,
     ScoringCalibrationUpdateRequest,
 )
+from app.models.system import SystemDiagnostics
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.history_store import (
     create_or_touch_anonymous_session,
@@ -155,6 +156,50 @@ def ready() -> dict[str, str]:
         "environment": settings.environment,
         "corsOrigins": settings.cors_allow_origins,
     }
+
+
+@app.get("/diagnostics/system", response_model=SystemDiagnostics)
+def system_diagnostics(userId: str | None = None) -> SystemDiagnostics:
+    warnings: list[str] = []
+    database_ok = True
+    workspace_counts: dict[str, int] = {}
+    try:
+        initialize_database()
+        if userId:
+            summary = get_workspace_summary(userId)
+            workspace_counts = {
+                "resumes": summary.resumeCount,
+                "jobDescriptions": summary.jobDescriptionCount,
+                "analyses": summary.analysisCount,
+                "preparationSessions": summary.preparationSessionCount,
+                "jobOpportunities": summary.jobOpportunityCount,
+            }
+    except Exception as exc:
+        database_ok = False
+        warnings.append(f"Database check failed: {exc}")
+
+    llm_key_configured = _llm_key_configured(settings)
+    if settings.llm_mode == "live" and not llm_key_configured:
+        warnings.append("Live LLM mode is enabled but no API key is configured for the selected provider.")
+    if settings.embedding_provider != "local" and not settings.embedding_fallback_local:
+        warnings.append("Remote embeddings are selected without local fallback.")
+
+    return SystemDiagnostics(
+        status="ready" if database_ok else "degraded",
+        environment=settings.environment,
+        databaseOk=database_ok,
+        llmMode=settings.llm_mode,
+        llmProvider=settings.llm_provider,
+        llmModel=settings.llm_model,
+        llmKeyConfigured=llm_key_configured,
+        embeddingProvider=settings.embedding_provider,
+        embeddingModel=settings.embedding_model or "auto",
+        embeddingFallbackLocal=settings.embedding_fallback_local,
+        jdParserMode=settings.jd_parser_mode,
+        corsOrigins=[origin.strip() for origin in settings.cors_allow_origins.split(",") if origin.strip()],
+        workspaceCounts=workspace_counts,
+        warnings=warnings,
+    )
 
 
 @app.post("/ai/resume-jd/analyze", response_model=AnalysisResponse)
@@ -608,6 +653,16 @@ def _default_extension_candidate_context(request: ExtensionMatchRequest) -> Cand
         preferredLocations=[request.job.location] if request.job.location else [],
         relocationOpen=False,
     )
+
+
+def _llm_key_configured(current_settings) -> bool:
+    if current_settings.llm_provider == "groq":
+        return bool(current_settings.groq_api_key or current_settings.llm_api_key)
+    if current_settings.llm_provider == "openai":
+        return bool(current_settings.openai_api_key or current_settings.llm_api_key)
+    if current_settings.llm_provider == "gemini":
+        return bool(current_settings.gemini_api_key or current_settings.google_api_key or current_settings.llm_api_key)
+    return bool(current_settings.llm_api_key)
 
 
 def _infer_stack_from_text(text: str) -> list[str]:
