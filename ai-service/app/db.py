@@ -255,4 +255,17 @@ def _postgres_schema() -> str:
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (user_id, role_family)
             );
+
+            CREATE TABLE IF NOT EXISTS scoring_calibration_audit (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role_family TEXT NOT NULL,
+                previous_weights_json TEXT NOT NULL,
+                new_weights_json TEXT NOT NULL,
+                change_source TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_scoring_calibration_audit_user_role
+            ON scoring_calibration_audit(user_id, role_family, created_at DESC);
             """

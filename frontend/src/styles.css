@@ -1216,6 +1216,10 @@ button.premiumButton:not(.secondaryButton) span {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
 }
 
+.auditPanel {
+  grid-column: 1 / -1;
+}
+
 .settingsMeta {
   display: flex;
   flex-wrap: wrap;

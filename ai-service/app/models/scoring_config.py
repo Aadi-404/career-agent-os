@@ -23,6 +23,7 @@ class ScoringCalibrationUpdateRequest(BaseModel):
     userId: str = Field(min_length=2, max_length=80)
     roleFamily: str = Field(min_length=2, max_length=80)
     categoryWeights: dict[str, int] = Field(min_length=1)
+    changeSource: str = Field(default="manual", max_length=80)
 
     @model_validator(mode="after")
     def validate_weight_total(self):
@@ -46,3 +47,18 @@ class ScoringCalibrationRecommendation(BaseModel):
     sampleSize: int
     reason: str
     changes: list[str] = Field(default_factory=list)
+
+
+class ScoringCalibrationAuditRecord(BaseModel):
+    id: str
+    userId: str
+    roleFamily: str
+    previousWeights: dict[str, int] = Field(default_factory=dict)
+    newWeights: dict[str, int] = Field(default_factory=dict)
+    changeSource: str
+    createdAt: str
+
+
+class ScoringCalibrationRestoreRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    auditId: str = Field(min_length=2, max_length=80)

@@ -1,13 +1,16 @@
 import json
+from uuid import uuid4
 from datetime import UTC, datetime
 from typing import Any
 
 from app.db import get_connection
 from app.models.scoring_config import (
     ROLE_FAMILIES,
+    ScoringCalibrationAuditRecord,
     ScoringCalibrationConfig,
     ScoringCalibrationListResponse,
     ScoringCalibrationRecommendation,
+    ScoringCalibrationRestoreRequest,
     ScoringCalibrationUpdateRequest,
 )
 
@@ -103,7 +106,17 @@ def list_scoring_calibrations(user_id: str) -> ScoringCalibrationListResponse:
 
 def save_scoring_calibration(request: ScoringCalibrationUpdateRequest) -> ScoringCalibrationConfig:
     now = _now()
+    family = normalize_role_family(request.roleFamily)
     with get_connection() as connection:
+        previous_row = connection.execute(
+            "SELECT * FROM scoring_calibration_configs WHERE user_id = ? AND role_family = ?",
+            (request.userId, family),
+        ).fetchone()
+        previous_weights = (
+            json.loads(previous_row["category_weights_json"])
+            if previous_row
+            else DEFAULT_ROLE_WEIGHTS.get(family, DEFAULT_ROLE_WEIGHTS["General Software"])
+        )
         connection.execute(
             """
             INSERT INTO scoring_calibration_configs (user_id, role_family, category_weights_json, updated_at)
@@ -111,13 +124,74 @@ def save_scoring_calibration(request: ScoringCalibrationUpdateRequest) -> Scorin
             ON CONFLICT (user_id, role_family)
             DO UPDATE SET category_weights_json = EXCLUDED.category_weights_json, updated_at = EXCLUDED.updated_at
             """,
-            (request.userId, request.roleFamily, json.dumps(request.categoryWeights, sort_keys=True), now),
+            (request.userId, family, json.dumps(request.categoryWeights, sort_keys=True), now),
+        )
+        connection.execute(
+            """
+            INSERT INTO scoring_calibration_audit (
+                id, user_id, role_family, previous_weights_json, new_weights_json, change_source, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                _id(),
+                request.userId,
+                family,
+                json.dumps(previous_weights, sort_keys=True),
+                json.dumps(request.categoryWeights, sort_keys=True),
+                request.changeSource,
+                now,
+            ),
         )
         row = connection.execute(
             "SELECT * FROM scoring_calibration_configs WHERE user_id = ? AND role_family = ?",
-            (request.userId, request.roleFamily),
+            (request.userId, family),
         ).fetchone()
     return _config_from_row(row)
+
+
+def list_scoring_calibration_audit(user_id: str, role_family: str | None = None) -> list[ScoringCalibrationAuditRecord]:
+    family = normalize_role_family(role_family) if role_family else None
+    with get_connection() as connection:
+        if family:
+            rows = connection.execute(
+                """
+                SELECT * FROM scoring_calibration_audit
+                WHERE user_id = ? AND role_family = ?
+                ORDER BY created_at DESC
+                LIMIT 50
+                """,
+                (user_id, family),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """
+                SELECT * FROM scoring_calibration_audit
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                LIMIT 50
+                """,
+                (user_id,),
+            ).fetchall()
+    return [_audit_from_row(row) for row in rows]
+
+
+def restore_scoring_calibration(request: ScoringCalibrationRestoreRequest) -> ScoringCalibrationConfig:
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM scoring_calibration_audit WHERE id = ? AND user_id = ?",
+            (request.auditId, request.userId),
+        ).fetchone()
+    if not row:
+        raise ValueError("Scoring calibration audit record not found")
+    return save_scoring_calibration(
+        ScoringCalibrationUpdateRequest(
+            userId=request.userId,
+            roleFamily=row["role_family"],
+            categoryWeights=json.loads(row["previous_weights_json"]),
+            changeSource=f"restore:{request.auditId}",
+        )
+    )
 
 
 def recommend_scoring_calibration(user_id: str, role_family: str) -> ScoringCalibrationRecommendation:
@@ -246,6 +320,22 @@ def _config_from_row(row: Any) -> ScoringCalibrationConfig:
         isDefault=False,
         updatedAt=row["updated_at"],
     )
+
+
+def _audit_from_row(row: Any) -> ScoringCalibrationAuditRecord:
+    return ScoringCalibrationAuditRecord(
+        id=row["id"],
+        userId=row["user_id"],
+        roleFamily=row["role_family"],
+        previousWeights=json.loads(row["previous_weights_json"]),
+        newWeights=json.loads(row["new_weights_json"]),
+        changeSource=row["change_source"],
+        createdAt=row["created_at"],
+    )
+
+
+def _id() -> str:
+    return f"audit_{uuid4().hex[:12]}"
 
 
 def _row_value(row: Any, key: str):

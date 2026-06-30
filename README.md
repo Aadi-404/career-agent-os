@@ -39,6 +39,8 @@ Current Phase 6 groundwork:
 - Calibrated scoring: match requests can use saved user calibration without extra LLM calls.
 - Calibration recommendations: propose weight changes from labelled feedback.
 - Approval flow: suggestions apply to a draft first; admins must explicitly save before scoring changes.
+- Scoring audit history: every saved calibration change stores before/after weights.
+- Rollback: admins can restore previous scoring weights from the audit trail.
 
 ## Run AI Service
 

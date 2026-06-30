@@ -125,6 +125,16 @@ type ScoringCalibrationRecommendation = {
   changes: string[];
 };
 
+type ScoringCalibrationAuditRecord = {
+  id: string;
+  userId: string;
+  roleFamily: string;
+  previousWeights: Record<string, number>;
+  newWeights: Record<string, number>;
+  changeSource: string;
+  createdAt: string;
+};
+
 type HistoryAnalysisRecord = {
   id: string;
   title: string;
@@ -424,6 +434,7 @@ function App() {
   const [evaluationInfo, setEvaluationInfo] = useState("");
   const [scoringConfigs, setScoringConfigs] = useState<ScoringCalibrationConfig[]>([]);
   const [scoringRecommendation, setScoringRecommendation] = useState<ScoringCalibrationRecommendation | null>(null);
+  const [scoringAudit, setScoringAudit] = useState<ScoringCalibrationAuditRecord[]>([]);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
@@ -881,8 +892,21 @@ function App() {
       if (!response.ok) throw new Error("Scoring calibration settings unavailable");
       const payload = await response.json() as { configs: ScoringCalibrationConfig[] };
       setScoringConfigs(payload.configs);
+      await loadScoringAudit();
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "Scoring calibration settings unavailable");
+    }
+  }
+
+  async function loadScoringAudit(roleFamily?: string) {
+    try {
+      await ensureLocalUser();
+      const suffix = roleFamily ? `?roleFamily=${encodeURIComponent(roleFamily)}` : "";
+      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration-audit${suffix}`);
+      if (!response.ok) throw new Error("Scoring calibration audit unavailable");
+      setScoringAudit(await response.json() as ScoringCalibrationAuditRecord[]);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Scoring calibration audit unavailable");
     }
   }
 
@@ -903,8 +927,28 @@ function App() {
       const saved = await response.json() as ScoringCalibrationConfig;
       setScoringConfigs((items) => items.map((item) => item.roleFamily === saved.roleFamily ? saved : item));
       setSettingsInfo(`Saved scoring weights for ${saved.roleFamily}. New scores will use this calibration.`);
+      await loadScoringAudit(saved.roleFamily);
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "Scoring calibration save failed");
+    }
+  }
+
+  async function restoreScoringConfig(auditId: string) {
+    setSettingsInfo("");
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/settings/scoring-calibration/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: defaultUserId, auditId }),
+      });
+      if (!response.ok) throw new Error("Scoring calibration restore failed");
+      const restored = await response.json() as ScoringCalibrationConfig;
+      setScoringConfigs((items) => items.map((item) => item.roleFamily === restored.roleFamily ? restored : item));
+      setSettingsInfo(`Restored previous weights for ${restored.roleFamily}.`);
+      await loadScoringAudit(restored.roleFamily);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Scoring calibration restore failed");
     }
   }
 
@@ -912,7 +956,7 @@ function App() {
     setSettingsInfo("");
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration/${encodeURIComponent(roleFamily)}/recommendation`);
+      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration-recommendation?roleFamily=${encodeURIComponent(roleFamily)}`);
       if (!response.ok) throw new Error("Scoring recommendation unavailable");
       const recommendation = await response.json() as ScoringCalibrationRecommendation;
       setScoringRecommendation(recommendation);
@@ -1926,10 +1970,13 @@ function App() {
               <ScoringSettingsPanel
                 configs={scoringConfigs}
                 recommendation={scoringRecommendation}
+                audit={scoringAudit}
                 info={settingsInfo}
                 onRefresh={loadScoringConfigs}
                 onSave={saveScoringConfig}
                 onRecommend={loadScoringRecommendation}
+                onLoadAudit={loadScoringAudit}
+                onRestore={restoreScoringConfig}
               />
             </TaskPanel>
           )}
@@ -2417,17 +2464,23 @@ function EvaluationPanel({
 function ScoringSettingsPanel({
   configs,
   recommendation,
+  audit,
   info,
   onRefresh,
   onSave,
   onRecommend,
+  onLoadAudit,
+  onRestore,
 }: {
   configs: ScoringCalibrationConfig[];
   recommendation: ScoringCalibrationRecommendation | null;
+  audit: ScoringCalibrationAuditRecord[];
   info: string;
   onRefresh: () => void;
   onSave: (config: ScoringCalibrationConfig) => void;
   onRecommend: (roleFamily: string) => void;
+  onLoadAudit: (roleFamily?: string) => void;
+  onRestore: (auditId: string) => void;
 }) {
   const [selectedFamily, setSelectedFamily] = useState(".NET");
   const activeConfig = configs.find((config) => config.roleFamily === selectedFamily) ?? configs[0];
@@ -2435,9 +2488,11 @@ function ScoringSettingsPanel({
 
   useEffect(() => {
     setDraftWeights(activeConfig?.categoryWeights ?? {});
+    if (activeConfig?.roleFamily) onLoadAudit(activeConfig.roleFamily);
   }, [activeConfig?.roleFamily]);
 
   const total = Object.values(draftWeights).reduce((sum, value) => sum + Number(value || 0), 0);
+  const visibleAudit = audit.filter((item) => item.roleFamily === activeConfig?.roleFamily);
 
   if (!configs.length) {
     return (
@@ -2537,8 +2592,44 @@ function ScoringSettingsPanel({
           ))}
         </div>
       </div>
+
+      <div className="panel auditPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Audit</p>
+            <h3>Weight Change History</h3>
+          </div>
+          <button type="button" className="secondaryButton" onClick={() => activeConfig && onLoadAudit(activeConfig.roleFamily)}>Refresh Audit</button>
+        </div>
+        <div className="compactList">
+          {visibleAudit.length ? visibleAudit.slice(0, 8).map((item) => (
+            <div key={item.id}>
+              <strong>{formatDate(item.createdAt)} | {item.changeSource}</strong>
+              <span>{weightDeltaSummary(item.previousWeights, item.newWeights)}</span>
+              <button type="button" className="tinyButton" onClick={() => onRestore(item.id)}>Restore previous weights</button>
+            </div>
+          )) : (
+            <div>
+              <strong>No changes yet</strong>
+              <span>Saved edits and restores will appear here.</span>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
+}
+
+function weightDeltaSummary(previous: Record<string, number>, next: Record<string, number>) {
+  const changes = Object.keys({ ...previous, ...next })
+    .map((key) => {
+      const before = previous[key] ?? 0;
+      const after = next[key] ?? 0;
+      const delta = after - before;
+      return delta === 0 ? null : `${formatCategory(key)} ${delta > 0 ? "+" : ""}${delta}`;
+    })
+    .filter(Boolean);
+  return changes.length ? changes.slice(0, 4).join(", ") : "No numeric change.";
 }
 
 function inferRoleFamily(text: string) {

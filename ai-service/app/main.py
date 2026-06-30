@@ -67,9 +67,11 @@ from app.models.prep_memory import PrepMemoryResponse
 from app.models.resume_extract import ResumeExtractResponse
 from app.models.resume_normalize import ResumeNormalizeRequest, ResumeNormalizeResponse
 from app.models.scoring_config import (
+    ScoringCalibrationAuditRecord,
     ScoringCalibrationConfig,
     ScoringCalibrationListResponse,
     ScoringCalibrationRecommendation,
+    ScoringCalibrationRestoreRequest,
     ScoringCalibrationUpdateRequest,
 )
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
@@ -115,7 +117,13 @@ from app.services.preparation_service import build_preparation_intelligence
 from app.services.prep_memory_service import build_prep_memory
 from app.services.resume_extractor import extract_resume
 from app.services.resume_normalizer import normalize_resume
-from app.services.scoring_config_service import list_scoring_calibrations, recommend_scoring_calibration, save_scoring_calibration
+from app.services.scoring_config_service import (
+    list_scoring_calibration_audit,
+    list_scoring_calibrations,
+    recommend_scoring_calibration,
+    restore_scoring_calibration,
+    save_scoring_calibration,
+)
 
 app = FastAPI(title="Career Agent OS AI Service", version="0.1.0")
 settings = get_settings()
@@ -569,6 +577,24 @@ def update_scoring_calibration_settings(request: ScoringCalibrationUpdateRequest
 @app.get("/settings/users/{user_id}/scoring-calibration/{role_family}/recommendation", response_model=ScoringCalibrationRecommendation)
 def get_scoring_calibration_recommendation(user_id: str, role_family: str) -> ScoringCalibrationRecommendation:
     return recommend_scoring_calibration(user_id, role_family)
+
+
+@app.get("/settings/users/{user_id}/scoring-calibration-recommendation", response_model=ScoringCalibrationRecommendation)
+def get_scoring_calibration_recommendation_by_query(user_id: str, roleFamily: str) -> ScoringCalibrationRecommendation:
+    return recommend_scoring_calibration(user_id, roleFamily)
+
+
+@app.get("/settings/users/{user_id}/scoring-calibration-audit", response_model=list[ScoringCalibrationAuditRecord])
+def get_scoring_calibration_audit(user_id: str, roleFamily: str | None = None) -> list[ScoringCalibrationAuditRecord]:
+    return list_scoring_calibration_audit(user_id, roleFamily)
+
+
+@app.post("/settings/scoring-calibration/restore", response_model=ScoringCalibrationConfig)
+def restore_scoring_calibration_settings(request: ScoringCalibrationRestoreRequest) -> ScoringCalibrationConfig:
+    try:
+        return restore_scoring_calibration(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def _default_extension_candidate_context(request: ExtensionMatchRequest) -> CandidateContext:

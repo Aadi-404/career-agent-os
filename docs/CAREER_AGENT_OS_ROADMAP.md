@@ -244,6 +244,8 @@ Started:
 - The matching engine can apply saved role-family weights while keeping score breakdowns explainable.
 - Calibration recommendations can propose role-family weight changes from labelled feedback.
 - Recommended weights are applied to a draft first and require explicit admin save approval.
+- Scoring calibration changes are audited with before/after weights and change source.
+- Previous scoring weights can be restored from the audit history.
 
 Why this matters:
 
