@@ -247,6 +247,7 @@ Started:
 - Scoring calibration changes are audited with before/after weights and change source.
 - Previous scoring weights can be restored from the audit history.
 - A system diagnostics endpoint and Settings panel show database, AI, embedding, parser, CORS, and workspace health.
+- User-scoped APIs can require `X-Session-Token` ownership checks by enabling `REQUIRE_USER_AUTH`.
 
 Why this matters:
 

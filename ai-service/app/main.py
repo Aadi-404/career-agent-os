@@ -1,6 +1,6 @@
 import re
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,6 +18,7 @@ from app.models.analysis import (
     RequirementMatch,
     ResumeImprovement,
 )
+from app.models.auth import UserSessionResponse
 from app.models.evaluation import (
     MatchFeedbackDataset,
     MatchFeedbackImportRequest,
@@ -159,13 +160,14 @@ def ready() -> dict[str, str]:
 
 
 @app.get("/diagnostics/system", response_model=SystemDiagnostics)
-def system_diagnostics(userId: str | None = None) -> SystemDiagnostics:
+def system_diagnostics(userId: str | None = None, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> SystemDiagnostics:
     warnings: list[str] = []
     database_ok = True
     workspace_counts: dict[str, int] = {}
     try:
         initialize_database()
         if userId:
+            _authorize_user(userId, session_token)
             summary = get_workspace_summary(userId)
             workspace_counts = {
                 "resumes": summary.resumeCount,
@@ -473,88 +475,112 @@ def upsert_user(request: UserCreateRequest) -> UserRecord:
     return create_or_update_user(request)
 
 
+@app.post("/auth/session/claim", response_model=UserSessionResponse)
+def claim_user_session(request: UserCreateRequest) -> UserSessionResponse:
+    user = create_or_update_user(request)
+    token = create_user_session(user.id, source="web")
+    return UserSessionResponse(user=user, sessionToken=token)
+
+
 @app.post("/auth/anonymous", response_model=AnonymousSessionRecord)
 def create_anonymous_session(request: AnonymousSessionCreateRequest | None = None) -> AnonymousSessionRecord:
     return create_or_touch_anonymous_session(request or AnonymousSessionCreateRequest())
 
 
 @app.get("/history/users/{user_id}/workspace", response_model=WorkspaceSummary)
-def workspace_summary(user_id: str) -> WorkspaceSummary:
+def workspace_summary(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> WorkspaceSummary:
+    _authorize_user(user_id, session_token)
     return get_workspace_summary(user_id)
 
 
 @app.post("/history/resumes", response_model=ResumeRecord)
-def create_resume_record(request: ResumeSaveRequest) -> ResumeRecord:
+def create_resume_record(request: ResumeSaveRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ResumeRecord:
+    _authorize_user(request.userId, session_token)
     return save_resume(request)
 
 
 @app.get("/history/users/{user_id}/resumes", response_model=list[ResumeRecord])
-def get_resume_records(user_id: str) -> list[ResumeRecord]:
+def get_resume_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[ResumeRecord]:
+    _authorize_user(user_id, session_token)
     return list_resumes(user_id)
 
 
 @app.post("/history/job-descriptions", response_model=JobDescriptionRecord)
-def create_job_description_record(request: JobDescriptionSaveRequest) -> JobDescriptionRecord:
+def create_job_description_record(request: JobDescriptionSaveRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> JobDescriptionRecord:
+    _authorize_user(request.userId, session_token)
     return save_job_description(request)
 
 
 @app.get("/history/users/{user_id}/job-descriptions", response_model=list[JobDescriptionRecord])
-def get_job_description_records(user_id: str) -> list[JobDescriptionRecord]:
+def get_job_description_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[JobDescriptionRecord]:
+    _authorize_user(user_id, session_token)
     return list_job_descriptions(user_id)
 
 
 @app.post("/history/analyses", response_model=AnalysisRecord)
-def create_analysis_record(request: AnalysisSaveRequest) -> AnalysisRecord:
+def create_analysis_record(request: AnalysisSaveRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> AnalysisRecord:
+    _authorize_user(request.userId, session_token)
     return save_analysis(request)
 
 
 @app.post("/history/analyses/lookup", response_model=AnalysisRecord | None)
-def lookup_analysis_record(request: AnalysisLookupRequest) -> AnalysisRecord | None:
+def lookup_analysis_record(request: AnalysisLookupRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> AnalysisRecord | None:
+    _authorize_user(request.userId, session_token)
     return lookup_analysis(request)
 
 
 @app.get("/history/users/{user_id}/analyses", response_model=list[AnalysisRecord])
-def get_analysis_records(user_id: str) -> list[AnalysisRecord]:
+def get_analysis_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[AnalysisRecord]:
+    _authorize_user(user_id, session_token)
     return list_analyses(user_id)
 
 
 @app.patch("/history/analyses/{analysis_id}/optional-artifacts", response_model=AnalysisRecord)
-def update_analysis_optional_artifact_record(analysis_id: str, request: OptionalArtifactUsageUpdateRequest) -> AnalysisRecord:
+def update_analysis_optional_artifact_record(analysis_id: str, request: OptionalArtifactUsageUpdateRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> AnalysisRecord:
+    _authorize_user(request.userId, session_token)
     return update_analysis_optional_artifact(analysis_id, request)
 
 
 @app.post("/history/preparation-sessions", response_model=PreparationSessionRecord)
-def create_preparation_session_record(request: PreparationSessionSaveRequest) -> PreparationSessionRecord:
+def create_preparation_session_record(request: PreparationSessionSaveRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> PreparationSessionRecord:
+    _authorize_user(request.userId, session_token)
     return save_preparation_session(request)
 
 
 @app.get("/history/users/{user_id}/preparation-sessions", response_model=list[PreparationSessionRecord])
-def get_preparation_session_records(user_id: str) -> list[PreparationSessionRecord]:
+def get_preparation_session_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[PreparationSessionRecord]:
+    _authorize_user(user_id, session_token)
     return list_preparation_sessions(user_id)
 
 
 @app.get("/ai/preparation/memory/{user_id}", response_model=PrepMemoryResponse)
-def get_preparation_memory(user_id: str) -> PrepMemoryResponse:
+def get_preparation_memory(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> PrepMemoryResponse:
+    _authorize_user(user_id, session_token)
     return build_prep_memory(list_analyses(user_id), list_preparation_sessions(user_id))
 
 
 @app.get("/history/users/{user_id}/preparation-sessions/{session_id}", response_model=PreparationSessionRecord)
-def get_preparation_session_record(user_id: str, session_id: str) -> PreparationSessionRecord:
+def get_preparation_session_record(user_id: str, session_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> PreparationSessionRecord:
+    _authorize_user(user_id, session_token)
     return get_preparation_session(user_id, session_id)
 
 
 @app.patch("/history/preparation-sessions/{session_id}/progress", response_model=PreparationSessionRecord)
-def update_preparation_progress_record(session_id: str, request: PreparationSessionProgressUpdateRequest) -> PreparationSessionRecord:
+def update_preparation_progress_record(session_id: str, request: PreparationSessionProgressUpdateRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> PreparationSessionRecord:
+    _authorize_user(request.userId, session_token)
     return update_preparation_session_progress(session_id, request)
 
 
 @app.post("/history/job-opportunities", response_model=JobOpportunityRecord)
-def create_job_opportunity_record(request: JobOpportunitySaveRequest) -> JobOpportunityRecord:
+def create_job_opportunity_record(request: JobOpportunitySaveRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> JobOpportunityRecord:
+    if request.userId:
+        _authorize_user(request.userId, session_token)
     return save_job_opportunity(request)
 
 
 @app.get("/history/users/{user_id}/job-opportunities", response_model=list[JobOpportunityRecord])
-def get_user_job_opportunities(user_id: str) -> list[JobOpportunityRecord]:
+def get_user_job_opportunities(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[JobOpportunityRecord]:
+    _authorize_user(user_id, session_token)
     return list_job_opportunities_for_user(user_id)
 
 
@@ -567,7 +593,12 @@ def get_anonymous_job_opportunities(anonymous_session_id: str) -> list[JobOpport
 def update_job_opportunity_status_record(
     job_opportunity_id: str,
     request: JobOpportunityStatusUpdateRequest,
+    session_token: str | None = Header(default=None, alias="X-Session-Token"),
 ) -> JobOpportunityRecord:
+    if request.userId:
+        _authorize_user(request.userId, session_token)
+    elif settings.require_user_auth:
+        raise HTTPException(status_code=401, detail="userId is required when auth is enabled")
     return update_job_opportunity_status(job_opportunity_id, request)
 
 
@@ -575,67 +606,81 @@ def update_job_opportunity_status_record(
 def update_job_opportunity_optional_artifact_record(
     job_opportunity_id: str,
     request: OptionalArtifactUsageUpdateRequest,
+    session_token: str | None = Header(default=None, alias="X-Session-Token"),
 ) -> JobOpportunityRecord:
+    _authorize_user(request.userId, session_token)
     return update_job_opportunity_optional_artifact(job_opportunity_id, request)
 
 
 @app.post("/extension/validation-results", response_model=ExtensionValidationRecord)
-def create_extension_validation_result(request: ExtensionValidationSaveRequest) -> ExtensionValidationRecord:
+def create_extension_validation_result(request: ExtensionValidationSaveRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ExtensionValidationRecord:
+    _authorize_user(request.userId, session_token)
     return save_extension_validation(request)
 
 
 @app.get("/extension/users/{user_id}/validation-results", response_model=list[ExtensionValidationRecord])
-def get_extension_validation_results(user_id: str) -> list[ExtensionValidationRecord]:
+def get_extension_validation_results(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[ExtensionValidationRecord]:
+    _authorize_user(user_id, session_token)
     return list_extension_validations(user_id)
 
 
 @app.post("/evaluation/match-feedback", response_model=MatchFeedbackRecord)
-def create_match_feedback(request: MatchFeedbackSaveRequest) -> MatchFeedbackRecord:
+def create_match_feedback(request: MatchFeedbackSaveRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> MatchFeedbackRecord:
+    _authorize_user(request.userId, session_token)
     return save_match_feedback(request)
 
 
 @app.get("/evaluation/users/{user_id}/summary", response_model=MatchFeedbackSummary)
-def get_evaluation_summary(user_id: str) -> MatchFeedbackSummary:
+def get_evaluation_summary(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> MatchFeedbackSummary:
+    _authorize_user(user_id, session_token)
     return get_match_feedback_summary(user_id)
 
 
 @app.get("/evaluation/users/{user_id}/dataset", response_model=MatchFeedbackDataset)
-def export_evaluation_dataset(user_id: str) -> MatchFeedbackDataset:
+def export_evaluation_dataset(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> MatchFeedbackDataset:
+    _authorize_user(user_id, session_token)
     return export_match_feedback_dataset(user_id)
 
 
 @app.post("/evaluation/dataset/import", response_model=MatchFeedbackDataset)
-def import_evaluation_dataset(request: MatchFeedbackImportRequest) -> MatchFeedbackDataset:
+def import_evaluation_dataset(request: MatchFeedbackImportRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> MatchFeedbackDataset:
+    _authorize_user(request.userId, session_token)
     return import_match_feedback_dataset(request)
 
 
 @app.get("/settings/users/{user_id}/scoring-calibration", response_model=ScoringCalibrationListResponse)
-def get_scoring_calibration_settings(user_id: str) -> ScoringCalibrationListResponse:
+def get_scoring_calibration_settings(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ScoringCalibrationListResponse:
+    _authorize_user(user_id, session_token)
     return list_scoring_calibrations(user_id)
 
 
 @app.put("/settings/scoring-calibration", response_model=ScoringCalibrationConfig)
-def update_scoring_calibration_settings(request: ScoringCalibrationUpdateRequest) -> ScoringCalibrationConfig:
+def update_scoring_calibration_settings(request: ScoringCalibrationUpdateRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ScoringCalibrationConfig:
+    _authorize_user(request.userId, session_token)
     return save_scoring_calibration(request)
 
 
 @app.get("/settings/users/{user_id}/scoring-calibration/{role_family}/recommendation", response_model=ScoringCalibrationRecommendation)
-def get_scoring_calibration_recommendation(user_id: str, role_family: str) -> ScoringCalibrationRecommendation:
+def get_scoring_calibration_recommendation(user_id: str, role_family: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ScoringCalibrationRecommendation:
+    _authorize_user(user_id, session_token)
     return recommend_scoring_calibration(user_id, role_family)
 
 
 @app.get("/settings/users/{user_id}/scoring-calibration-recommendation", response_model=ScoringCalibrationRecommendation)
-def get_scoring_calibration_recommendation_by_query(user_id: str, roleFamily: str) -> ScoringCalibrationRecommendation:
+def get_scoring_calibration_recommendation_by_query(user_id: str, roleFamily: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ScoringCalibrationRecommendation:
+    _authorize_user(user_id, session_token)
     return recommend_scoring_calibration(user_id, roleFamily)
 
 
 @app.get("/settings/users/{user_id}/scoring-calibration-audit", response_model=list[ScoringCalibrationAuditRecord])
-def get_scoring_calibration_audit(user_id: str, roleFamily: str | None = None) -> list[ScoringCalibrationAuditRecord]:
+def get_scoring_calibration_audit(user_id: str, roleFamily: str | None = None, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[ScoringCalibrationAuditRecord]:
+    _authorize_user(user_id, session_token)
     return list_scoring_calibration_audit(user_id, roleFamily)
 
 
 @app.post("/settings/scoring-calibration/restore", response_model=ScoringCalibrationConfig)
-def restore_scoring_calibration_settings(request: ScoringCalibrationRestoreRequest) -> ScoringCalibrationConfig:
+def restore_scoring_calibration_settings(request: ScoringCalibrationRestoreRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ScoringCalibrationConfig:
+    _authorize_user(request.userId, session_token)
     try:
         return restore_scoring_calibration(request)
     except ValueError as exc:
@@ -663,6 +708,16 @@ def _llm_key_configured(current_settings) -> bool:
     if current_settings.llm_provider == "gemini":
         return bool(current_settings.gemini_api_key or current_settings.google_api_key or current_settings.llm_api_key)
     return bool(current_settings.llm_api_key)
+
+
+def _authorize_user(user_id: str, session_token: str | None) -> None:
+    if not settings.require_user_auth:
+        return
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Session token is required")
+    user = resolve_user_session(session_token)
+    if user.id != user_id:
+        raise HTTPException(status_code=403, detail="Session token does not match requested user")
 
 
 def _infer_stack_from_text(text: str) -> list[str]:

@@ -389,6 +389,15 @@ const defaultJd =
   "Looking for a skilled .NET Developer with 2 to 5 years of experience in ASP.NET, .NET Core, C#, Web API, MVC and Azure Cloud Services. Strong knowledge of LINQ, Entity Framework, HTML, CSS, JavaScript, jQuery, Azure DevOps CI/CD pipelines, code compliance and enterprise application development.";
 
 const defaultUserId = "local-aditya";
+const sessionTokenStorageKey = "careerAgentSessionToken";
+
+function authHeaders(contentType = true): HeadersInit {
+  const token = window.localStorage.getItem(sessionTokenStorageKey) || "";
+  return {
+    ...(contentType ? { "Content-Type": "application/json" } : {}),
+    ...(token ? { "X-Session-Token": token } : {}),
+  };
+}
 
 function App() {
   const [activeTask, setActiveTask] = useState<ActiveTask>("matching");
@@ -541,22 +550,26 @@ function App() {
   }
 
   async function ensureLocalUser() {
-    await fetch(`${API_BASE_URL}/history/users`, {
+    const response = await fetch(`${API_BASE_URL}/auth/session/claim`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({
         userId: defaultUserId,
         displayName: "Aditya Local Workspace",
         email: "aditya.local@career-agent-os",
       }),
     });
+    if (response.ok) {
+      const payload = await response.json() as { sessionToken: string };
+      window.localStorage.setItem(sessionTokenStorageKey, payload.sessionToken);
+    }
   }
 
   async function lookupSavedAnalysis(fingerprint: string): Promise<HistoryAnalysisRecord | null> {
     await ensureLocalUser();
     const response = await fetch(`${API_BASE_URL}/history/analyses/lookup`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({
         userId: defaultUserId,
         fingerprint,
@@ -571,7 +584,7 @@ function App() {
 
     const resumeResponse = await fetch(`${API_BASE_URL}/history/resumes`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({
         userId: defaultUserId,
         title: `${payload.candidateContext.targetRole} resume snapshot`,
@@ -586,7 +599,7 @@ function App() {
 
     const jdResponse = await fetch(`${API_BASE_URL}/history/job-descriptions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({
         userId: defaultUserId,
         title: parsedJd?.roleTitle || payload.candidateContext.targetRole,
@@ -601,7 +614,7 @@ function App() {
 
     const analysisResponse = await fetch(`${API_BASE_URL}/history/analyses`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({
         userId: defaultUserId,
         title: `${payload.candidateContext.targetRole} - ${analysis.technicalMatchScore}%`,
@@ -620,7 +633,7 @@ function App() {
     await ensureLocalUser();
     const response = await fetch(`${API_BASE_URL}/history/preparation-sessions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({
         userId: defaultUserId,
         analysisId: lastSavedAnalysisId,
@@ -639,13 +652,14 @@ function App() {
     setHistoryInfo("");
     try {
       await ensureLocalUser();
+      const getOptions = { headers: authHeaders(false) };
       const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/workspace`),
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/analyses`),
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/resumes`),
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/job-descriptions`),
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/preparation-sessions`),
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/job-opportunities`),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/workspace`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/analyses`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/resumes`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/job-descriptions`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/preparation-sessions`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/job-opportunities`, getOptions),
       ]);
 
       if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok) {
@@ -673,7 +687,7 @@ function App() {
 
   async function loadPrepMemory() {
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/preparation/memory/${defaultUserId}`);
+      const response = await fetch(`${API_BASE_URL}/ai/preparation/memory/${defaultUserId}`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Preparation memory load failed");
       setPrepMemory(await response.json() as PrepMemoryResponse);
     } catch {
@@ -686,8 +700,8 @@ function App() {
     try {
       const response = await fetch(`${API_BASE_URL}/history/job-opportunities/${jobOpportunityId}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        headers: authHeaders(),
+        body: JSON.stringify({ userId: defaultUserId, status }),
       });
       if (!response.ok) throw new Error("Opportunity status update failed");
       const updated = await response.json() as HistoryJobOpportunityRecord;
@@ -701,7 +715,7 @@ function App() {
   async function persistAnalysisArtifact(analysisId: string, artifactKey: string, response: AnalysisResponse) {
     const updateResponse = await fetch(`${API_BASE_URL}/history/analyses/${analysisId}/optional-artifacts`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({
         userId: defaultUserId,
         artifactKey,
@@ -717,7 +731,7 @@ function App() {
   async function persistOpportunityArtifact(opportunityId: string, artifactKey: string, response: AnalysisResponse) {
     const updateResponse = await fetch(`${API_BASE_URL}/history/job-opportunities/${opportunityId}/optional-artifacts`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({
         userId: defaultUserId,
         artifactKey,
@@ -739,7 +753,7 @@ function App() {
       await ensureLocalUser();
       const diagnosticsResponse = await fetch(`${API_BASE_URL}/extension/diagnostics`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           userId: defaultUserId,
           anonymousSessionId: null,
@@ -766,7 +780,7 @@ function App() {
   async function loadExtensionValidations() {
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/extension/users/${defaultUserId}/validation-results`);
+      const response = await fetch(`${API_BASE_URL}/extension/users/${defaultUserId}/validation-results`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Extension validation history unavailable");
       setExtensionValidations(await response.json() as ExtensionValidationRecord[]);
     } catch (err) {
@@ -790,7 +804,7 @@ function App() {
       await ensureLocalUser();
       const response = await fetch(`${API_BASE_URL}/extension/validation-results`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           userId: defaultUserId,
           ...payload,
@@ -810,7 +824,7 @@ function App() {
   async function loadEvaluationSummary() {
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/evaluation/users/${defaultUserId}/summary`);
+      const response = await fetch(`${API_BASE_URL}/evaluation/users/${defaultUserId}/summary`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Evaluation summary unavailable");
       setEvaluationSummary(await response.json() as MatchFeedbackSummary);
     } catch (err) {
@@ -830,7 +844,7 @@ function App() {
       await ensureLocalUser();
       const response = await fetch(`${API_BASE_URL}/evaluation/match-feedback`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           userId: defaultUserId,
           analysisId: lastSavedAnalysisId,
@@ -853,7 +867,7 @@ function App() {
     setEvaluationInfo("");
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/evaluation/users/${defaultUserId}/dataset`);
+      const response = await fetch(`${API_BASE_URL}/evaluation/users/${defaultUserId}/dataset`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Evaluation export failed");
       const dataset = await response.json() as MatchFeedbackDataset;
       const blob = new Blob([JSON.stringify(dataset, null, 2)], { type: "application/json" });
@@ -878,7 +892,7 @@ function App() {
       const dataset = JSON.parse(text) as MatchFeedbackDataset;
       const response = await fetch(`${API_BASE_URL}/evaluation/dataset/import`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           userId: defaultUserId,
           records: dataset.records.map((record) => ({
@@ -907,7 +921,7 @@ function App() {
     setSettingsInfo("");
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration`);
+      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Scoring calibration settings unavailable");
       const payload = await response.json() as { configs: ScoringCalibrationConfig[] };
       setScoringConfigs(payload.configs);
@@ -921,7 +935,7 @@ function App() {
     try {
       await ensureLocalUser();
       const suffix = roleFamily ? `?roleFamily=${encodeURIComponent(roleFamily)}` : "";
-      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration-audit${suffix}`);
+      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration-audit${suffix}`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Scoring calibration audit unavailable");
       setScoringAudit(await response.json() as ScoringCalibrationAuditRecord[]);
     } catch (err) {
@@ -932,7 +946,7 @@ function App() {
   async function loadSystemDiagnostics() {
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/diagnostics/system?userId=${encodeURIComponent(defaultUserId)}`);
+      const response = await fetch(`${API_BASE_URL}/diagnostics/system?userId=${encodeURIComponent(defaultUserId)}`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("System diagnostics unavailable");
       setSystemDiagnostics(await response.json() as SystemDiagnostics);
     } catch (err) {
@@ -946,7 +960,7 @@ function App() {
       await ensureLocalUser();
       const response = await fetch(`${API_BASE_URL}/settings/scoring-calibration`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           userId: defaultUserId,
           roleFamily: config.roleFamily,
@@ -969,7 +983,7 @@ function App() {
       await ensureLocalUser();
       const response = await fetch(`${API_BASE_URL}/settings/scoring-calibration/restore`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ userId: defaultUserId, auditId }),
       });
       if (!response.ok) throw new Error("Scoring calibration restore failed");
@@ -986,7 +1000,7 @@ function App() {
     setSettingsInfo("");
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration-recommendation?roleFamily=${encodeURIComponent(roleFamily)}`);
+      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration-recommendation?roleFamily=${encodeURIComponent(roleFamily)}`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Scoring recommendation unavailable");
       const recommendation = await response.json() as ScoringCalibrationRecommendation;
       setScoringRecommendation(recommendation);
@@ -1025,7 +1039,7 @@ function App() {
       }
       const response = await fetch(`${API_BASE_URL}/ai/match/score`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify(payload),
       });
 
@@ -1067,7 +1081,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE_URL}/ai/preparation/plan`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           sourceRequest: lastAnalysisRequest,
           analysis: result,
@@ -1125,7 +1139,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           sourceRequest: lastAnalysisRequest,
           analysis: result,
@@ -1243,7 +1257,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE_URL}${config.endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           sourceRequest,
           analysis: baseAnalysis,
@@ -1278,7 +1292,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE_URL}/history/preparation-sessions/${activePreparationSession.id}/progress`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           userId: defaultUserId,
           status: nextStatus ?? inferPreparationStatus(nextProgress, activePreparationSession.plan),

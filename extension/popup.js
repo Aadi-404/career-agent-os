@@ -194,7 +194,10 @@ function setStatus(value) {
 async function post(path, body) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(state.sessionToken ? { "X-Session-Token": state.sessionToken } : {}),
+    },
     body: JSON.stringify(body),
   });
   if (!response.ok) {

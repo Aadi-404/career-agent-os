@@ -161,6 +161,7 @@ class JobOpportunitySaveRequest(BaseModel):
 
 
 class JobOpportunityStatusUpdateRequest(BaseModel):
+    userId: str | None = Field(default=None, min_length=2, max_length=80)
     status: Literal["viewed", "shortlisted", "applied", "interview", "rejected", "offer", "archived"]
 
 
