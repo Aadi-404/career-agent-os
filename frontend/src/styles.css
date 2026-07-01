@@ -1224,6 +1224,76 @@ button.premiumButton:not(.secondaryButton) span {
   grid-column: 1 / -1;
 }
 
+.readinessSummary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+
+.readinessSummary strong {
+  color: var(--brand);
+}
+
+.readinessSummary span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+  text-transform: capitalize;
+}
+
+.readinessList {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.readinessList > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.readinessList p {
+  grid-column: 2;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.statusPill {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.statusPill.pass {
+  background: #e5f7ee;
+  color: #136c3d;
+}
+
+.statusPill.warn {
+  background: #fff3d8;
+  color: #8a5a00;
+}
+
+.statusPill.fail {
+  background: #ffe5e5;
+  color: #a62222;
+}
+
 .diagnosticTiles {
   display: grid;
   gap: 10px;

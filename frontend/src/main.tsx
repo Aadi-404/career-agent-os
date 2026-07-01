@@ -152,6 +152,18 @@ type SystemDiagnostics = {
   warnings: string[];
 };
 
+type ProductionReadiness = {
+  environment: string;
+  readyForProduction: boolean;
+  checks: Array<{
+    key: string;
+    label: string;
+    status: "pass" | "warn" | "fail";
+    detail: string;
+  }>;
+  warnings: string[];
+};
+
 type AdminUserRecord = {
   id: string;
   displayName: string;
@@ -470,6 +482,7 @@ function App() {
   const [scoringRecommendation, setScoringRecommendation] = useState<ScoringCalibrationRecommendation | null>(null);
   const [scoringAudit, setScoringAudit] = useState<ScoringCalibrationAuditRecord[]>([]);
   const [systemDiagnostics, setSystemDiagnostics] = useState<SystemDiagnostics | null>(null);
+  const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
@@ -498,6 +511,7 @@ function App() {
     if (activeTask === "settings") {
       loadScoringConfigs();
       loadSystemDiagnostics();
+      loadProductionReadiness();
       loadAdminUsers();
     }
   }, [activeTask]);
@@ -962,6 +976,17 @@ function App() {
       setSystemDiagnostics(await response.json() as SystemDiagnostics);
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "System diagnostics unavailable");
+    }
+  }
+
+  async function loadProductionReadiness() {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/diagnostics/production-readiness?userId=${encodeURIComponent(defaultUserId)}`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error("Production readiness unavailable");
+      setProductionReadiness(await response.json() as ProductionReadiness);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Production readiness unavailable");
     }
   }
 
@@ -2038,6 +2063,7 @@ function App() {
                 recommendation={scoringRecommendation}
                 audit={scoringAudit}
                 diagnostics={systemDiagnostics}
+                productionReadiness={productionReadiness}
                 users={adminUsers}
                 info={settingsInfo}
                 onRefresh={loadScoringConfigs}
@@ -2046,6 +2072,7 @@ function App() {
                 onLoadAudit={loadScoringAudit}
                 onRestore={restoreScoringConfig}
                 onRefreshDiagnostics={loadSystemDiagnostics}
+                onRefreshReadiness={loadProductionReadiness}
                 onRefreshUsers={loadAdminUsers}
               />
             </TaskPanel>
@@ -2536,6 +2563,7 @@ function ScoringSettingsPanel({
   recommendation,
   audit,
   diagnostics,
+  productionReadiness,
   users,
   info,
   onRefresh,
@@ -2544,12 +2572,14 @@ function ScoringSettingsPanel({
   onLoadAudit,
   onRestore,
   onRefreshDiagnostics,
+  onRefreshReadiness,
   onRefreshUsers,
 }: {
   configs: ScoringCalibrationConfig[];
   recommendation: ScoringCalibrationRecommendation | null;
   audit: ScoringCalibrationAuditRecord[];
   diagnostics: SystemDiagnostics | null;
+  productionReadiness: ProductionReadiness | null;
   users: AdminUserRecord[];
   info: string;
   onRefresh: () => void;
@@ -2558,6 +2588,7 @@ function ScoringSettingsPanel({
   onLoadAudit: (roleFamily?: string) => void;
   onRestore: (auditId: string) => void;
   onRefreshDiagnostics: () => void;
+  onRefreshReadiness: () => void;
   onRefreshUsers: () => void;
 }) {
   const [selectedFamily, setSelectedFamily] = useState(".NET");
@@ -2669,6 +2700,35 @@ function ScoringSettingsPanel({
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="panel diagnosticsPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Deployment</p>
+            <h3>Production Readiness</h3>
+          </div>
+          <button type="button" className="secondaryButton" onClick={onRefreshReadiness}>Refresh Readiness</button>
+        </div>
+        {productionReadiness ? (
+          <>
+            <div className="readinessSummary">
+              <strong>{productionReadiness.readyForProduction ? "Ready to deploy" : "Needs attention"}</strong>
+              <span>{productionReadiness.environment} environment</span>
+            </div>
+            <div className="readinessList">
+              {productionReadiness.checks.map((check) => (
+                <div key={check.key}>
+                  <span className={`statusPill ${check.status}`}>{check.status}</span>
+                  <strong>{check.label}</strong>
+                  <p>{check.detail}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="hint">Production readiness has not been loaded yet.</p>
+        )}
       </div>
 
       <div className="panel diagnosticsPanel">

@@ -75,7 +75,7 @@ from app.models.scoring_config import (
     ScoringCalibrationRestoreRequest,
     ScoringCalibrationUpdateRequest,
 )
-from app.models.system import SystemDiagnostics
+from app.models.system import ProductionReadinessResponse, ReadinessCheck, SystemDiagnostics
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.history_store import (
     create_or_touch_anonymous_session,
@@ -201,6 +201,28 @@ def system_diagnostics(userId: str | None = None, session_token: str | None = He
         jdParserMode=settings.jd_parser_mode,
         corsOrigins=[origin.strip() for origin in settings.cors_allow_origins.split(",") if origin.strip()],
         workspaceCounts=workspace_counts,
+        warnings=warnings,
+    )
+
+
+@app.get("/diagnostics/production-readiness", response_model=ProductionReadinessResponse)
+def production_readiness(userId: str | None = None, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ProductionReadinessResponse:
+    database_ok = True
+    database_error = ""
+    try:
+        initialize_database()
+    except Exception as exc:
+        database_ok = False
+        database_error = str(exc)
+    if userId:
+        _authorize_user(userId, session_token)
+
+    checks = _build_production_readiness_checks(database_ok, database_error)
+    warnings = [check.detail for check in checks if check.status in {"warn", "fail"}]
+    return ProductionReadinessResponse(
+        environment=settings.environment,
+        readyForProduction=all(check.status != "fail" for check in checks),
+        checks=checks,
         warnings=warnings,
     )
 
@@ -711,6 +733,124 @@ def _default_extension_candidate_context(request: ExtensionMatchRequest) -> Cand
         preferredLocations=[request.job.location] if request.job.location else [],
         relocationOpen=False,
     )
+
+
+def _build_production_readiness_checks(database_ok: bool, database_error: str = "") -> list[ReadinessCheck]:
+    is_production = settings.environment == "production"
+    cors_origins = [origin.strip() for origin in settings.cors_allow_origins.split(",") if origin.strip()]
+    has_local_cors = any(_is_local_origin(origin) for origin in cors_origins)
+    has_wildcard_cors = "*" in cors_origins
+    llm_key_configured = _llm_key_configured(settings)
+    embedding_key_configured = _embedding_key_configured(settings)
+    admin_ids = [item.strip() for item in settings.admin_user_ids.split(",") if item.strip()]
+
+    checks: list[ReadinessCheck] = [
+        ReadinessCheck(
+            key="database",
+            label="Database connection",
+            status="pass" if database_ok else "fail",
+            detail="PostgreSQL is reachable and schema initialization completed." if database_ok else f"Database check failed: {database_error}",
+        ),
+        ReadinessCheck(
+            key="environment",
+            label="Environment mode",
+            status="pass" if is_production else "warn",
+            detail="Application is running in production mode." if is_production else f"Current mode is {settings.environment}; switch ENVIRONMENT=production before public deployment.",
+        ),
+        ReadinessCheck(
+            key="auth",
+            label="User auth enforcement",
+            status="pass" if settings.require_user_auth else ("fail" if is_production else "warn"),
+            detail="User-scoped APIs require X-Session-Token." if settings.require_user_auth else "REQUIRE_USER_AUTH is disabled; enable it before multi-user deployment.",
+        ),
+        ReadinessCheck(
+            key="adminBootstrap",
+            label="Admin bootstrap",
+            status="pass" if admin_ids else ("fail" if is_production else "warn"),
+            detail=f"{len(admin_ids)} admin user id(s) configured." if admin_ids else "ADMIN_USER_IDS is empty; configure at least one admin before deployment.",
+        ),
+        ReadinessCheck(
+            key="cors",
+            label="CORS origins",
+            status="fail" if is_production and (not cors_origins or has_local_cors or has_wildcard_cors) else ("warn" if has_wildcard_cors else "pass"),
+            detail=_cors_readiness_detail(cors_origins, is_production, has_local_cors, has_wildcard_cors),
+        ),
+        ReadinessCheck(
+            key="llm",
+            label="LLM configuration",
+            status="fail" if settings.llm_mode == "live" and not llm_key_configured else ("warn" if is_production and settings.llm_mode != "live" else "pass"),
+            detail=_llm_readiness_detail(llm_key_configured, is_production),
+        ),
+        ReadinessCheck(
+            key="embeddings",
+            label="Embedding configuration",
+            status="pass" if settings.embedding_provider == "local" or embedding_key_configured or settings.embedding_fallback_local else ("fail" if is_production else "warn"),
+            detail=_embedding_readiness_detail(embedding_key_configured),
+        ),
+        ReadinessCheck(
+            key="jdParser",
+            label="JD parser mode",
+            status="warn" if settings.jd_parser_mode == "llm" and (settings.llm_mode != "live" or not llm_key_configured) else "pass",
+            detail=_jd_parser_readiness_detail(llm_key_configured),
+        ),
+    ]
+    return checks
+
+
+def _cors_readiness_detail(cors_origins: list[str], is_production: bool, has_local_cors: bool, has_wildcard_cors: bool) -> str:
+    if not cors_origins:
+        return "No CORS origins are configured."
+    if is_production and has_wildcard_cors:
+        return "Wildcard CORS is unsafe for production; use the deployed frontend and extension origins only."
+    if is_production and has_local_cors:
+        return "Production CORS still includes localhost/127.0.0.1; replace with deployed frontend and extension origins."
+    return f"{len(cors_origins)} origin(s) configured."
+
+
+def _llm_readiness_detail(llm_key_configured: bool, is_production: bool) -> str:
+    if settings.llm_mode == "live" and llm_key_configured:
+        return f"Live LLM is configured for {settings.llm_provider} / {settings.llm_model}."
+    if settings.llm_mode == "live":
+        return f"Live LLM mode is selected for {settings.llm_provider}, but the provider key is missing."
+    if is_production:
+        return "LLM mode is mock; paid optional artifacts will return deterministic placeholders."
+    return "Mock LLM mode is active, which is fine for local development."
+
+
+def _embedding_readiness_detail(embedding_key_configured: bool) -> str:
+    if settings.embedding_provider == "local":
+        return "Local embeddings are active; no remote key is required."
+    if embedding_key_configured:
+        return f"{settings.embedding_provider} embeddings have a provider key configured."
+    if settings.embedding_fallback_local:
+        return f"{settings.embedding_provider} embeddings can fall back to local embeddings when the remote key is unavailable."
+    return f"{settings.embedding_provider} embeddings are selected without a provider key or local fallback."
+
+
+def _jd_parser_readiness_detail(llm_key_configured: bool) -> str:
+    if settings.jd_parser_mode == "llm" and (settings.llm_mode != "live" or not llm_key_configured):
+        return "JD parser is set to LLM mode, but live LLM access is not fully configured."
+    return f"JD parser mode is {settings.jd_parser_mode}."
+
+
+def _embedding_key_configured(current_settings) -> bool:
+    if current_settings.embedding_provider == "openai":
+        return bool(current_settings.openai_api_key or current_settings.llm_api_key)
+    if current_settings.embedding_provider == "gemini":
+        return bool(current_settings.gemini_api_key or current_settings.google_api_key or current_settings.llm_api_key)
+    if current_settings.embedding_provider == "auto":
+        return bool(
+            current_settings.openai_api_key
+            or current_settings.gemini_api_key
+            or current_settings.google_api_key
+            or current_settings.llm_api_key
+        )
+    return True
+
+
+def _is_local_origin(origin: str) -> bool:
+    lowered = origin.lower()
+    return "localhost" in lowered or "127.0.0.1" in lowered or "[::1]" in lowered
 
 
 def _llm_key_configured(current_settings) -> bool:

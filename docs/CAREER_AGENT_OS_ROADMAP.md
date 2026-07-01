@@ -247,6 +247,7 @@ Started:
 - Scoring calibration changes are audited with before/after weights and change source.
 - Previous scoring weights can be restored from the audit history.
 - A system diagnostics endpoint and Settings panel show database, AI, embedding, parser, CORS, and workspace health.
+- A production readiness endpoint and Settings panel flag deployment blockers before hosting the app publicly.
 - User-scoped APIs can require `X-Session-Token` ownership checks by enabling `REQUIRE_USER_AUTH`.
 - Settings includes a basic known-users panel for multi-user deployment checks.
 - Admin-only guards now protect admin and scoring settings APIs when auth enforcement is enabled.
