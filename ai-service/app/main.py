@@ -23,7 +23,7 @@ from app.models.analysis import (
     RequirementMatch,
     ResumeImprovement,
 )
-from app.models.auth import UserSessionResponse
+from app.models.auth import UserLoginRequest, UserPasswordRegisterRequest, UserSessionResponse
 from app.models.evaluation import (
     MatchFeedbackDataset,
     MatchFeedbackImportRequest,
@@ -85,8 +85,10 @@ from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.history_store import (
     create_or_touch_anonymous_session,
     claim_anonymous_session,
+    authenticate_user_password,
     create_user_session,
     create_or_update_user,
+    create_or_update_user_password,
     get_resume,
     get_preparation_session,
     get_workspace_summary,
@@ -560,6 +562,26 @@ def upsert_user(request: UserCreateRequest) -> UserRecord:
 def claim_user_session(request: UserCreateRequest) -> UserSessionResponse:
     user = create_or_update_user(request)
     token = create_user_session(user.id, source="web")
+    return UserSessionResponse(user=user, sessionToken=token)
+
+
+@app.post("/auth/register", response_model=UserSessionResponse)
+def register_user_password(request: UserPasswordRegisterRequest) -> UserSessionResponse:
+    user = create_or_update_user_password(
+        request.userId,
+        request.displayName,
+        request.email,
+        request.password,
+        request.role,
+    )
+    token = create_user_session(user.id, source="password")
+    return UserSessionResponse(user=user, sessionToken=token)
+
+
+@app.post("/auth/login", response_model=UserSessionResponse)
+def login_user_password(request: UserLoginRequest) -> UserSessionResponse:
+    user = authenticate_user_password(request.userIdOrEmail, request.password)
+    token = create_user_session(user.id, source="password")
     return UserSessionResponse(user=user, sessionToken=token)
 
 

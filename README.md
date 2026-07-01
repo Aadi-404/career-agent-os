@@ -52,6 +52,7 @@ Current Phase 6 groundwork:
 - Admin runtime panel: Settings page shows operational diagnostics without making AI calls.
 - Optional user auth enforcement: set `REQUIRE_USER_AUTH=true` to require `X-Session-Token` on user-scoped history, evaluation, settings, diagnostics, and extension validation APIs.
 - Web session claim: frontend uses `/auth/session/claim` and stores a session token for guarded requests.
+- Password-ready web auth: `/auth/register` and `/auth/login` issue the same session token shape for deployable multi-user login flows.
 - Admin user visibility: `/admin/users` and the Settings page show known users for deployment checks.
 - Role-based admin guard: when auth is enforced, `/admin/*` and scoring settings require an admin session.
 - First admin bootstrap: configure `ADMIN_USER_IDS` so listed users are promoted to `admin` on session claim/update.
@@ -59,6 +60,7 @@ Current Phase 6 groundwork:
 - CI workflow: GitHub Actions runs backend tests, frontend build, deployment script compile checks, and extension packaging dry run.
 - Session controls: web and extension UIs can refresh or clear saved session tokens when auth state is stale.
 - Workspace user selector: the web app can switch the active user id instead of being locked to `local-aditya`.
+- Role-aware Settings UI: scoring recommendations, saves, restores, and known-user refresh controls are disabled unless the active session is admin.
 
 ## Run AI Service
 

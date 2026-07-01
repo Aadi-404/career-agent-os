@@ -243,7 +243,7 @@ Restore approach:
 ```
 
 - Do not commit files under `deployment/backups`; the folder is intentionally ignored.
-- Treat backup files as secrets because they include user data, saved resumes, job descriptions, analyses, and session tokens.
+- Treat backup files as secrets because they include user data, saved resumes, job descriptions, analyses, session tokens, and password hashes.
 
 ## Known Remaining Manual Work
 

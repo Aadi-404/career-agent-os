@@ -1,5 +1,7 @@
 import json
 import secrets
+import hashlib
+import hmac
 from datetime import UTC, datetime
 from sqlite3 import IntegrityError
 from typing import Any
@@ -69,6 +71,61 @@ def create_or_update_user(request: UserCreateRequest) -> UserRecord:
                 raise
             raise HTTPException(status_code=409, detail="A user with this email already exists") from exc
     return UserRecord(id=request.userId, displayName=request.displayName, email=request.email, role=role, createdAt=now)
+
+
+def create_or_update_user_password(
+    user_id: str,
+    display_name: str,
+    email: str | None,
+    password: str,
+    requested_role: str | None = None,
+) -> UserRecord:
+    now = _now()
+    role = _resolved_user_role(user_id, requested_role)
+    password_hash = _hash_password(password)
+    with get_connection() as connection:
+        existing = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if existing:
+            connection.execute(
+                """
+                UPDATE users
+                SET display_name = ?, email = ?, role = ?, password_hash = ?
+                WHERE id = ?
+                """,
+                (display_name, email, role, password_hash, user_id),
+            )
+            row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+            return _user_from_row(_require_row(row, "User not found after password update"))
+        try:
+            connection.execute(
+                """
+                INSERT INTO users (id, display_name, email, role, password_hash, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (user_id, display_name, email, role, password_hash, now),
+            )
+        except Exception as exc:
+            if not isinstance(exc, IntegrityError) and exc.__class__.__name__ != "UniqueViolation":
+                raise
+            raise HTTPException(status_code=409, detail="A user with this email already exists") from exc
+    return UserRecord(id=user_id, displayName=display_name, email=email, role=role, createdAt=now)
+
+
+def authenticate_user_password(identifier: str, password: str) -> UserRecord:
+    normalized = identifier.strip()
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT *
+            FROM users
+            WHERE id = ? OR lower(email) = lower(?)
+            LIMIT 1
+            """,
+            (normalized, normalized),
+        ).fetchone()
+    if not row or not _verify_password(password, _row_value(row, "password_hash")):
+        raise HTTPException(status_code=401, detail="Invalid user id/email or password")
+    return _user_from_row(row)
 
 
 def list_users() -> list[UserRecord]:
@@ -832,6 +889,30 @@ def _resolved_user_role(user_id: str, requested_role: str | None) -> str:
     if user_id in admin_ids:
         return "admin"
     return "admin" if requested_role == "admin" and not admin_ids else "member"
+
+
+def _hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000).hex()
+    return f"pbkdf2_sha256$120000${salt}${digest}"
+
+
+def _verify_password(password: str, stored_hash: str | None) -> bool:
+    if not stored_hash:
+        return False
+    try:
+        algorithm, iterations_text, salt, expected = stored_hash.split("$", 3)
+        if algorithm != "pbkdf2_sha256":
+            return False
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt.encode("utf-8"),
+            int(iterations_text),
+        ).hex()
+        return hmac.compare_digest(digest, expected)
+    except Exception:
+        return False
 
 
 def _ensure_owned_record(connection, table: str, record_id: str, user_id: str) -> None:

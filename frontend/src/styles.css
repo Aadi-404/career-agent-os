@@ -289,7 +289,7 @@ h1 {
 
 .workspaceUserControl {
   display: grid;
-  grid-template-columns: minmax(180px, 260px) auto;
+  grid-template-columns: minmax(180px, 260px) auto auto;
   align-items: end;
   gap: 8px;
 }
@@ -300,6 +300,10 @@ h1 {
   color: var(--muted);
   font-size: 12px;
   font-weight: 850;
+}
+
+.workspaceUserControl button {
+  white-space: nowrap;
 }
 
 .sessionStatusPanel span,

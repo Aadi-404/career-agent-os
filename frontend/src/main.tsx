@@ -490,6 +490,8 @@ function App() {
   const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [sessionInfo, setSessionInfo] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [currentUser, setCurrentUser] = useState<AdminUserRecord | null>(null);
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
   const [resumeHistory, setResumeHistory] = useState<HistoryResumeRecord[]>([]);
@@ -591,9 +593,10 @@ function App() {
       }),
     });
     if (response.ok) {
-      const payload = await response.json() as { sessionToken: string };
+      const payload = await response.json() as { user: AdminUserRecord; sessionToken: string };
       window.localStorage.setItem(sessionTokenStorageKey, payload.sessionToken);
       window.localStorage.setItem(sessionIssuedAtStorageKey, new Date().toISOString());
+      setCurrentUser(payload.user);
       refreshSessionInfo();
     } else if (response.status === 401 || response.status === 403) {
       clearStoredSession("Saved session was invalid. Reconnect to continue.");
@@ -621,6 +624,7 @@ function App() {
   function clearStoredSession(message = "Session cleared. Reconnect before guarded actions.") {
     window.localStorage.removeItem(sessionTokenStorageKey);
     window.localStorage.removeItem(sessionIssuedAtStorageKey);
+    setCurrentUser(null);
     setSessionInfo(message);
   }
 
@@ -652,6 +656,72 @@ function App() {
     setSystemDiagnostics(null);
     setProductionReadiness(null);
     setAdminUsers([]);
+  }
+
+  function applyAuthenticatedSession(payload: { user: AdminUserRecord; sessionToken: string }, message: string) {
+    window.localStorage.setItem(workspaceUserStorageKey, payload.user.id);
+    window.localStorage.setItem(sessionTokenStorageKey, payload.sessionToken);
+    window.localStorage.setItem(sessionIssuedAtStorageKey, new Date().toISOString());
+    setWorkspaceUserId(payload.user.id);
+    setWorkspaceUserDraft(payload.user.id);
+    setCurrentUser(payload.user);
+    setAuthPassword("");
+    setSessionInfo(message);
+  }
+
+  async function registerWithPassword() {
+    if (workspaceUserDraft.trim().length < 2) {
+      setSessionInfo("Workspace user id must be at least 2 characters.");
+      return;
+    }
+    if (authPassword.length < 8) {
+      setSessionInfo("Password must be at least 8 characters.");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          userId: workspaceUserDraft.trim(),
+          displayName: workspaceUserDraft.trim(),
+          email: null,
+          password: authPassword,
+          role: "admin",
+        }),
+      });
+      if (!response.ok) {
+        setSessionInfo("Password registration failed.");
+        return;
+      }
+      applyAuthenticatedSession(await response.json() as { user: AdminUserRecord; sessionToken: string }, "Password session active.");
+    } catch (error) {
+      setSessionInfo(error instanceof Error ? error.message : "Password registration failed.");
+    }
+  }
+
+  async function loginWithPassword() {
+    if (workspaceUserDraft.trim().length < 2 || authPassword.length < 8) {
+      setSessionInfo("Enter user id/email and password.");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          userIdOrEmail: workspaceUserDraft.trim(),
+          password: authPassword,
+        }),
+      });
+      if (!response.ok) {
+        clearStoredSession("Login failed. Check user id/email and password.");
+        return;
+      }
+      applyAuthenticatedSession(await response.json() as { user: AdminUserRecord; sessionToken: string }, "Password login active.");
+    } catch (error) {
+      clearStoredSession(error instanceof Error ? error.message : "Login failed. Check user id/email and password.");
+    }
   }
 
   async function lookupSavedAnalysis(fingerprint: string): Promise<HistoryAnalysisRecord | null> {
@@ -1635,8 +1705,13 @@ function App() {
             userId={workspaceUserId}
             draftUserId={workspaceUserDraft}
             sessionInfo={sessionInfo}
+            currentRole={currentUser?.role ?? "unknown"}
+            authPassword={authPassword}
             onDraftUserChange={setWorkspaceUserDraft}
+            onPasswordChange={setAuthPassword}
             onApplyUser={applyWorkspaceUser}
+            onLogin={loginWithPassword}
+            onRegister={registerWithPassword}
             onReconnect={reconnectSession}
             onClear={() => clearStoredSession()}
           />
@@ -2139,6 +2214,7 @@ function App() {
                 diagnostics={systemDiagnostics}
                 productionReadiness={productionReadiness}
                 users={adminUsers}
+                canManageSettings={currentUser?.role === "admin"}
                 info={settingsInfo}
                 onRefresh={loadScoringConfigs}
                 onSave={saveScoringConfig}
@@ -2161,16 +2237,26 @@ function SessionStatusPanel({
   userId,
   draftUserId,
   sessionInfo,
+  currentRole,
+  authPassword,
   onDraftUserChange,
+  onPasswordChange,
   onApplyUser,
+  onLogin,
+  onRegister,
   onReconnect,
   onClear,
 }: {
   userId: string;
   draftUserId: string;
   sessionInfo: string;
+  currentRole: string;
+  authPassword: string;
   onDraftUserChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
   onApplyUser: () => void;
+  onLogin: () => void;
+  onRegister: () => void;
   onReconnect: () => void;
   onClear: () => void;
 }) {
@@ -2179,7 +2265,7 @@ function SessionStatusPanel({
       <div>
         <span>Workspace user</span>
         <strong>{userId}</strong>
-        <small>{sessionInfo}</small>
+        <small>{sessionInfo} | Role: {currentRole}</small>
       </div>
       <div className="workspaceUserControl">
         <label>
@@ -2187,6 +2273,14 @@ function SessionStatusPanel({
           <input value={draftUserId} onChange={(event) => onDraftUserChange(event.target.value)} />
         </label>
         <button type="button" className="secondaryButton" onClick={onApplyUser}>Use User</button>
+      </div>
+      <div className="workspaceUserControl">
+        <label>
+          Password
+          <input type="password" value={authPassword} onChange={(event) => onPasswordChange(event.target.value)} placeholder="8+ characters" />
+        </label>
+        <button type="button" className="secondaryButton" onClick={onLogin}>Login</button>
+        <button type="button" className="secondaryButton" onClick={onRegister}>Register</button>
       </div>
       <div className="sessionActions">
         <button type="button" className="secondaryButton" onClick={onReconnect}>Refresh Session</button>
@@ -2678,6 +2772,7 @@ function ScoringSettingsPanel({
   diagnostics,
   productionReadiness,
   users,
+  canManageSettings,
   info,
   onRefresh,
   onSave,
@@ -2694,6 +2789,7 @@ function ScoringSettingsPanel({
   diagnostics: SystemDiagnostics | null;
   productionReadiness: ProductionReadiness | null;
   users: AdminUserRecord[];
+  canManageSettings: boolean;
   info: string;
   onRefresh: () => void;
   onSave: (config: ScoringCalibrationConfig) => void;
@@ -2737,6 +2833,9 @@ function ScoringSettingsPanel({
           </div>
           <button type="button" className="secondaryButton" onClick={onRefresh}>Refresh</button>
         </div>
+        {!canManageSettings && (
+          <p className="hint">Admin role is required to generate recommendations, save weights, restore audit entries, or view known users when auth enforcement is enabled.</p>
+        )}
         <label>
           Role family
           <select value={selectedFamily} onChange={(event) => setSelectedFamily(event.target.value)}>
@@ -2766,13 +2865,13 @@ function ScoringSettingsPanel({
           ))}
         </div>
         <div className="actionBar">
-          <button type="button" className="secondaryButton" onClick={() => activeConfig && onRecommend(activeConfig.roleFamily)}>
+          <button type="button" className="secondaryButton" disabled={!canManageSettings} onClick={() => activeConfig && onRecommend(activeConfig.roleFamily)}>
             Generate Suggestion
           </button>
           <button
             type="button"
             className="secondaryButton"
-            disabled={!recommendation || recommendation.roleFamily !== activeConfig?.roleFamily}
+            disabled={!canManageSettings || !recommendation || recommendation.roleFamily !== activeConfig?.roleFamily}
             onClick={() => recommendation && setDraftWeights(recommendation.suggestedWeights)}
           >
             Apply Suggestion to Draft
@@ -2794,7 +2893,7 @@ function ScoringSettingsPanel({
         )}
         <button
           type="button"
-          disabled={!activeConfig || total !== 100}
+          disabled={!canManageSettings || !activeConfig || total !== 100}
           onClick={() => activeConfig && onSave({ ...activeConfig, categoryWeights: draftWeights })}
         >
           Save Weights
@@ -2884,7 +2983,7 @@ function ScoringSettingsPanel({
             <p className="eyebrow">Admin</p>
             <h3>Known Users</h3>
           </div>
-          <button type="button" className="secondaryButton" onClick={onRefreshUsers}>Refresh Users</button>
+          <button type="button" className="secondaryButton" disabled={!canManageSettings} onClick={onRefreshUsers}>Refresh Users</button>
         </div>
         <div className="compactList">
           {users.length ? users.map((user) => (
@@ -2914,7 +3013,7 @@ function ScoringSettingsPanel({
             <div key={item.id}>
               <strong>{formatDate(item.createdAt)} | {item.changeSource}</strong>
               <span>{weightDeltaSummary(item.previousWeights, item.newWeights)}</span>
-              <button type="button" className="tinyButton" onClick={() => onRestore(item.id)}>Restore previous weights</button>
+              <button type="button" className="tinyButton" disabled={!canManageSettings} onClick={() => onRestore(item.id)}>Restore previous weights</button>
             </div>
           )) : (
             <div>

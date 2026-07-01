@@ -76,11 +76,15 @@ def _postgres_schema() -> str:
                 display_name TEXT NOT NULL,
                 email TEXT,
                 role TEXT NOT NULL DEFAULT 'member',
+                password_hash TEXT,
                 created_at TEXT NOT NULL
             );
 
             ALTER TABLE users
             ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
+
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS password_hash TEXT;
 
             CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
             ON users(email)
