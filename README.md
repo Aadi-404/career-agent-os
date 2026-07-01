@@ -25,6 +25,12 @@ Phase 5 deployment and extension validation details are documented in:
 docs/PHASE_5_PRODUCTION_READINESS.md
 ```
 
+Deployment environment templates are available in:
+
+```text
+deployment/env
+```
+
 Current Phase 6 groundwork:
 
 - Extension validation records: `POST /extension/validation-results`.
@@ -100,6 +106,21 @@ Frontend: http://localhost:8080
 AI service: http://localhost:8001
 PostgreSQL: localhost:5432
 ```
+
+## Deployment Env Profiles
+
+Use the templates in `deployment/env` when configuring hosting environments:
+
+```text
+backend.local.env.example
+backend.staging.env.example
+backend.production.env.example
+frontend.local.env.example
+frontend.staging.env.example
+frontend.production.env.example
+```
+
+Production should use `ENVIRONMENT=production`, `REQUIRE_USER_AUTH=true`, a managed PostgreSQL `DATABASE_URL`, deployed CORS origins, and backend-only provider keys.
 
 ## Browser Extension
 

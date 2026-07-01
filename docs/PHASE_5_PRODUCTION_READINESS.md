@@ -22,6 +22,7 @@ Backend:
 ```text
 GET /health
 GET /ready
+GET /diagnostics/production-readiness
 POST /extension/diagnostics
 ```
 
@@ -61,10 +62,60 @@ For each page verify:
 - Set `ENVIRONMENT=production`.
 - Set `DATABASE_URL` to managed PostgreSQL.
 - Set `CORS_ALLOW_ORIGINS` to the deployed frontend origin only.
+- Set `REQUIRE_USER_AUTH=true`.
+- Set `ADMIN_USER_IDS` to the first admin user's id.
 - Set provider keys only in backend environment variables.
 - Set frontend `VITE_API_BASE_URL` to the deployed backend URL before building.
 - Run backend `/ready` after deploy.
+- Run backend `/diagnostics/production-readiness` and clear all `fail` checks.
 - Create a user and save at least one resume before extension testing.
+
+## Environment Profiles
+
+Copy the matching template into the hosting provider's environment variable screen:
+
+```text
+deployment/env/backend.local.env.example
+deployment/env/backend.staging.env.example
+deployment/env/backend.production.env.example
+deployment/env/frontend.local.env.example
+deployment/env/frontend.staging.env.example
+deployment/env/frontend.production.env.example
+```
+
+Local keeps `LLM_MODE=mock` and `REQUIRE_USER_AUTH=false` for fast development. Staging and production should use `LLM_MODE=live`, `REQUIRE_USER_AUTH=true`, a managed PostgreSQL `DATABASE_URL`, and deployed CORS origins.
+
+## Deployment Runbook
+
+1. Provision PostgreSQL and create the `careerAgentOS` database.
+2. Deploy the backend with the production backend env profile.
+3. Confirm backend health:
+
+```text
+GET https://api.your-domain.com/health
+GET https://api.your-domain.com/ready
+GET https://api.your-domain.com/diagnostics/production-readiness
+```
+
+4. Deploy the frontend with `VITE_API_BASE_URL` pointing to the backend URL.
+5. Open the frontend, claim the local web session, and confirm the Settings readiness panel has no failed checks.
+6. Upload or paste one resume, parse it, review/edit normalized resume and JD, then run the free score step.
+7. Save the resume and analysis, then verify History shows the saved records.
+8. Load the unpacked extension or packaged extension build, connect it to the same user, parse a real job page, and run a match against a saved resume.
+
+## Smoke Test Matrix
+
+| Area | Test | Expected result |
+| --- | --- | --- |
+| Backend | `/health` | `{"status":"ok"}` |
+| Backend | `/ready` | Database initializes and returns `status=ready` |
+| Backend | `/diagnostics/production-readiness` | No `fail` checks before public launch |
+| Frontend | Settings task | Diagnostics, readiness, users, and scoring settings load |
+| Matching | Resume/JD score | Score response returns without generating optional paid artifacts |
+| History | Save resume/analysis | Saved records appear under the same user |
+| Preparation | Generate plan | Optional plan is generated only when requested |
+| Extension | Parse job page | Title, company, location, and JD are detected or manual fallback works |
+| Extension | Match saved resume | Opportunity is saved and visible in History |
 
 ## Known Remaining Manual Work
 

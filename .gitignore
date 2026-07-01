@@ -10,6 +10,8 @@ __pycache__/
 .venv/
 venv/
 env/
+!deployment/env/
+!deployment/env/*.example
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
