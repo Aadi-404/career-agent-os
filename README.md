@@ -122,6 +122,12 @@ frontend.production.env.example
 
 Production should use `ENVIRONMENT=production`, `REQUIRE_USER_AUTH=true`, a managed PostgreSQL `DATABASE_URL`, deployed CORS origins, and backend-only provider keys.
 
+Run deployment smoke checks with:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api http://localhost:8000 --frontend http://localhost:5173
+```
+
 ## Browser Extension
 
 Load the unpacked extension from:

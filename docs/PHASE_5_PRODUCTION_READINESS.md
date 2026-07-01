@@ -103,6 +103,32 @@ GET https://api.your-domain.com/diagnostics/production-readiness
 7. Save the resume and analysis, then verify History shows the saved records.
 8. Load the unpacked extension or packaged extension build, connect it to the same user, parse a real job page, and run a match against a saved resume.
 
+## Automated Smoke Check
+
+Run the smoke checker after local startup, Docker Compose startup, staging deploy, or production deploy:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api http://localhost:8000 --frontend http://localhost:5173
+```
+
+For Docker Compose:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api http://localhost:8001 --frontend http://localhost:8080
+```
+
+For production:
+
+```powershell
+python deployment/smoke_check.py --api https://api.your-domain.com --frontend https://app.your-domain.com --strict-production
+```
+
+If `REQUIRE_USER_AUTH=true` and you want user-scoped readiness, pass:
+
+```powershell
+python deployment/smoke_check.py --api https://api.your-domain.com --user-id your-user-id --session-token your-session-token --strict-production
+```
+
 ## Smoke Test Matrix
 
 | Area | Test | Expected result |
