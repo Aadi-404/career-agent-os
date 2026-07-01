@@ -55,6 +55,8 @@ Current Phase 6 groundwork:
 - Admin user visibility: `/admin/users` and the Settings page show known users for deployment checks.
 - Role-based admin guard: when auth is enforced, `/admin/*` and scoring settings require an admin session.
 - First admin bootstrap: configure `ADMIN_USER_IDS` so listed users are promoted to `admin` on session claim/update.
+- Request tracing: every backend response includes `X-Request-ID`, and unhandled errors return a safe request id instead of raw internals.
+- CI workflow: GitHub Actions runs backend tests, frontend build, deployment script compile checks, and extension packaging dry run.
 
 ## Run AI Service
 
@@ -121,6 +123,7 @@ frontend.production.env.example
 ```
 
 Production should use `ENVIRONMENT=production`, `REQUIRE_USER_AUTH=true`, a managed PostgreSQL `DATABASE_URL`, deployed CORS origins, and backend-only provider keys.
+Set `LOG_LEVEL=INFO` for normal deployment logs or `LOG_LEVEL=DEBUG` only during short debugging sessions.
 
 Run deployment smoke checks with:
 

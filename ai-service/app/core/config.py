@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +24,16 @@ class Settings(BaseSettings):
     environment: Literal["development", "staging", "production"] = "development"
     require_user_auth: bool = False
     admin_user_ids: str = "local-aditya"
+    log_level: str = "INFO"
+
+    @field_validator("log_level")
+    @classmethod
+    def normalize_log_level(cls, value: str) -> str:
+        normalized = value.upper()
+        allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        if normalized not in allowed:
+            raise ValueError(f"LOG_LEVEL must be one of: {', '.join(sorted(allowed))}")
+        return normalized
 
     model_config = SettingsConfigDict(
         env_file=".env",

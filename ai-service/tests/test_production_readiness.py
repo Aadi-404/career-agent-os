@@ -17,6 +17,7 @@ class ProductionReadinessTests(unittest.TestCase):
             "embedding_provider": settings.embedding_provider,
             "embedding_fallback_local": settings.embedding_fallback_local,
             "jd_parser_mode": settings.jd_parser_mode,
+            "log_level": settings.log_level,
         }
 
     def tearDown(self):
@@ -44,6 +45,14 @@ class ProductionReadinessTests(unittest.TestCase):
         checks = {check.key: check for check in _build_production_readiness_checks(database_ok=True)}
 
         self.assertEqual(checks["llm"].status, "fail")
+
+    def test_production_warns_for_debug_logging(self):
+        settings.environment = "production"
+        settings.log_level = "DEBUG"
+
+        checks = {check.key: check for check in _build_production_readiness_checks(database_ok=True)}
+
+        self.assertEqual(checks["logging"].status, "warn")
 
 
 if __name__ == "__main__":

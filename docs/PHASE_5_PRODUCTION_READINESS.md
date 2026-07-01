@@ -14,6 +14,8 @@ Phase 5 turns Career Agent OS from a local prototype into a deployable product s
 - `/ready` deployment readiness endpoint.
 - Dockerfiles for backend and frontend.
 - Local `docker-compose.yml` with PostgreSQL, API, and frontend.
+- Request id propagation and structured request logs.
+- CI workflow for backend tests, frontend build, deployment scripts, and extension packaging.
 
 ## Runtime Checks
 
@@ -64,6 +66,7 @@ For each page verify:
 - Set `CORS_ALLOW_ORIGINS` to the deployed frontend origin only.
 - Set `REQUIRE_USER_AUTH=true`.
 - Set `ADMIN_USER_IDS` to the first admin user's id.
+- Set `LOG_LEVEL=INFO`.
 - Set provider keys only in backend environment variables.
 - Set frontend `VITE_API_BASE_URL` to the deployed backend URL before building.
 - Run backend `/ready` after deploy.
@@ -192,6 +195,26 @@ Release checklist:
 | Preparation | Generate plan | Optional plan is generated only when requested |
 | Extension | Parse job page | Title, company, location, and JD are detected or manual fallback works |
 | Extension | Match saved resume | Opportunity is saved and visible in History |
+
+## Observability Checks
+
+- Every backend response should include `X-Request-ID`.
+- Pass `X-Request-ID` from a client or proxy when debugging one request across logs.
+- Unhandled backend failures return `{"detail":"Internal server error","requestId":"..."}`.
+- Backend logs include `request_completed` and `request_error` events with method, path, status code, request id, and duration.
+- Keep `LOG_LEVEL=INFO` in production unless you are actively debugging a short-lived issue.
+
+## CI Checks
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs on pushes and pull requests to `master`:
+
+- Python dependency install.
+- Backend compile check.
+- Backend unit tests.
+- Deployment script compile checks.
+- Extension packaging dry run.
+- Frontend dependency install.
+- Frontend production build.
 
 ## Known Remaining Manual Work
 

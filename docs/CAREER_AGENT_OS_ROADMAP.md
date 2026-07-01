@@ -252,6 +252,8 @@ Started:
 - Settings includes a basic known-users panel for multi-user deployment checks.
 - Admin-only guards now protect admin and scoring settings APIs when auth enforcement is enabled.
 - `ADMIN_USER_IDS` bootstraps first admin users during session claim/update.
+- Backend responses now carry `X-Request-ID` and log request completion/error events for production tracing.
+- CI runs backend tests, frontend build, deployment script checks, and extension packaging on push/PR.
 
 Why this matters:
 

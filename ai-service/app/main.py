@@ -1,8 +1,13 @@
+import json
+import logging
 import re
+import time
+from uuid import uuid4
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.db import initialize_database
 from app.core.config import get_settings
@@ -128,8 +133,16 @@ from app.services.scoring_config_service import (
     save_scoring_calibration,
 )
 
-app = FastAPI(title="Career Agent OS AI Service", version="0.1.0")
 settings = get_settings()
+logger = logging.getLogger("career-agent-os")
+logger.setLevel(getattr(logging, settings.log_level))
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.propagate = False
+
+app = FastAPI(title="Career Agent OS AI Service", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -138,6 +151,51 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_observability(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        logger.exception(
+            json.dumps(
+                {
+                    "event": "request_error",
+                    "requestId": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "durationMs": duration_ms,
+                }
+            )
+        )
+        response = JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Internal server error",
+                "requestId": request_id,
+            },
+        )
+
+    response.headers["X-Request-ID"] = request_id
+    duration_ms = round((time.perf_counter() - started) * 1000, 2)
+    logger.info(
+        json.dumps(
+            {
+                "event": "request_completed",
+                "requestId": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "statusCode": response.status_code,
+                "durationMs": duration_ms,
+            }
+        )
+    )
+    return response
 
 
 @app.on_event("startup")
@@ -792,6 +850,12 @@ def _build_production_readiness_checks(database_ok: bool, database_error: str = 
             label="JD parser mode",
             status="warn" if settings.jd_parser_mode == "llm" and (settings.llm_mode != "live" or not llm_key_configured) else "pass",
             detail=_jd_parser_readiness_detail(llm_key_configured),
+        ),
+        ReadinessCheck(
+            key="logging",
+            label="Logging level",
+            status="warn" if is_production and settings.log_level == "DEBUG" else "pass",
+            detail="DEBUG logging is enabled; use INFO or higher for production." if is_production and settings.log_level == "DEBUG" else f"LOG_LEVEL is {settings.log_level}.",
         ),
     ]
     return checks
