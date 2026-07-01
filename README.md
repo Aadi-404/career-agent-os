@@ -128,6 +128,12 @@ Run deployment smoke checks with:
 .\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api http://localhost:8000 --frontend http://localhost:5173
 ```
 
+For a single-host Docker deployment, copy and edit `deployment/env/compose.production.env.example`, then run:
+
+```powershell
+docker compose --env-file deployment/env/compose.production.env -f docker-compose.production.example.yml up --build -d
+```
+
 ## Browser Extension
 
 Load the unpacked extension from:
@@ -140,6 +146,12 @@ Then open the web app and use:
 
 ```text
 Task 5 -> Extension Setup -> Check Extension Readiness
+```
+
+Package a release build with the deployed backend URL:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\package_extension.py --api https://api.your-domain.com --version 0.1.0
 ```
 
 ## Level 1 Request Shape

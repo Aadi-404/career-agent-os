@@ -78,6 +78,7 @@ Copy the matching template into the hosting provider's environment variable scre
 deployment/env/backend.local.env.example
 deployment/env/backend.staging.env.example
 deployment/env/backend.production.env.example
+deployment/env/compose.production.env.example
 deployment/env/frontend.local.env.example
 deployment/env/frontend.staging.env.example
 deployment/env/frontend.production.env.example
@@ -128,6 +129,55 @@ If `REQUIRE_USER_AUTH=true` and you want user-scoped readiness, pass:
 ```powershell
 python deployment/smoke_check.py --api https://api.your-domain.com --user-id your-user-id --session-token your-session-token --strict-production
 ```
+
+## Production Docker Compose
+
+Use the production compose example when deploying all three services on one host:
+
+```powershell
+copy deployment\env\compose.production.env.example deployment\env\compose.production.env
+```
+
+Edit `deployment/env/compose.production.env`, then run:
+
+```powershell
+docker compose --env-file deployment/env/compose.production.env -f docker-compose.production.example.yml up --build -d
+```
+
+Then run:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api http://localhost:8000 --frontend http://localhost:8080 --strict-production
+```
+
+For managed PostgreSQL, keep the same backend and frontend services but set `DATABASE_URL` in the host environment or provider secret store instead of using the bundled `postgres` service.
+
+## Extension Release Packaging
+
+Package the extension with the backend API URL that the browser should call:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\package_extension.py --api https://api.your-domain.com --version 0.1.0
+```
+
+The script writes:
+
+```text
+deployment/releases/extension/<api-host>-v<version>
+deployment/releases/extension/<api-host>-v<version>.zip
+```
+
+Release checklist:
+
+- Confirm backend `/diagnostics/production-readiness` has no failed checks.
+- Package the extension with the deployed backend API URL.
+- Load the unpacked release folder in Chrome/Edge developer mode.
+- Connect a user and confirm saved resumes load.
+- Test LinkedIn, Naukri, Indeed, and one company careers page.
+- Use manual JD fallback when auto parsing is weak.
+- Save parser feedback from the popup.
+- Match a saved resume and confirm the opportunity appears in History.
+- Upload the generated zip to the browser extension store only after the real-page checks pass.
 
 ## Smoke Test Matrix
 

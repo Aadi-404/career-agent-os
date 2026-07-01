@@ -35,3 +35,4 @@ Thumbs.db
 # Local artifacts
 coverage/
 .coverage
+deployment/releases/

@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-careerAgentOS}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - career_agent_pg_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-careerAgentOS}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai-service:
+    build:
+      context: ./ai-service
+    restart: unless-stopped
+    env_file:
+      - ./deployment/env/backend.production.env.example
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-careerAgentOS}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:?Set deployed frontend origin}
+      ADMIN_USER_IDS: ${ADMIN_USER_IDS:?Set first admin user id}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${FRONTEND_API_BASE_URL:?Set deployed backend URL}
+    restart: unless-stopped
+    depends_on:
+      - ai-service
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+volumes:
+  career_agent_pg_prod:
