@@ -381,6 +381,16 @@ h1 {
   .profileStats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .savedResumeGrid,
+  .productAccessPanel,
+  .productAccessPanel.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .productAccessPanel.compact .accessNote {
+    grid-column: auto;
+  }
 }
 
 .taskPanelHeader {
@@ -1114,6 +1124,129 @@ button.premiumButton:not(.secondaryButton) span {
   border-color: var(--brand-2);
   background: #eefaf8;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.savedResumePanel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d4e5e2;
+  border-radius: 8px;
+  background: #f7fbfb;
+  padding: 16px;
+}
+
+.savedResumeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.savedResumeCard {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.savedResumeCard strong {
+  display: block;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.savedResumeCard span,
+.savedResumeCard small,
+.emptyLibraryState span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.emptyLibraryState {
+  display: grid;
+  gap: 4px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.productAccessPanel {
+  display: grid;
+  grid-template-columns: 1fr 1fr minmax(220px, 0.8fr);
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 14px;
+  box-shadow: var(--shadow-soft);
+}
+
+.productAccessPanel.compact {
+  grid-template-columns: 1fr 1fr;
+}
+
+.productAccessPanel.compact .accessNote {
+  grid-column: 1 / -1;
+}
+
+.accessTier,
+.accessNote {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+
+.accessTier.active {
+  border-color: rgba(15, 118, 110, 0.5);
+  background: #eefaf8;
+}
+
+.accessTier.premium.active {
+  border-color: #e4c675;
+  background: #fffaf0;
+}
+
+.accessTier div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.accessTier span {
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #334155;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.accessTier.premium span {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.accessTier strong,
+.accessNote strong {
+  color: var(--ink);
+}
+
+.accessTier small,
+.accessNote span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .extensionSetupGrid {

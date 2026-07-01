@@ -256,6 +256,8 @@ Started:
 - The Settings UI is role-aware and disables admin mutation controls for non-admin sessions.
 - The web workspace now has a profile-aware auth panel with active role, session status, and saved history counts.
 - The browser extension now supports password login/register, session-backed saved resume loading, manual role/company/JD fallback, and saved-resume matching from the popup.
+- The web matching flow can reuse saved resume snapshots from PostgreSQL before parsing, reviewing, and scoring a new JD.
+- Free versus premium module boundaries are now visible in the UI: score is free, while deeper coaching artifacts are premium-positioned optional calls.
 - Backend responses now carry `X-Request-ID` and log request completion/error events for production tracing.
 - CI runs backend tests, frontend build, deployment script checks, and extension packaging on push/PR.
 - Web and extension session controls now support explicit reconnect/clear flows.

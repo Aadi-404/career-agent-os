@@ -63,6 +63,8 @@ Current Phase 6 groundwork:
 - Workspace user selector: the web app can switch the active user id instead of being locked to `local-aditya`.
 - Role-aware Settings UI: scoring recommendations, saves, restores, and known-user refresh controls are disabled unless the active session is admin.
 - Extension auth alignment: the extension can login/register with password auth, load saved resumes through the session, parse/paste a JD, and match a saved resume.
+- Resume library reuse: the matching flow can load saved PostgreSQL resume snapshots back into the parser/review/scoring steps.
+- Free/premium visual gating: score output is presented as the free module, while preparation, interview, cross-question, and rewrite artifacts are presented as premium modules.
 
 ## Run AI Service
 

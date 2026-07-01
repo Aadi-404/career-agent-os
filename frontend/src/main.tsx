@@ -188,6 +188,10 @@ type HistoryResumeRecord = {
   id: string;
   title: string;
   createdAt: string;
+  source: string;
+  rawText: string;
+  normalizedText?: string | null;
+  structuredResume?: StructuredResume | null;
 };
 
 type HistoryJobDescriptionRecord = {
@@ -505,6 +509,7 @@ function App() {
     refreshSessionInfo();
     ensureLocalUser().then(() => {
       void loadWorkspaceSummary();
+      void loadResumeLibrary();
     }).catch(() => {
       setHistoryInfo("History is offline until the backend database is available.");
     });
@@ -862,6 +867,32 @@ function App() {
     } catch {
       // Full history loading surfaces detailed errors. Profile counts can quietly stay empty.
     }
+  }
+
+  async function loadResumeLibrary() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resumes`, { headers: authHeaders(false) });
+      if (response.ok) {
+        setResumeHistory(await response.json() as HistoryResumeRecord[]);
+      }
+    } catch {
+      // The upload step can still use pasted resumes if saved resume loading is unavailable.
+    }
+  }
+
+  function useSavedResume(resume: HistoryResumeRecord) {
+    const nextText = resume.normalizedText || resume.rawText;
+    setResumeText(nextText);
+    setResumeParseSourceText(resume.rawText);
+    setStructuredResume(resume.structuredResume ?? null);
+    setResumeParserDebug(null);
+    setNormalizeInfo(
+      resume.structuredResume
+        ? `Loaded saved resume "${resume.title}" with ${resume.structuredResume.projects.length} project(s), ${resume.structuredResume.experience.length} experience item(s), and ${resume.structuredResume.skills.length} skill(s).`
+        : `Loaded saved resume "${resume.title}". Parse it before review if structured sections are needed.`
+    );
+    setResult(null);
+    setScoreStep("upload");
   }
 
   async function loadPrepMemory() {
@@ -1789,6 +1820,12 @@ function App() {
                           <input type="file" accept=".txt,.pdf,.docx" onChange={(event) => uploadJobDescription(event.target.files?.[0] ?? null)} />
                         </div>
                       </div>
+                      <SavedResumeLibraryPanel
+                        resumes={resumeHistory}
+                        loading={historyLoading}
+                        onRefresh={loadResumeLibrary}
+                        onUse={useSavedResume}
+                      />
                       <div className="editorSplit">
                         <label>
                           Resume text
@@ -2020,6 +2057,7 @@ function App() {
               title="Analysis Report"
               description="Mandatory match output only. Generate coaching artifacts separately when needed."
             >
+              <ProductAccessPanel active="free" />
               {historyInfo && <p className="hint">{historyInfo}</p>}
               {result && (
                 <div className="costModePanel">
@@ -2125,6 +2163,7 @@ function App() {
               title="Preparation Intelligence"
               description="This consumes the latest match result instead of reparsing the resume or JD, which keeps AI usage scoped."
             >
+              <ProductAccessPanel active="premium" compact />
               <div className="prepControls">
                 <label>
                   Preparation plan days
@@ -2147,6 +2186,7 @@ function App() {
               title="Preparation Progress"
               description="Track daily preparation tasks, notes, confidence, and completion from saved preparation sessions."
             >
+              <ProductAccessPanel active="premium" compact />
               <PreparationProgressTracker
                 currentSession={activePreparationSession}
                 sessions={preparationHistory}
@@ -2357,6 +2397,84 @@ function EmptyState({
     <div className="panel empty">
       <h2>{title}</h2>
       <p>{body}</p>
+    </div>
+  );
+}
+
+function SavedResumeLibraryPanel({
+  resumes,
+  loading,
+  onRefresh,
+  onUse,
+}: {
+  resumes: HistoryResumeRecord[];
+  loading: boolean;
+  onRefresh: () => void;
+  onUse: (resume: HistoryResumeRecord) => void;
+}) {
+  return (
+    <div className="savedResumePanel">
+      <div className="panelHeader">
+        <div>
+          <p className="eyebrow">Resume Library</p>
+          <h3>Reuse Saved Resume</h3>
+          <p className="hint">Pick a saved resume snapshot instead of uploading or pasting again.</p>
+        </div>
+        <button type="button" className="secondaryButton" disabled={loading} onClick={onRefresh}>
+          {loading ? "Loading..." : "Refresh"}
+        </button>
+      </div>
+      {resumes.length ? (
+        <div className="savedResumeGrid">
+          {resumes.slice(0, 6).map((resume) => {
+            const structured = resume.structuredResume;
+            return (
+              <div className="savedResumeCard" key={resume.id}>
+                <div>
+                  <strong>{resume.title}</strong>
+                  <span>{resume.source} | {formatDate(resume.createdAt)}</span>
+                </div>
+                <small>
+                  {structured
+                    ? `${structured.experience.length} exp | ${structured.projects.length} project(s) | ${structured.skills.length} skill(s)`
+                    : "Raw resume snapshot"}
+                </small>
+                <button type="button" className="secondaryButton" onClick={() => onUse(resume)}>Use Resume</button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="emptyLibraryState">
+          <strong>No saved resumes yet</strong>
+          <span>Run one match or save a resume snapshot, then it will be reusable here and in the extension.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductAccessPanel({ active, compact = false }: { active: "free" | "premium"; compact?: boolean }) {
+  return (
+    <div className={compact ? "productAccessPanel compact" : "productAccessPanel"}>
+      <div className={active === "free" ? "accessTier active" : "accessTier"}>
+        <div>
+          <span>Free</span>
+          <strong>Match Score</strong>
+        </div>
+        <small>Score, breakdown, requirement matrix, shortlisting factors.</small>
+      </div>
+      <div className={active === "premium" ? "accessTier premium active" : "accessTier premium"}>
+        <div>
+          <span>Premium</span>
+          <strong>Career Intelligence</strong>
+        </div>
+        <small>Resume rewrite ideas, interview pack, cross-questions, preparation plan, progress tracking.</small>
+      </div>
+      <div className="accessNote">
+        <strong>{active === "free" ? "No extra AI calls by default" : "Premium module"}</strong>
+        <span>{active === "free" ? "Run paid-style artifacts only when needed." : "Visual gating only for now; payment integration can connect here later."}</span>
+      </div>
     </div>
   );
 }
