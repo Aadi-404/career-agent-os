@@ -32,7 +32,7 @@ jobs:
       - name: Compile backend and deployment scripts
         run: |
           python -m compileall ai-service/app ai-service/tests
-          python -m py_compile deployment/smoke_check.py deployment/package_extension.py
+          python -m py_compile deployment/smoke_check.py deployment/package_extension.py deployment/backup_database.py
 
       - name: Run backend tests
         working-directory: ai-service

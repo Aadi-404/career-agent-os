@@ -176,6 +176,7 @@ Release checklist:
 - Package the extension with the deployed backend API URL.
 - Load the unpacked release folder in Chrome/Edge developer mode.
 - Connect a user and confirm saved resumes load.
+- Use Clear Session and reconnect once to confirm invalid-session recovery.
 - Test LinkedIn, Naukri, Indeed, and one company careers page.
 - Use manual JD fallback when auto parsing is weak.
 - Save parser feedback from the popup.
@@ -215,6 +216,29 @@ The GitHub Actions workflow in `.github/workflows/ci.yml` runs on pushes and pul
 - Extension packaging dry run.
 - Frontend dependency install.
 - Frontend production build.
+
+## Backup And Restore Notes
+
+Export a JSON backup before production deploys, schema changes, or cleanup scripts:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\backup_database.py --pretty
+```
+
+By default backups are written to:
+
+```text
+deployment/backups/career-agent-os-backup-<timestamp>.json
+```
+
+For managed PostgreSQL, also keep provider-native backups or snapshots enabled. The JSON export is useful for review, migration planning, and emergency inspection, while provider snapshots are the preferred restore mechanism for full production recovery.
+
+Restore approach:
+
+- Prefer managed PostgreSQL point-in-time restore or snapshot restore for production.
+- For local/dev recovery, create a fresh `careerAgentOS` database, run the backend once so schema initialization completes, then import data from the JSON backup with a purpose-built migration script for the target schema.
+- Do not commit files under `deployment/backups`; the folder is intentionally ignored.
+- Treat backup files as secrets because they include user data, saved resumes, job descriptions, analyses, and session tokens.
 
 ## Known Remaining Manual Work
 

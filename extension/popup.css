@@ -46,7 +46,7 @@ label {
 .inlineControl {
   display: grid;
   gap: 8px;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
 }
 
 .feedbackGrid {
@@ -101,6 +101,11 @@ button {
   color: #ffffff;
   cursor: pointer;
   font-weight: 800;
+}
+
+.secondaryButton {
+  background: #ffffff;
+  color: #172033;
 }
 
 button:disabled {

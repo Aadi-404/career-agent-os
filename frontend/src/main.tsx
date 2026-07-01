@@ -410,6 +410,7 @@ const defaultJd =
 
 const defaultUserId = "local-aditya";
 const sessionTokenStorageKey = "careerAgentSessionToken";
+const sessionIssuedAtStorageKey = "careerAgentSessionIssuedAt";
 
 function authHeaders(contentType = true): HeadersInit {
   const token = window.localStorage.getItem(sessionTokenStorageKey) || "";
@@ -485,6 +486,7 @@ function App() {
   const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
   const [settingsInfo, setSettingsInfo] = useState("");
+  const [sessionInfo, setSessionInfo] = useState("");
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
   const [resumeHistory, setResumeHistory] = useState<HistoryResumeRecord[]>([]);
@@ -493,6 +495,7 @@ function App() {
   const [jobOpportunityHistory, setJobOpportunityHistory] = useState<HistoryJobOpportunityRecord[]>([]);
 
   useEffect(() => {
+    refreshSessionInfo();
     ensureLocalUser().catch(() => {
       setHistoryInfo("History is offline until the backend database is available.");
     });
@@ -587,7 +590,35 @@ function App() {
     if (response.ok) {
       const payload = await response.json() as { sessionToken: string };
       window.localStorage.setItem(sessionTokenStorageKey, payload.sessionToken);
+      window.localStorage.setItem(sessionIssuedAtStorageKey, new Date().toISOString());
+      refreshSessionInfo();
+    } else if (response.status === 401 || response.status === 403) {
+      clearStoredSession("Saved session was invalid. Reconnect to continue.");
+      throw new Error("Session was invalid. Reconnect to continue.");
+    } else {
+      throw new Error("Session claim failed");
     }
+  }
+
+  function refreshSessionInfo() {
+    const token = window.localStorage.getItem(sessionTokenStorageKey) || "";
+    const issuedAt = window.localStorage.getItem(sessionIssuedAtStorageKey);
+    setSessionInfo(token ? `Session active${issuedAt ? ` since ${formatDate(issuedAt)}` : ""}` : "No saved session token");
+  }
+
+  async function reconnectSession() {
+    setSessionInfo("Refreshing session...");
+    try {
+      await ensureLocalUser();
+    } catch (err) {
+      setSessionInfo(err instanceof Error ? err.message : "Session refresh failed");
+    }
+  }
+
+  function clearStoredSession(message = "Session cleared. Reconnect before guarded actions.") {
+    window.localStorage.removeItem(sessionTokenStorageKey);
+    window.localStorage.removeItem(sessionIssuedAtStorageKey);
+    setSessionInfo(message);
   }
 
   async function lookupSavedAnalysis(fingerprint: string): Promise<HistoryAnalysisRecord | null> {
@@ -1567,6 +1598,13 @@ function App() {
         />
 
         <section className="taskSurface">
+          <SessionStatusPanel
+            userId={defaultUserId}
+            sessionInfo={sessionInfo}
+            onReconnect={reconnectSession}
+            onClear={() => clearStoredSession()}
+          />
+
           {activeTask === "matching" && (
             <TaskPanel
               eyebrow="Task 1"
@@ -2080,6 +2118,32 @@ function App() {
         </section>
       </section>
     </main>
+  );
+}
+
+function SessionStatusPanel({
+  userId,
+  sessionInfo,
+  onReconnect,
+  onClear,
+}: {
+  userId: string;
+  sessionInfo: string;
+  onReconnect: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="sessionStatusPanel">
+      <div>
+        <span>Workspace user</span>
+        <strong>{userId}</strong>
+        <small>{sessionInfo}</small>
+      </div>
+      <div className="sessionActions">
+        <button type="button" className="secondaryButton" onClick={onReconnect}>Refresh Session</button>
+        <button type="button" className="secondaryButton" onClick={onClear}>Clear Session</button>
+      </div>
+    </div>
   );
 }
 

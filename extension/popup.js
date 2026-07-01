@@ -11,6 +11,7 @@ const els = {
   userId: document.getElementById("userId"),
   resumeSelect: document.getElementById("resumeSelect"),
   claimSession: document.getElementById("claimSession"),
+  clearSession: document.getElementById("clearSession"),
   sessionInfo: document.getElementById("sessionInfo"),
   parsePage: document.getElementById("parsePage"),
   matchJob: document.getElementById("matchJob"),
@@ -31,33 +32,38 @@ const els = {
 bootstrap();
 
 els.claimSession.addEventListener("click", claimSession);
+els.clearSession.addEventListener("click", () => clearSession());
 els.parsePage.addEventListener("click", parseCurrentPage);
 els.matchJob.addEventListener("click", matchJob);
 els.saveParserFeedback.addEventListener("click", saveParserFeedback);
 
 async function bootstrap() {
   setStatus("Connecting...");
-  const saved = await chrome.storage.local.get(["anonymousSessionId", "userId", "sessionToken"]);
-  if (saved.userId) els.userId.value = saved.userId;
-  const userId = els.userId.value.trim() || null;
-  const response = await post("/extension/bootstrap", {
-    userId,
-    sessionToken: saved.sessionToken || null,
-    anonymousSessionId: saved.anonymousSessionId || null,
-  });
-  state.anonymousSessionId = response.anonymousSession.id;
-  state.sessionToken = response.userSession?.sessionToken || saved.sessionToken || null;
-  if (response.userSession?.userId) els.userId.value = response.userSession.userId;
-  await chrome.storage.local.set({
-    anonymousSessionId: state.anonymousSessionId,
-    sessionToken: state.sessionToken || "",
-    userId: response.userSession?.userId || userId || "",
-  });
-  renderResumes(response.resumes);
-  els.sessionInfo.textContent = response.userSession
-    ? `Connected as ${response.userSession.displayName}. Session token active.`
-    : `Anonymous session ${state.anonymousSessionId}. Connect a user to load saved resumes.`;
-  setStatus(response.resumes.length ? "Ready" : "Connect user or paste resume/JD in app first");
+  try {
+    const saved = await chrome.storage.local.get(["anonymousSessionId", "userId", "sessionToken"]);
+    if (saved.userId) els.userId.value = saved.userId;
+    const userId = els.userId.value.trim() || null;
+    const response = await post("/extension/bootstrap", {
+      userId,
+      sessionToken: saved.sessionToken || null,
+      anonymousSessionId: saved.anonymousSessionId || null,
+    });
+    state.anonymousSessionId = response.anonymousSession.id;
+    state.sessionToken = response.userSession?.sessionToken || saved.sessionToken || null;
+    if (response.userSession?.userId) els.userId.value = response.userSession.userId;
+    await chrome.storage.local.set({
+      anonymousSessionId: state.anonymousSessionId,
+      sessionToken: state.sessionToken || "",
+      userId: response.userSession?.userId || userId || "",
+    });
+    renderResumes(response.resumes);
+    els.sessionInfo.textContent = response.userSession
+      ? `Connected as ${response.userSession.displayName}. Session token active.`
+      : `Anonymous session ${state.anonymousSessionId}. Connect a user to load saved resumes.`;
+    setStatus(response.resumes.length ? "Ready" : "Connect user or paste resume/JD in app first");
+  } catch (error) {
+    await clearSession("Saved session failed. Connect again.");
+  }
 }
 
 async function claimSession() {
@@ -78,6 +84,28 @@ async function claimSession() {
   renderResumes(response.resumes);
   els.sessionInfo.textContent = `Connected as ${userId}. Migrated ${response.migratedOpportunityCount} saved job(s).`;
   setStatus(response.resumes.length ? "Ready" : "No saved resumes");
+}
+
+async function clearSession(message = "Session cleared. Connect again to load saved resumes.") {
+  state.sessionToken = null;
+  state.anonymousSessionId = null;
+  state.jobDraft = null;
+  await chrome.storage.local.remove(["anonymousSessionId", "sessionToken"]);
+  renderResumes([]);
+  els.sessionInfo.textContent = message;
+  setStatus("Disconnected");
+  try {
+    const response = await post("/extension/bootstrap", {
+      userId: null,
+      sessionToken: null,
+      anonymousSessionId: null,
+    });
+    state.anonymousSessionId = response.anonymousSession.id;
+    await chrome.storage.local.set({ anonymousSessionId: state.anonymousSessionId });
+    els.sessionInfo.textContent = `${message} Anonymous session ${state.anonymousSessionId} is ready.`;
+  } catch {
+    els.sessionInfo.textContent = `${message} Backend is not reachable yet.`;
+  }
 }
 
 async function parseCurrentPage() {
@@ -202,7 +230,18 @@ async function post(path, body) {
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `${path} failed`);
+    let message = text || `${path} failed`;
+    try {
+      const payload = JSON.parse(text);
+      message = payload.detail || payload.message || message;
+      if (payload.requestId) message = `${message} (${payload.requestId})`;
+    } catch {
+      // Keep the raw text if the backend did not return JSON.
+    }
+    if (response.status === 401 || response.status === 403) {
+      await clearSession("Session expired or invalid. Connect again.");
+    }
+    throw new Error(message);
   }
   return response.json();
 }

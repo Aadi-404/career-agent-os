@@ -57,6 +57,7 @@ Current Phase 6 groundwork:
 - First admin bootstrap: configure `ADMIN_USER_IDS` so listed users are promoted to `admin` on session claim/update.
 - Request tracing: every backend response includes `X-Request-ID`, and unhandled errors return a safe request id instead of raw internals.
 - CI workflow: GitHub Actions runs backend tests, frontend build, deployment script compile checks, and extension packaging dry run.
+- Session controls: web and extension UIs can refresh or clear saved session tokens when auth state is stale.
 
 ## Run AI Service
 
@@ -129,6 +130,12 @@ Run deployment smoke checks with:
 
 ```powershell
 .\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api http://localhost:8000 --frontend http://localhost:5173
+```
+
+Export a PostgreSQL JSON backup with:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\backup_database.py --pretty
 ```
 
 For a single-host Docker deployment, copy and edit `deployment/env/compose.production.env.example`, then run:

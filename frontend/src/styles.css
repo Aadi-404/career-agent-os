@@ -269,6 +269,41 @@ h1 {
   min-width: 0;
 }
 
+.sessionStatusPanel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-soft);
+}
+
+.sessionStatusPanel > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.sessionStatusPanel span,
+.sessionStatusPanel small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sessionStatusPanel strong {
+  color: var(--ink);
+}
+
+.sessionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .taskPanelHeader {
   border: 1px solid var(--line);
   border-radius: 8px;

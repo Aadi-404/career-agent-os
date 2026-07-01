@@ -254,6 +254,8 @@ Started:
 - `ADMIN_USER_IDS` bootstraps first admin users during session claim/update.
 - Backend responses now carry `X-Request-ID` and log request completion/error events for production tracing.
 - CI runs backend tests, frontend build, deployment script checks, and extension packaging on push/PR.
+- Web and extension session controls now support explicit reconnect/clear flows.
+- Deployment tooling includes PostgreSQL JSON backup export for data safety reviews.
 
 Why this matters:
 
