@@ -12,15 +12,34 @@
       <span id="status">Connecting...</span>
     </header>
 
-    <label>
-      Connect user
+    <section class="authBox">
+      <div>
+        <strong>Profile</strong>
+        <small id="sessionInfo">Login to load saved resumes.</small>
+      </div>
+      <label>
+        User id or email
+        <input id="userId" placeholder="local-aditya or email" />
+      </label>
+      <label>
+        Display name
+        <input id="displayName" placeholder="Your name" />
+      </label>
+      <label>
+        Email
+        <input id="email" type="email" placeholder="you@example.com" />
+      </label>
+      <label>
+        Password
+        <input id="password" type="password" placeholder="8+ characters" />
+      </label>
       <div class="inlineControl">
-        <input id="userId" placeholder="local-aditya" />
-        <button id="claimSession" type="button">Connect</button>
+        <button id="loginSession" type="button">Login</button>
+        <button id="registerSession" type="button" class="secondaryButton">Register</button>
+        <button id="claimSession" type="button" class="secondaryButton">Dev Connect</button>
         <button id="clearSession" type="button" class="secondaryButton">Clear</button>
       </div>
-      <small id="sessionInfo">Anonymous session will be used until a session token is created.</small>
-    </label>
+    </section>
 
     <label>
       Resume
@@ -39,6 +58,17 @@
       Manual JD fallback
       <textarea id="manualJd" placeholder="Paste role, company, and full job description when page parsing is weak."></textarea>
     </label>
+
+    <div class="manualMetaGrid">
+      <label>
+        Role
+        <input id="manualTitle" placeholder="Role title if page parsing fails" />
+      </label>
+      <label>
+        Company
+        <input id="manualCompany" placeholder="Company if page parsing fails" />
+      </label>
+    </div>
 
     <section class="feedbackBox">
       <div>

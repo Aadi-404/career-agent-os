@@ -491,6 +491,8 @@ function App() {
   const [settingsInfo, setSettingsInfo] = useState("");
   const [sessionInfo, setSessionInfo] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [authDisplayName, setAuthDisplayName] = useState(workspaceUserId);
+  const [authEmail, setAuthEmail] = useState("");
   const [currentUser, setCurrentUser] = useState<AdminUserRecord | null>(null);
   const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummary | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<HistoryAnalysisRecord[]>([]);
@@ -501,7 +503,9 @@ function App() {
 
   useEffect(() => {
     refreshSessionInfo();
-    ensureLocalUser().catch(() => {
+    ensureLocalUser().then(() => {
+      void loadWorkspaceSummary();
+    }).catch(() => {
       setHistoryInfo("History is offline until the backend database is available.");
     });
   }, [workspaceUserId]);
@@ -597,6 +601,8 @@ function App() {
       window.localStorage.setItem(sessionTokenStorageKey, payload.sessionToken);
       window.localStorage.setItem(sessionIssuedAtStorageKey, new Date().toISOString());
       setCurrentUser(payload.user);
+      setAuthDisplayName(payload.user.displayName);
+      setAuthEmail(payload.user.email ?? "");
       refreshSessionInfo();
     } else if (response.status === 401 || response.status === 403) {
       clearStoredSession("Saved session was invalid. Reconnect to continue.");
@@ -642,6 +648,7 @@ function App() {
     clearStoredSession("Workspace user changed. Refresh session to connect.");
     setWorkspaceUserId(nextUserId);
     setWorkspaceUserDraft(nextUserId);
+    setAuthDisplayName(nextUserId);
     setWorkspaceSummary(null);
     setAnalysisHistory([]);
     setResumeHistory([]);
@@ -665,6 +672,8 @@ function App() {
     setWorkspaceUserId(payload.user.id);
     setWorkspaceUserDraft(payload.user.id);
     setCurrentUser(payload.user);
+    setAuthDisplayName(payload.user.displayName);
+    setAuthEmail(payload.user.email ?? "");
     setAuthPassword("");
     setSessionInfo(message);
   }
@@ -684,8 +693,8 @@ function App() {
         headers: authHeaders(),
         body: JSON.stringify({
           userId: workspaceUserDraft.trim(),
-          displayName: workspaceUserDraft.trim(),
-          email: null,
+          displayName: authDisplayName.trim() || workspaceUserDraft.trim(),
+          email: authEmail.trim() || null,
           password: authPassword,
           role: "admin",
         }),
@@ -841,6 +850,17 @@ function App() {
       setHistoryInfo(err instanceof Error ? err.message : "History load failed");
     } finally {
       setHistoryLoading(false);
+    }
+  }
+
+  async function loadWorkspaceSummary() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/workspace`, { headers: authHeaders(false) });
+      if (response.ok) {
+        setWorkspaceSummary(await response.json() as WorkspaceSummary);
+      }
+    } catch {
+      // Full history loading surfaces detailed errors. Profile counts can quietly stay empty.
     }
   }
 
@@ -1705,10 +1725,16 @@ function App() {
             userId={workspaceUserId}
             draftUserId={workspaceUserDraft}
             sessionInfo={sessionInfo}
+            currentUser={currentUser}
             currentRole={currentUser?.role ?? "unknown"}
             authPassword={authPassword}
+            authDisplayName={authDisplayName}
+            authEmail={authEmail}
+            workspaceSummary={workspaceSummary}
             onDraftUserChange={setWorkspaceUserDraft}
             onPasswordChange={setAuthPassword}
+            onDisplayNameChange={setAuthDisplayName}
+            onEmailChange={setAuthEmail}
             onApplyUser={applyWorkspaceUser}
             onLogin={loginWithPassword}
             onRegister={registerWithPassword}
@@ -2237,10 +2263,16 @@ function SessionStatusPanel({
   userId,
   draftUserId,
   sessionInfo,
+  currentUser,
   currentRole,
   authPassword,
+  authDisplayName,
+  authEmail,
+  workspaceSummary,
   onDraftUserChange,
   onPasswordChange,
+  onDisplayNameChange,
+  onEmailChange,
   onApplyUser,
   onLogin,
   onRegister,
@@ -2250,10 +2282,16 @@ function SessionStatusPanel({
   userId: string;
   draftUserId: string;
   sessionInfo: string;
+  currentUser: AdminUserRecord | null;
   currentRole: string;
   authPassword: string;
+  authDisplayName: string;
+  authEmail: string;
+  workspaceSummary: WorkspaceSummary | null;
   onDraftUserChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
+  onDisplayNameChange: (value: string) => void;
+  onEmailChange: (value: string) => void;
   onApplyUser: () => void;
   onLogin: () => void;
   onRegister: () => void;
@@ -2261,30 +2299,48 @@ function SessionStatusPanel({
   onClear: () => void;
 }) {
   return (
-    <div className="sessionStatusPanel">
-      <div>
-        <span>Workspace user</span>
-        <strong>{userId}</strong>
-        <small>{sessionInfo} | Role: {currentRole}</small>
+    <div className="authProfilePanel">
+      <div className="profileIdentity">
+        <div>
+          <span>Active profile</span>
+          <strong>{currentUser?.displayName || userId}</strong>
+          <small>{currentUser?.email || "No email saved"} | Role: {currentRole}</small>
+        </div>
+        <div className="sessionPill">{sessionInfo}</div>
       </div>
-      <div className="workspaceUserControl">
+
+      <div className="profileStats">
+        <div><span>Resumes</span><strong>{workspaceSummary?.resumeCount ?? 0}</strong></div>
+        <div><span>Reports</span><strong>{workspaceSummary?.analysisCount ?? 0}</strong></div>
+        <div><span>Plans</span><strong>{workspaceSummary?.preparationSessionCount ?? 0}</strong></div>
+        <div><span>Jobs</span><strong>{workspaceSummary?.jobOpportunityCount ?? 0}</strong></div>
+      </div>
+
+      <div className="authFormGrid">
         <label>
-          User id
-          <input value={draftUserId} onChange={(event) => onDraftUserChange(event.target.value)} />
+          User id or email
+          <input value={draftUserId} onChange={(event) => onDraftUserChange(event.target.value)} placeholder="local-aditya or email" />
         </label>
-        <button type="button" className="secondaryButton" onClick={onApplyUser}>Use User</button>
-      </div>
-      <div className="workspaceUserControl">
+        <label>
+          Display name
+          <input value={authDisplayName} onChange={(event) => onDisplayNameChange(event.target.value)} placeholder="Your name" />
+        </label>
+        <label>
+          Email
+          <input type="email" value={authEmail} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@example.com" />
+        </label>
         <label>
           Password
           <input type="password" value={authPassword} onChange={(event) => onPasswordChange(event.target.value)} placeholder="8+ characters" />
         </label>
+      </div>
+
+      <div className="sessionActions profileActions">
+        <button type="button" className="secondaryButton" onClick={onApplyUser}>Use User</button>
         <button type="button" className="secondaryButton" onClick={onLogin}>Login</button>
         <button type="button" className="secondaryButton" onClick={onRegister}>Register</button>
-      </div>
-      <div className="sessionActions">
-        <button type="button" className="secondaryButton" onClick={onReconnect}>Refresh Session</button>
-        <button type="button" className="secondaryButton" onClick={onClear}>Clear Session</button>
+        <button type="button" className="secondaryButton" onClick={onReconnect}>Refresh</button>
+        <button type="button" className="secondaryButton" onClick={onClear}>Logout</button>
       </div>
     </div>
   );

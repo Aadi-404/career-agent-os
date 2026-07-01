@@ -53,6 +53,7 @@ Current Phase 6 groundwork:
 - Optional user auth enforcement: set `REQUIRE_USER_AUTH=true` to require `X-Session-Token` on user-scoped history, evaluation, settings, diagnostics, and extension validation APIs.
 - Web session claim: frontend uses `/auth/session/claim` and stores a session token for guarded requests.
 - Password-ready web auth: `/auth/register` and `/auth/login` issue the same session token shape for deployable multi-user login flows.
+- Profile workspace panel: the web app shows active user, role, session state, and saved workspace counts beside login/register/logout controls.
 - Admin user visibility: `/admin/users` and the Settings page show known users for deployment checks.
 - Role-based admin guard: when auth is enforced, `/admin/*` and scoring settings require an admin session.
 - First admin bootstrap: configure `ADMIN_USER_IDS` so listed users are promoted to `admin` on session claim/update.
@@ -61,6 +62,7 @@ Current Phase 6 groundwork:
 - Session controls: web and extension UIs can refresh or clear saved session tokens when auth state is stale.
 - Workspace user selector: the web app can switch the active user id instead of being locked to `local-aditya`.
 - Role-aware Settings UI: scoring recommendations, saves, restores, and known-user refresh controls are disabled unless the active session is admin.
+- Extension auth alignment: the extension can login/register with password auth, load saved resumes through the session, parse/paste a JD, and match a saved resume.
 
 ## Run AI Service
 

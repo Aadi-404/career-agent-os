@@ -16,7 +16,8 @@ body {
 header,
 .jobBox,
 .result,
-.feedbackBox {
+.feedbackBox,
+.authBox {
   background: #ffffff;
   border: 1px solid #dbe3ef;
   border-radius: 8px;
@@ -46,7 +47,27 @@ label {
 .inlineControl {
   display: grid;
   gap: 8px;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.authBox {
+  grid-template-columns: 1fr 1fr;
+}
+
+.authBox > div:first-child,
+.authBox .inlineControl {
+  grid-column: 1 / -1;
+}
+
+.authBox .inlineControl button {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.manualMetaGrid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
 }
 
 .feedbackGrid {
@@ -111,6 +132,14 @@ button {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+@media (max-width: 390px) {
+  .authBox,
+  .manualMetaGrid,
+  .inlineControl {
+    grid-template-columns: 1fr;
+  }
 }
 
 .result strong {
