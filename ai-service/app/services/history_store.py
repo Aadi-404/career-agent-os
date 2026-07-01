@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from pydantic_core import from_json
 
 from app.db import get_connection
+from app.core.config import get_settings
 from app.models.analysis import AnalysisResponse, AnalyzeRequest, PreparationIntelligence
 from app.models.evaluation import (
     MatchFeedbackDataset,
@@ -47,26 +48,27 @@ from app.models.resume_normalize import StructuredResume
 
 def create_or_update_user(request: UserCreateRequest) -> UserRecord:
     now = _now()
+    role = _resolved_user_role(request.userId, request.role)
     with get_connection() as connection:
         existing = connection.execute("SELECT * FROM users WHERE id = ?", (request.userId,)).fetchone()
         if existing:
             connection.execute(
-                "UPDATE users SET display_name = ?, email = ? WHERE id = ?",
-                (request.displayName, request.email, request.userId),
+                "UPDATE users SET display_name = ?, email = ?, role = ? WHERE id = ?",
+                (request.displayName, request.email, role, request.userId),
             )
             row = connection.execute("SELECT * FROM users WHERE id = ?", (request.userId,)).fetchone()
             return _user_from_row(_require_row(row, "User not found after update"))
 
         try:
             connection.execute(
-                "INSERT INTO users (id, display_name, email, created_at) VALUES (?, ?, ?, ?)",
-                (request.userId, request.displayName, request.email, now),
+                "INSERT INTO users (id, display_name, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                (request.userId, request.displayName, request.email, role, now),
             )
         except Exception as exc:
             if not isinstance(exc, IntegrityError) and exc.__class__.__name__ != "UniqueViolation":
                 raise
             raise HTTPException(status_code=409, detail="A user with this email already exists") from exc
-    return UserRecord(id=request.userId, displayName=request.displayName, email=request.email, createdAt=now)
+    return UserRecord(id=request.userId, displayName=request.displayName, email=request.email, role=role, createdAt=now)
 
 
 def list_users() -> list[UserRecord]:
@@ -110,9 +112,10 @@ def claim_anonymous_session(
         _get_anonymous_session(connection, anonymous_session_id)
         existing_user = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if not existing_user:
+            role = _resolved_user_role(user_id, None)
             connection.execute(
-                "INSERT INTO users (id, display_name, email, created_at) VALUES (?, ?, ?, ?)",
-                (user_id, display_name or user_id, email, now),
+                "INSERT INTO users (id, display_name, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                (user_id, display_name or user_id, email, role, now),
             )
         connection.execute(
             """
@@ -824,6 +827,13 @@ def _validate_opportunity_owner(connection, user_id: str | None, anonymous_sessi
         raise HTTPException(status_code=400, detail="Either userId or anonymousSessionId is required")
 
 
+def _resolved_user_role(user_id: str, requested_role: str | None) -> str:
+    admin_ids = {item.strip() for item in get_settings().admin_user_ids.split(",") if item.strip()}
+    if user_id in admin_ids:
+        return "admin"
+    return "admin" if requested_role == "admin" and not admin_ids else "member"
+
+
 def _ensure_owned_record(connection, table: str, record_id: str, user_id: str) -> None:
     row = connection.execute(
         f"SELECT id FROM {table} WHERE id = ? AND user_id = ?",
@@ -843,6 +853,7 @@ def _user_from_row(row: Any) -> UserRecord:
         id=row["id"],
         displayName=row["display_name"],
         email=row["email"],
+        role=_row_value(row, "role") or "member",
         createdAt=row["created_at"],
     )
 

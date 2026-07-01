@@ -46,6 +46,8 @@ Current Phase 6 groundwork:
 - Optional user auth enforcement: set `REQUIRE_USER_AUTH=true` to require `X-Session-Token` on user-scoped history, evaluation, settings, diagnostics, and extension validation APIs.
 - Web session claim: frontend uses `/auth/session/claim` and stores a session token for guarded requests.
 - Admin user visibility: `/admin/users` and the Settings page show known users for deployment checks.
+- Role-based admin guard: when auth is enforced, `/admin/*` and scoring settings require an admin session.
+- First admin bootstrap: configure `ADMIN_USER_IDS` so listed users are promoted to `admin` on session claim/update.
 
 ## Run AI Service
 

@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     cors_allow_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     environment: Literal["development", "staging", "production"] = "development"
     require_user_auth: bool = False
+    admin_user_ids: str = "local-aditya"
 
     model_config = SettingsConfigDict(
         env_file=".env",

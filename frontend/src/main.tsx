@@ -156,6 +156,7 @@ type AdminUserRecord = {
   id: string;
   displayName: string;
   email?: string | null;
+  role: string;
   createdAt: string;
 };
 
@@ -566,6 +567,7 @@ function App() {
         userId: defaultUserId,
         displayName: "Aditya Local Workspace",
         email: "aditya.local@career-agent-os",
+        role: "admin",
       }),
     });
     if (response.ok) {
@@ -2715,7 +2717,7 @@ function ScoringSettingsPanel({
           {users.length ? users.map((user) => (
             <div key={user.id}>
               <strong>{user.displayName}</strong>
-              <span>{user.id} | {user.email ?? "no email"} | {formatDate(user.createdAt)}</span>
+              <span>{user.id} | {user.role} | {user.email ?? "no email"} | {formatDate(user.createdAt)}</span>
             </div>
           )) : (
             <div>

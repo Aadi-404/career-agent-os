@@ -490,10 +490,7 @@ def create_anonymous_session(request: AnonymousSessionCreateRequest | None = Non
 
 @app.get("/admin/users", response_model=list[UserRecord])
 def get_admin_users(session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[UserRecord]:
-    if settings.require_user_auth and not session_token:
-        raise HTTPException(status_code=401, detail="Session token is required")
-    if settings.require_user_auth and session_token:
-        resolve_user_session(session_token)
+    _authorize_admin(session_token)
     return list_users()
 
 
@@ -661,36 +658,42 @@ def import_evaluation_dataset(request: MatchFeedbackImportRequest, session_token
 @app.get("/settings/users/{user_id}/scoring-calibration", response_model=ScoringCalibrationListResponse)
 def get_scoring_calibration_settings(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ScoringCalibrationListResponse:
     _authorize_user(user_id, session_token)
+    _authorize_admin(session_token)
     return list_scoring_calibrations(user_id)
 
 
 @app.put("/settings/scoring-calibration", response_model=ScoringCalibrationConfig)
 def update_scoring_calibration_settings(request: ScoringCalibrationUpdateRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ScoringCalibrationConfig:
     _authorize_user(request.userId, session_token)
+    _authorize_admin(session_token)
     return save_scoring_calibration(request)
 
 
 @app.get("/settings/users/{user_id}/scoring-calibration/{role_family}/recommendation", response_model=ScoringCalibrationRecommendation)
 def get_scoring_calibration_recommendation(user_id: str, role_family: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ScoringCalibrationRecommendation:
     _authorize_user(user_id, session_token)
+    _authorize_admin(session_token)
     return recommend_scoring_calibration(user_id, role_family)
 
 
 @app.get("/settings/users/{user_id}/scoring-calibration-recommendation", response_model=ScoringCalibrationRecommendation)
 def get_scoring_calibration_recommendation_by_query(user_id: str, roleFamily: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ScoringCalibrationRecommendation:
     _authorize_user(user_id, session_token)
+    _authorize_admin(session_token)
     return recommend_scoring_calibration(user_id, roleFamily)
 
 
 @app.get("/settings/users/{user_id}/scoring-calibration-audit", response_model=list[ScoringCalibrationAuditRecord])
 def get_scoring_calibration_audit(user_id: str, roleFamily: str | None = None, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[ScoringCalibrationAuditRecord]:
     _authorize_user(user_id, session_token)
+    _authorize_admin(session_token)
     return list_scoring_calibration_audit(user_id, roleFamily)
 
 
 @app.post("/settings/scoring-calibration/restore", response_model=ScoringCalibrationConfig)
 def restore_scoring_calibration_settings(request: ScoringCalibrationRestoreRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ScoringCalibrationConfig:
     _authorize_user(request.userId, session_token)
+    _authorize_admin(session_token)
     try:
         return restore_scoring_calibration(request)
     except ValueError as exc:
@@ -728,6 +731,16 @@ def _authorize_user(user_id: str, session_token: str | None) -> None:
     user = resolve_user_session(session_token)
     if user.id != user_id:
         raise HTTPException(status_code=403, detail="Session token does not match requested user")
+
+
+def _authorize_admin(session_token: str | None) -> None:
+    if not settings.require_user_auth:
+        return
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Session token is required")
+    user = resolve_user_session(session_token)
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role is required")
 
 
 def _infer_stack_from_text(text: str) -> list[str]:

@@ -75,8 +75,12 @@ def _postgres_schema() -> str:
                 id TEXT PRIMARY KEY,
                 display_name TEXT NOT NULL,
                 email TEXT,
+                role TEXT NOT NULL DEFAULT 'member',
                 created_at TEXT NOT NULL
             );
+
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
 
             CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
             ON users(email)

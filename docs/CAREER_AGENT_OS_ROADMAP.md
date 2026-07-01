@@ -249,6 +249,8 @@ Started:
 - A system diagnostics endpoint and Settings panel show database, AI, embedding, parser, CORS, and workspace health.
 - User-scoped APIs can require `X-Session-Token` ownership checks by enabling `REQUIRE_USER_AUTH`.
 - Settings includes a basic known-users panel for multi-user deployment checks.
+- Admin-only guards now protect admin and scoring settings APIs when auth enforcement is enabled.
+- `ADMIN_USER_IDS` bootstraps first admin users during session claim/update.
 
 Why this matters:
 

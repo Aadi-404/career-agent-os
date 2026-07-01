@@ -11,12 +11,14 @@ class UserCreateRequest(BaseModel):
     userId: str = Field(min_length=2, max_length=80)
     displayName: str = Field(min_length=2, max_length=120)
     email: str | None = Field(default=None, max_length=180)
+    role: Literal["member", "admin"] | None = None
 
 
 class UserRecord(BaseModel):
     id: str
     displayName: str
     email: str | None = None
+    role: str = "member"
     createdAt: str
 
 
