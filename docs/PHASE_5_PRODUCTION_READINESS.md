@@ -236,7 +236,12 @@ For managed PostgreSQL, also keep provider-native backups or snapshots enabled. 
 Restore approach:
 
 - Prefer managed PostgreSQL point-in-time restore or snapshot restore for production.
-- For local/dev recovery, create a fresh `careerAgentOS` database, run the backend once so schema initialization completes, then import data from the JSON backup with a purpose-built migration script for the target schema.
+- For local/dev recovery, create a fresh `careerAgentOS` database, then run:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\restore_database.py deployment\backups\career-agent-os-backup.json --yes
+```
+
 - Do not commit files under `deployment/backups`; the folder is intentionally ignored.
 - Treat backup files as secrets because they include user data, saved resumes, job descriptions, analyses, and session tokens.
 

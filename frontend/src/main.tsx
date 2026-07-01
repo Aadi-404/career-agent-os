@@ -408,7 +408,8 @@ const defaultResume =
 const defaultJd =
   "Looking for a skilled .NET Developer with 2 to 5 years of experience in ASP.NET, .NET Core, C#, Web API, MVC and Azure Cloud Services. Strong knowledge of LINQ, Entity Framework, HTML, CSS, JavaScript, jQuery, Azure DevOps CI/CD pipelines, code compliance and enterprise application development.";
 
-const defaultUserId = "local-aditya";
+const defaultWorkspaceUserId = "local-aditya";
+const workspaceUserStorageKey = "careerAgentWorkspaceUserId";
 const sessionTokenStorageKey = "careerAgentSessionToken";
 const sessionIssuedAtStorageKey = "careerAgentSessionIssuedAt";
 
@@ -422,6 +423,8 @@ function authHeaders(contentType = true): HeadersInit {
 
 function App() {
   const [activeTask, setActiveTask] = useState<ActiveTask>("matching");
+  const [workspaceUserId, setWorkspaceUserId] = useState(() => window.localStorage.getItem(workspaceUserStorageKey) || defaultWorkspaceUserId);
+  const [workspaceUserDraft, setWorkspaceUserDraft] = useState(workspaceUserId);
   const [resumeText, setResumeText] = useState(defaultResume);
   const [resumeParseSourceText, setResumeParseSourceText] = useState(defaultResume);
   const [jobDescriptionText, setJobDescriptionText] = useState(defaultJd);
@@ -499,7 +502,7 @@ function App() {
     ensureLocalUser().catch(() => {
       setHistoryInfo("History is offline until the backend database is available.");
     });
-  }, []);
+  }, [workspaceUserId]);
 
   useEffect(() => {
     if (activeTask === "history") {
@@ -517,7 +520,7 @@ function App() {
       loadProductionReadiness();
       loadAdminUsers();
     }
-  }, [activeTask]);
+  }, [activeTask, workspaceUserId]);
 
   function buildAnalyzeRequest(): AnalyzeRequestPayload {
     return {
@@ -542,7 +545,7 @@ function App() {
         model: llmModel,
       },
       preparationPlanDays,
-      scoringCalibrationUserId: defaultUserId,
+      scoringCalibrationUserId: workspaceUserId,
       roleFamily: inferRoleFamily(`${targetRole} ${currentStack} ${jobDescriptionText}`),
     };
   }
@@ -581,9 +584,9 @@ function App() {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({
-        userId: defaultUserId,
-        displayName: "Aditya Local Workspace",
-        email: "aditya.local@career-agent-os",
+        userId: workspaceUserId,
+        displayName: workspaceUserId,
+        email: null,
         role: "admin",
       }),
     });
@@ -621,13 +624,43 @@ function App() {
     setSessionInfo(message);
   }
 
+  function applyWorkspaceUser() {
+    const nextUserId = workspaceUserDraft.trim();
+    if (nextUserId.length < 2) {
+      setSessionInfo("Workspace user id must be at least 2 characters.");
+      return;
+    }
+    if (nextUserId === workspaceUserId) {
+      void reconnectSession();
+      return;
+    }
+    window.localStorage.setItem(workspaceUserStorageKey, nextUserId);
+    clearStoredSession("Workspace user changed. Refresh session to connect.");
+    setWorkspaceUserId(nextUserId);
+    setWorkspaceUserDraft(nextUserId);
+    setWorkspaceSummary(null);
+    setAnalysisHistory([]);
+    setResumeHistory([]);
+    setJdHistory([]);
+    setPreparationHistory([]);
+    setJobOpportunityHistory([]);
+    setExtensionValidations([]);
+    setEvaluationSummary(null);
+    setScoringConfigs([]);
+    setScoringRecommendation(null);
+    setScoringAudit([]);
+    setSystemDiagnostics(null);
+    setProductionReadiness(null);
+    setAdminUsers([]);
+  }
+
   async function lookupSavedAnalysis(fingerprint: string): Promise<HistoryAnalysisRecord | null> {
     await ensureLocalUser();
     const response = await fetch(`${API_BASE_URL}/history/analyses/lookup`, {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({
-        userId: defaultUserId,
+        userId: workspaceUserId,
         fingerprint,
       }),
     });
@@ -642,7 +675,7 @@ function App() {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({
-        userId: defaultUserId,
+        userId: workspaceUserId,
         title: `${payload.candidateContext.targetRole} resume snapshot`,
         source: resumeSource,
         rawText: payload.resumeText,
@@ -657,7 +690,7 @@ function App() {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({
-        userId: defaultUserId,
+        userId: workspaceUserId,
         title: parsedJd?.roleTitle || payload.candidateContext.targetRole,
         company: null,
         rawText: payload.jobDescriptionText,
@@ -672,7 +705,7 @@ function App() {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({
-        userId: defaultUserId,
+        userId: workspaceUserId,
         title: `${payload.candidateContext.targetRole} - ${analysis.technicalMatchScore}%`,
         resumeId: resumeRecord.id,
         jobDescriptionId: jdRecord.id,
@@ -691,7 +724,7 @@ function App() {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({
-        userId: defaultUserId,
+        userId: workspaceUserId,
         analysisId: lastSavedAnalysisId,
         title: `${preparation.dailyPlan.length}-day preparation plan`,
         status: "planned",
@@ -710,12 +743,12 @@ function App() {
       await ensureLocalUser();
       const getOptions = { headers: authHeaders(false) };
       const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/workspace`, getOptions),
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/analyses`, getOptions),
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/resumes`, getOptions),
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/job-descriptions`, getOptions),
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/preparation-sessions`, getOptions),
-        fetch(`${API_BASE_URL}/history/users/${defaultUserId}/job-opportunities`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/workspace`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/analyses`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resumes`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/job-descriptions`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/preparation-sessions`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/job-opportunities`, getOptions),
       ]);
 
       if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok) {
@@ -743,7 +776,7 @@ function App() {
 
   async function loadPrepMemory() {
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/preparation/memory/${defaultUserId}`, { headers: authHeaders(false) });
+      const response = await fetch(`${API_BASE_URL}/ai/preparation/memory/${workspaceUserId}`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Preparation memory load failed");
       setPrepMemory(await response.json() as PrepMemoryResponse);
     } catch {
@@ -757,7 +790,7 @@ function App() {
       const response = await fetch(`${API_BASE_URL}/history/job-opportunities/${jobOpportunityId}/status`, {
         method: "PATCH",
         headers: authHeaders(),
-        body: JSON.stringify({ userId: defaultUserId, status }),
+        body: JSON.stringify({ userId: workspaceUserId, status }),
       });
       if (!response.ok) throw new Error("Opportunity status update failed");
       const updated = await response.json() as HistoryJobOpportunityRecord;
@@ -773,7 +806,7 @@ function App() {
       method: "PATCH",
       headers: authHeaders(),
       body: JSON.stringify({
-        userId: defaultUserId,
+        userId: workspaceUserId,
         artifactKey,
         response,
       }),
@@ -789,7 +822,7 @@ function App() {
       method: "PATCH",
       headers: authHeaders(),
       body: JSON.stringify({
-        userId: defaultUserId,
+        userId: workspaceUserId,
         artifactKey,
         response,
       }),
@@ -811,7 +844,7 @@ function App() {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
-          userId: defaultUserId,
+          userId: workspaceUserId,
           anonymousSessionId: null,
         }),
       });
@@ -836,7 +869,7 @@ function App() {
   async function loadExtensionValidations() {
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/extension/users/${defaultUserId}/validation-results`, { headers: authHeaders(false) });
+      const response = await fetch(`${API_BASE_URL}/extension/users/${workspaceUserId}/validation-results`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Extension validation history unavailable");
       setExtensionValidations(await response.json() as ExtensionValidationRecord[]);
     } catch (err) {
@@ -862,7 +895,7 @@ function App() {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
-          userId: defaultUserId,
+          userId: workspaceUserId,
           ...payload,
           url: payload.url.trim() || null,
           notes: payload.notes.trim() || null,
@@ -880,7 +913,7 @@ function App() {
   async function loadEvaluationSummary() {
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/evaluation/users/${defaultUserId}/summary`, { headers: authHeaders(false) });
+      const response = await fetch(`${API_BASE_URL}/evaluation/users/${workspaceUserId}/summary`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Evaluation summary unavailable");
       setEvaluationSummary(await response.json() as MatchFeedbackSummary);
     } catch (err) {
@@ -902,7 +935,7 @@ function App() {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
-          userId: defaultUserId,
+          userId: workspaceUserId,
           analysisId: lastSavedAnalysisId,
           roleFamily: payload.roleFamily.trim() || null,
           expectedFit: payload.expectedFit,
@@ -923,14 +956,14 @@ function App() {
     setEvaluationInfo("");
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/evaluation/users/${defaultUserId}/dataset`, { headers: authHeaders(false) });
+      const response = await fetch(`${API_BASE_URL}/evaluation/users/${workspaceUserId}/dataset`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Evaluation export failed");
       const dataset = await response.json() as MatchFeedbackDataset;
       const blob = new Blob([JSON.stringify(dataset, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `career-agent-evaluation-${defaultUserId}.json`;
+      anchor.download = `career-agent-evaluation-${workspaceUserId}.json`;
       anchor.click();
       URL.revokeObjectURL(url);
       setEvaluationInfo(`Exported ${dataset.records.length} feedback record(s).`);
@@ -950,7 +983,7 @@ function App() {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
-          userId: defaultUserId,
+          userId: workspaceUserId,
           records: dataset.records.map((record) => ({
             analysisId: record.analysisId ?? null,
             jobOpportunityId: record.jobOpportunityId ?? null,
@@ -977,7 +1010,7 @@ function App() {
     setSettingsInfo("");
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration`, { headers: authHeaders(false) });
+      const response = await fetch(`${API_BASE_URL}/settings/users/${workspaceUserId}/scoring-calibration`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Scoring calibration settings unavailable");
       const payload = await response.json() as { configs: ScoringCalibrationConfig[] };
       setScoringConfigs(payload.configs);
@@ -991,7 +1024,7 @@ function App() {
     try {
       await ensureLocalUser();
       const suffix = roleFamily ? `?roleFamily=${encodeURIComponent(roleFamily)}` : "";
-      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration-audit${suffix}`, { headers: authHeaders(false) });
+      const response = await fetch(`${API_BASE_URL}/settings/users/${workspaceUserId}/scoring-calibration-audit${suffix}`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Scoring calibration audit unavailable");
       setScoringAudit(await response.json() as ScoringCalibrationAuditRecord[]);
     } catch (err) {
@@ -1002,7 +1035,7 @@ function App() {
   async function loadSystemDiagnostics() {
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/diagnostics/system?userId=${encodeURIComponent(defaultUserId)}`, { headers: authHeaders(false) });
+      const response = await fetch(`${API_BASE_URL}/diagnostics/system?userId=${encodeURIComponent(workspaceUserId)}`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("System diagnostics unavailable");
       setSystemDiagnostics(await response.json() as SystemDiagnostics);
     } catch (err) {
@@ -1013,7 +1046,7 @@ function App() {
   async function loadProductionReadiness() {
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/diagnostics/production-readiness?userId=${encodeURIComponent(defaultUserId)}`, { headers: authHeaders(false) });
+      const response = await fetch(`${API_BASE_URL}/diagnostics/production-readiness?userId=${encodeURIComponent(workspaceUserId)}`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Production readiness unavailable");
       setProductionReadiness(await response.json() as ProductionReadiness);
     } catch (err) {
@@ -1040,7 +1073,7 @@ function App() {
         method: "PUT",
         headers: authHeaders(),
         body: JSON.stringify({
-          userId: defaultUserId,
+          userId: workspaceUserId,
           roleFamily: config.roleFamily,
           categoryWeights: config.categoryWeights,
         }),
@@ -1062,7 +1095,7 @@ function App() {
       const response = await fetch(`${API_BASE_URL}/settings/scoring-calibration/restore`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ userId: defaultUserId, auditId }),
+        body: JSON.stringify({ userId: workspaceUserId, auditId }),
       });
       if (!response.ok) throw new Error("Scoring calibration restore failed");
       const restored = await response.json() as ScoringCalibrationConfig;
@@ -1078,7 +1111,7 @@ function App() {
     setSettingsInfo("");
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/settings/users/${defaultUserId}/scoring-calibration-recommendation?roleFamily=${encodeURIComponent(roleFamily)}`, { headers: authHeaders(false) });
+      const response = await fetch(`${API_BASE_URL}/settings/users/${workspaceUserId}/scoring-calibration-recommendation?roleFamily=${encodeURIComponent(roleFamily)}`, { headers: authHeaders(false) });
       if (!response.ok) throw new Error("Scoring recommendation unavailable");
       const recommendation = await response.json() as ScoringCalibrationRecommendation;
       setScoringRecommendation(recommendation);
@@ -1372,7 +1405,7 @@ function App() {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({
-          userId: defaultUserId,
+          userId: workspaceUserId,
           status: nextStatus ?? inferPreparationStatus(nextProgress, activePreparationSession.plan),
           progress: nextProgress,
         }),
@@ -1599,8 +1632,11 @@ function App() {
 
         <section className="taskSurface">
           <SessionStatusPanel
-            userId={defaultUserId}
+            userId={workspaceUserId}
+            draftUserId={workspaceUserDraft}
             sessionInfo={sessionInfo}
+            onDraftUserChange={setWorkspaceUserDraft}
+            onApplyUser={applyWorkspaceUser}
             onReconnect={reconnectSession}
             onClear={() => clearStoredSession()}
           />
@@ -2058,7 +2094,7 @@ function App() {
             >
               <ExtensionSetupPanel
                 backendUrl={API_BASE_URL}
-                defaultUserId={defaultUserId}
+                workspaceUserId={workspaceUserId}
                 checking={extensionChecking}
                 setupInfo={extensionSetupInfo}
                 resumeCount={extensionResumeCount}
@@ -2123,12 +2159,18 @@ function App() {
 
 function SessionStatusPanel({
   userId,
+  draftUserId,
   sessionInfo,
+  onDraftUserChange,
+  onApplyUser,
   onReconnect,
   onClear,
 }: {
   userId: string;
+  draftUserId: string;
   sessionInfo: string;
+  onDraftUserChange: (value: string) => void;
+  onApplyUser: () => void;
   onReconnect: () => void;
   onClear: () => void;
 }) {
@@ -2138,6 +2180,13 @@ function SessionStatusPanel({
         <span>Workspace user</span>
         <strong>{userId}</strong>
         <small>{sessionInfo}</small>
+      </div>
+      <div className="workspaceUserControl">
+        <label>
+          User id
+          <input value={draftUserId} onChange={(event) => onDraftUserChange(event.target.value)} />
+        </label>
+        <button type="button" className="secondaryButton" onClick={onApplyUser}>Use User</button>
       </div>
       <div className="sessionActions">
         <button type="button" className="secondaryButton" onClick={onReconnect}>Refresh Session</button>
@@ -2288,7 +2337,7 @@ function TaskPanel({
 
 function ExtensionSetupPanel({
   backendUrl,
-  defaultUserId,
+  workspaceUserId,
   checking,
   setupInfo,
   resumeCount,
@@ -2299,7 +2348,7 @@ function ExtensionSetupPanel({
   onSaveValidation,
 }: {
   backendUrl: string;
-  defaultUserId: string;
+  workspaceUserId: string;
   checking: boolean;
   setupInfo: string;
   resumeCount: number | null;
@@ -2343,8 +2392,8 @@ function ExtensionSetupPanel({
             <strong>{backendUrl}</strong>
           </div>
           <div className="metaBlock">
-            <span>Default user</span>
-            <strong>{defaultUserId}</strong>
+            <span>Workspace user</span>
+            <strong>{workspaceUserId}</strong>
           </div>
           <div className="metaBlock">
             <span>Saved resumes</span>
@@ -2380,7 +2429,7 @@ function ExtensionSetupPanel({
           <li>Enable Developer mode.</li>
           <li>Choose Load unpacked.</li>
           <li>Select <code>C:\Code\AI\career-agent-os\extension</code>.</li>
-          <li>Open a job page, click the extension, then connect with <code>{defaultUserId}</code>.</li>
+          <li>Open a job page, click the extension, then connect with <code>{workspaceUserId}</code>.</li>
         </ol>
       </div>
 

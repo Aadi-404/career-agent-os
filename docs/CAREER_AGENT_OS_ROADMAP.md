@@ -256,6 +256,8 @@ Started:
 - CI runs backend tests, frontend build, deployment script checks, and extension packaging on push/PR.
 - Web and extension session controls now support explicit reconnect/clear flows.
 - Deployment tooling includes PostgreSQL JSON backup export for data safety reviews.
+- Deployment tooling includes a local/dev JSON restore utility.
+- The web app has an editable workspace user selector for multi-user testing.
 
 Why this matters:
 

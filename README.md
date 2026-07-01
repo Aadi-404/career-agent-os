@@ -58,6 +58,7 @@ Current Phase 6 groundwork:
 - Request tracing: every backend response includes `X-Request-ID`, and unhandled errors return a safe request id instead of raw internals.
 - CI workflow: GitHub Actions runs backend tests, frontend build, deployment script compile checks, and extension packaging dry run.
 - Session controls: web and extension UIs can refresh or clear saved session tokens when auth state is stale.
+- Workspace user selector: the web app can switch the active user id instead of being locked to `local-aditya`.
 
 ## Run AI Service
 
@@ -136,6 +137,12 @@ Export a PostgreSQL JSON backup with:
 
 ```powershell
 .\ai-service\.venv\Scripts\python.exe deployment\backup_database.py --pretty
+```
+
+Restore a local/dev database from a JSON backup with:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\restore_database.py deployment\backups\career-agent-os-backup.json --yes
 ```
 
 For a single-host Docker deployment, copy and edit `deployment/env/compose.production.env.example`, then run:

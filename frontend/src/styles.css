@@ -287,6 +287,21 @@ h1 {
   gap: 3px;
 }
 
+.workspaceUserControl {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.workspaceUserControl label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .sessionStatusPanel span,
 .sessionStatusPanel small {
   color: var(--muted);
@@ -302,6 +317,13 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .workspaceUserControl {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
 }
 
 .taskPanelHeader {
