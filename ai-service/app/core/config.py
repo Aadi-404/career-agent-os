@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     environment: Literal["development", "staging", "production"] = "development"
     require_user_auth: bool = False
     admin_user_ids: str = "local-aditya"
+    billing_webhook_secret: str = ""
     log_level: str = "INFO"
 
     @field_validator("log_level")

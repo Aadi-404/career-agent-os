@@ -17,6 +17,7 @@ class ProductionReadinessTests(unittest.TestCase):
             "embedding_provider": settings.embedding_provider,
             "embedding_fallback_local": settings.embedding_fallback_local,
             "jd_parser_mode": settings.jd_parser_mode,
+            "billing_webhook_secret": settings.billing_webhook_secret,
             "log_level": settings.log_level,
         }
 
@@ -34,7 +35,15 @@ class ProductionReadinessTests(unittest.TestCase):
 
         self.assertEqual(checks["auth"].status, "fail")
         self.assertEqual(checks["adminBootstrap"].status, "fail")
+        self.assertEqual(checks["billingWebhook"].status, "fail")
         self.assertEqual(checks["cors"].status, "fail")
+
+    def test_billing_webhook_secret_passes_when_configured(self):
+        settings.billing_webhook_secret = "configured-secret"
+
+        checks = {check.key: check for check in _build_production_readiness_checks(database_ok=True)}
+
+        self.assertEqual(checks["billingWebhook"].status, "pass")
 
     def test_live_llm_without_key_is_a_blocker(self):
         settings.llm_mode = "live"

@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import time
+import hmac
 from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Request
@@ -53,6 +54,7 @@ from app.models.history import (
     AnalysisLookupRequest,
     AnalysisRecord,
     AnalysisSaveRequest,
+    BillingWebhookSubscriptionEvent,
     JobOpportunityRecord,
     JobOpportunitySaveRequest,
     JobOpportunityStatusUpdateRequest,
@@ -602,6 +604,25 @@ def update_user_billing_metadata(user_id: str, request: UserBillingUpdateRequest
     return update_user_billing(user_id, request)
 
 
+@app.post("/billing/webhooks/subscription", response_model=UserRecord)
+def ingest_subscription_webhook(
+    request: BillingWebhookSubscriptionEvent,
+    billing_webhook_secret: str | None = Header(default=None, alias="X-Billing-Webhook-Secret"),
+) -> UserRecord:
+    _authorize_billing_webhook(billing_webhook_secret)
+    return update_user_billing(
+        request.userId,
+        UserBillingUpdateRequest(
+            subscriptionTier=request.subscriptionTier,
+            subscriptionStatus=request.subscriptionStatus,
+            subscriptionPlanId=request.subscriptionPlanId,
+            billingProviderCustomerId=request.billingProviderCustomerId,
+            billingProviderSubscriptionId=request.billingProviderSubscriptionId,
+            billingPeriodEnd=request.billingPeriodEnd,
+        ),
+    )
+
+
 @app.post("/auth/anonymous", response_model=AnonymousSessionRecord)
 def create_anonymous_session(request: AnonymousSessionCreateRequest | None = None) -> AnonymousSessionRecord:
     return create_or_touch_anonymous_session(request or AnonymousSessionCreateRequest())
@@ -867,6 +888,12 @@ def _build_production_readiness_checks(database_ok: bool, database_error: str = 
             detail=f"{len(admin_ids)} admin user id(s) configured." if admin_ids else "ADMIN_USER_IDS is empty; configure at least one admin before deployment.",
         ),
         ReadinessCheck(
+            key="billingWebhook",
+            label="Billing webhook secret",
+            status="pass" if settings.billing_webhook_secret else ("fail" if is_production else "warn"),
+            detail="Billing webhook secret is configured." if settings.billing_webhook_secret else "BILLING_WEBHOOK_SECRET is empty; configure it before enabling paid subscription webhooks.",
+        ),
+        ReadinessCheck(
             key="cors",
             label="CORS origins",
             status="fail" if is_production and (not cors_origins or has_local_cors or has_wildcard_cors) else ("warn" if has_wildcard_cors else "pass"),
@@ -964,6 +991,14 @@ def _llm_key_configured(current_settings) -> bool:
     if current_settings.llm_provider == "gemini":
         return bool(current_settings.gemini_api_key or current_settings.google_api_key or current_settings.llm_api_key)
     return bool(current_settings.llm_api_key)
+
+
+def _authorize_billing_webhook(provided_secret: str | None) -> None:
+    expected_secret = settings.billing_webhook_secret.strip()
+    if not expected_secret:
+        raise HTTPException(status_code=503, detail="Billing webhook secret is not configured")
+    if not provided_secret or not hmac.compare_digest(provided_secret, expected_secret):
+        raise HTTPException(status_code=401, detail="Invalid billing webhook secret")
 
 
 def _authorize_user(user_id: str, session_token: str | None) -> None:
