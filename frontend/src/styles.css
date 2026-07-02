@@ -1728,6 +1728,36 @@ button.premiumButton:not(.secondaryButton) span {
   font-weight: 850;
 }
 
+.billingEditor {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+
+.billingEditor h4 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.billingGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.billingGrid label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .recommendationPanel {
   display: grid;
   gap: 10px;
@@ -2467,6 +2497,7 @@ pre {
   .calibrationGrid,
   .settingsGrid,
   .diagnosticTiles,
+  .billingGrid,
   .weightEditor label {
     grid-template-columns: 1fr;
   }

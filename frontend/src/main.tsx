@@ -179,6 +179,16 @@ type AdminUserRecord = {
   createdAt: string;
 };
 
+type BillingDraft = {
+  userId: string;
+  subscriptionTier: "free" | "premium";
+  subscriptionStatus: "inactive" | "trialing" | "active" | "past_due" | "canceled";
+  subscriptionPlanId: string;
+  billingProviderCustomerId: string;
+  billingProviderSubscriptionId: string;
+  billingPeriodEnd: string;
+};
+
 type HistoryAnalysisRecord = {
   id: string;
   title: string;
@@ -520,6 +530,7 @@ function App() {
   const [systemDiagnostics, setSystemDiagnostics] = useState<SystemDiagnostics | null>(null);
   const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
+  const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [sessionInfo, setSessionInfo] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -1351,6 +1362,51 @@ function App() {
       setAdminUsers(await response.json() as AdminUserRecord[]);
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "User list unavailable");
+    }
+  }
+
+  function startBillingEdit(user: AdminUserRecord) {
+    setBillingDraft({
+      userId: user.id,
+      subscriptionTier: user.subscriptionTier === "premium" ? "premium" : "free",
+      subscriptionStatus: (["trialing", "active", "past_due", "canceled"].includes(user.subscriptionStatus ?? "") ? user.subscriptionStatus : "inactive") as BillingDraft["subscriptionStatus"],
+      subscriptionPlanId: user.subscriptionPlanId ?? "",
+      billingProviderCustomerId: user.billingProviderCustomerId ?? "",
+      billingProviderSubscriptionId: user.billingProviderSubscriptionId ?? "",
+      billingPeriodEnd: user.billingPeriodEnd ?? "",
+    });
+    setSettingsInfo("");
+  }
+
+  async function saveBillingMetadata(draft: BillingDraft) {
+    setSettingsInfo("");
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(draft.userId)}/billing`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          subscriptionTier: draft.subscriptionTier,
+          subscriptionStatus: draft.subscriptionStatus,
+          subscriptionPlanId: draft.subscriptionPlanId.trim() || null,
+          billingProviderCustomerId: draft.billingProviderCustomerId.trim() || null,
+          billingProviderSubscriptionId: draft.billingProviderSubscriptionId.trim() || null,
+          billingPeriodEnd: draft.billingPeriodEnd.trim() || null,
+        }),
+      });
+      if (!response.ok) throw new Error("Billing metadata save failed. Admin access is required.");
+      const saved = await response.json() as AdminUserRecord;
+      setAdminUsers((items) => items.map((item) => item.id === saved.id ? saved : item));
+      if (currentUser?.id === saved.id) {
+        setCurrentUser(saved);
+        const nextTier = storedAccountTier(saved);
+        setAccountTier(nextTier);
+        window.localStorage.setItem(accountTierStorageKey, nextTier);
+      }
+      setBillingDraft(null);
+      setSettingsInfo(`Saved billing metadata for ${saved.displayName}.`);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Billing metadata save failed");
     }
   }
 
@@ -2500,6 +2556,7 @@ function App() {
                 diagnostics={systemDiagnostics}
                 productionReadiness={productionReadiness}
                 users={adminUsers}
+                billingDraft={billingDraft}
                 canManageSettings={currentUser?.role === "admin"}
                 info={settingsInfo}
                 onRefresh={loadScoringConfigs}
@@ -2510,6 +2567,10 @@ function App() {
                 onRefreshDiagnostics={loadSystemDiagnostics}
                 onRefreshReadiness={loadProductionReadiness}
                 onRefreshUsers={loadAdminUsers}
+                onBillingEdit={startBillingEdit}
+                onBillingDraftChange={setBillingDraft}
+                onBillingSave={saveBillingMetadata}
+                onBillingCancel={() => setBillingDraft(null)}
               />
             </TaskPanel>
           )}
@@ -3363,6 +3424,7 @@ function ScoringSettingsPanel({
   diagnostics,
   productionReadiness,
   users,
+  billingDraft,
   canManageSettings,
   info,
   onRefresh,
@@ -3373,6 +3435,10 @@ function ScoringSettingsPanel({
   onRefreshDiagnostics,
   onRefreshReadiness,
   onRefreshUsers,
+  onBillingEdit,
+  onBillingDraftChange,
+  onBillingSave,
+  onBillingCancel,
 }: {
   configs: ScoringCalibrationConfig[];
   recommendation: ScoringCalibrationRecommendation | null;
@@ -3380,6 +3446,7 @@ function ScoringSettingsPanel({
   diagnostics: SystemDiagnostics | null;
   productionReadiness: ProductionReadiness | null;
   users: AdminUserRecord[];
+  billingDraft: BillingDraft | null;
   canManageSettings: boolean;
   info: string;
   onRefresh: () => void;
@@ -3390,6 +3457,10 @@ function ScoringSettingsPanel({
   onRefreshDiagnostics: () => void;
   onRefreshReadiness: () => void;
   onRefreshUsers: () => void;
+  onBillingEdit: (user: AdminUserRecord) => void;
+  onBillingDraftChange: (draft: BillingDraft) => void;
+  onBillingSave: (draft: BillingDraft) => void;
+  onBillingCancel: () => void;
 }) {
   const [selectedFamily, setSelectedFamily] = useState(".NET");
   const activeConfig = configs.find((config) => config.roleFamily === selectedFamily) ?? configs[0];
@@ -3402,6 +3473,7 @@ function ScoringSettingsPanel({
 
   const total = Object.values(draftWeights).reduce((sum, value) => sum + Number(value || 0), 0);
   const visibleAudit = audit.filter((item) => item.roleFamily === activeConfig?.roleFamily);
+  const billingUser = billingDraft ? users.find((user) => user.id === billingDraft.userId) : null;
 
   if (!configs.length) {
     return (
@@ -3583,12 +3655,70 @@ function ScoringSettingsPanel({
               <span>
                 {user.id} | {user.role} | {user.subscriptionTier ?? "free"} / {user.subscriptionStatus ?? "inactive"} | {user.subscriptionPlanId ?? "no plan"} | {user.email ?? "no email"} | {formatDate(user.createdAt)}
               </span>
+              <button type="button" className="tinyButton" disabled={!canManageSettings} onClick={() => onBillingEdit(user)}>Edit Billing</button>
             </div>
           )) : (
             <div>
               <strong>No users loaded</strong>
               <span>Create or claim a session to populate users.</span>
             </div>
+          )}
+        </div>
+        <div className="billingEditor">
+          {billingDraft ? (
+            <>
+              <div>
+                <p className="eyebrow">Billing metadata</p>
+                <h4>{billingUser?.displayName ?? billingDraft.userId}</h4>
+              </div>
+              <div className="billingGrid">
+                <label>
+                  Tier
+                  <select
+                    value={billingDraft.subscriptionTier}
+                    onChange={(event) => onBillingDraftChange({ ...billingDraft, subscriptionTier: event.target.value as BillingDraft["subscriptionTier"] })}
+                  >
+                    <option value="free">Free</option>
+                    <option value="premium">Premium</option>
+                  </select>
+                </label>
+                <label>
+                  Status
+                  <select
+                    value={billingDraft.subscriptionStatus}
+                    onChange={(event) => onBillingDraftChange({ ...billingDraft, subscriptionStatus: event.target.value as BillingDraft["subscriptionStatus"] })}
+                  >
+                    <option value="inactive">Inactive</option>
+                    <option value="trialing">Trialing</option>
+                    <option value="active">Active</option>
+                    <option value="past_due">Past due</option>
+                    <option value="canceled">Canceled</option>
+                  </select>
+                </label>
+                <label>
+                  Plan id
+                  <input value={billingDraft.subscriptionPlanId} onChange={(event) => onBillingDraftChange({ ...billingDraft, subscriptionPlanId: event.target.value })} placeholder="premium_monthly" />
+                </label>
+                <label>
+                  Customer id
+                  <input value={billingDraft.billingProviderCustomerId} onChange={(event) => onBillingDraftChange({ ...billingDraft, billingProviderCustomerId: event.target.value })} placeholder="cus_..." />
+                </label>
+                <label>
+                  Subscription id
+                  <input value={billingDraft.billingProviderSubscriptionId} onChange={(event) => onBillingDraftChange({ ...billingDraft, billingProviderSubscriptionId: event.target.value })} placeholder="sub_..." />
+                </label>
+                <label>
+                  Period end
+                  <input value={billingDraft.billingPeriodEnd} onChange={(event) => onBillingDraftChange({ ...billingDraft, billingPeriodEnd: event.target.value })} placeholder="2026-07-31T23:59:59Z" />
+                </label>
+              </div>
+              <div className="actionBar">
+                <button type="button" disabled={!canManageSettings} onClick={() => onBillingSave(billingDraft)}>Save Billing</button>
+                <button type="button" className="secondaryButton" onClick={onBillingCancel}>Cancel</button>
+              </div>
+            </>
+          ) : (
+            <p className="hint">Select a known user to update billing metadata or manually unlock premium access.</p>
           )}
         </div>
       </div>
