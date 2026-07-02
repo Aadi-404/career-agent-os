@@ -21,11 +21,25 @@ class UserRecord(BaseModel):
     email: str | None = None
     role: str = "member"
     subscriptionTier: str = "free"
+    subscriptionStatus: str = "inactive"
+    subscriptionPlanId: str | None = None
+    billingProviderCustomerId: str | None = None
+    billingProviderSubscriptionId: str | None = None
+    billingPeriodEnd: str | None = None
     createdAt: str
 
 
 class UserSubscriptionTierUpdateRequest(BaseModel):
     subscriptionTier: Literal["free", "premium"]
+
+
+class UserBillingUpdateRequest(BaseModel):
+    subscriptionTier: Literal["free", "premium"] | None = None
+    subscriptionStatus: Literal["inactive", "trialing", "active", "past_due", "canceled"] = "inactive"
+    subscriptionPlanId: str | None = Field(default=None, max_length=120)
+    billingProviderCustomerId: str | None = Field(default=None, max_length=180)
+    billingProviderSubscriptionId: str | None = Field(default=None, max_length=180)
+    billingPeriodEnd: str | None = Field(default=None, max_length=80)
 
 
 class AnonymousSessionCreateRequest(BaseModel):

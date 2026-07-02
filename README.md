@@ -68,6 +68,8 @@ Current Phase 6 groundwork:
 - Entitlement state: the workspace now tracks Free, Premium, and Admin access so premium actions can be locked or unlocked consistently.
 - JD library reuse: saved PostgreSQL job descriptions can be loaded back into the matching flow for repeat comparisons.
 - Persistent subscription tier: user records store the Free/Premium tier and expose a guarded tier update API for deployed sessions.
+- Billing-ready metadata: user records can store subscription status, plan id, provider customer id, provider subscription id, and billing period end.
+- Saved comparison workflow: the web app can compare saved resumes against saved JDs with score-only runs capped to avoid accidental spend.
 
 ## Run AI Service
 

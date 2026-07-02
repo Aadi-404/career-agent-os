@@ -76,7 +76,7 @@ type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
-type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "extension" | "evaluation" | "settings";
+type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "extension" | "evaluation" | "settings";
 type CostMode = "free" | "standard" | "premium";
 type AccessTier = "free" | "premium" | "admin";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
@@ -171,6 +171,11 @@ type AdminUserRecord = {
   email?: string | null;
   role: string;
   subscriptionTier?: AccessTier | null;
+  subscriptionStatus?: string | null;
+  subscriptionPlanId?: string | null;
+  billingProviderCustomerId?: string | null;
+  billingProviderSubscriptionId?: string | null;
+  billingPeriodEnd?: string | null;
   createdAt: string;
 };
 
@@ -214,6 +219,18 @@ type HistoryPreparationRecord = {
   updatedAt: string;
   plan: PreparationIntelligence;
   progress?: PreparationProgress | null;
+};
+
+type ComparisonResult = {
+  id: string;
+  resumeId: string;
+  resumeTitle: string;
+  jobDescriptionId: string;
+  jobTitle: string;
+  company?: string | null;
+  score: number;
+  fitCategory: string;
+  recommendedAction?: string | null;
 };
 
 type TaskStatus = "todo" | "in_progress" | "done" | "skipped";
@@ -515,6 +532,11 @@ function App() {
   const [jdHistory, setJdHistory] = useState<HistoryJobDescriptionRecord[]>([]);
   const [preparationHistory, setPreparationHistory] = useState<HistoryPreparationRecord[]>([]);
   const [jobOpportunityHistory, setJobOpportunityHistory] = useState<HistoryJobOpportunityRecord[]>([]);
+  const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
+  const [comparisonJdIds, setComparisonJdIds] = useState<string[]>([]);
+  const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
+  const [comparisonInfo, setComparisonInfo] = useState("");
+  const [comparisonLoading, setComparisonLoading] = useState(false);
 
   useEffect(() => {
     refreshSessionInfo();
@@ -530,6 +552,10 @@ function App() {
   useEffect(() => {
     if (activeTask === "history") {
       loadHistory();
+    }
+    if (activeTask === "compare") {
+      void loadResumeLibrary();
+      void loadJdLibrary();
     }
     if (activeTask === "extension") {
       loadExtensionValidations();
@@ -611,7 +637,6 @@ function App() {
         displayName: workspaceUserId,
         email: null,
         role: "admin",
-        subscriptionTier: accountTier === "premium" ? "premium" : "free",
       }),
     });
     if (response.ok) {
@@ -961,6 +986,81 @@ function App() {
     );
     setResult(null);
     setScoreStep("upload");
+  }
+
+  function toggleComparisonResume(resumeId: string) {
+    setComparisonResumeIds((current) => current.includes(resumeId) ? current.filter((id) => id !== resumeId) : [...current, resumeId]);
+  }
+
+  function toggleComparisonJd(jobDescriptionId: string) {
+    setComparisonJdIds((current) => current.includes(jobDescriptionId) ? current.filter((id) => id !== jobDescriptionId) : [...current, jobDescriptionId]);
+  }
+
+  async function runComparison() {
+    const selectedResumes = resumeHistory.filter((resume) => comparisonResumeIds.includes(resume.id));
+    const selectedJds = jdHistory.filter((jd) => comparisonJdIds.includes(jd.id));
+    const totalRuns = selectedResumes.length * selectedJds.length;
+    if (!selectedResumes.length || !selectedJds.length) {
+      setComparisonInfo("Select at least one saved resume and one saved JD.");
+      return;
+    }
+    if (totalRuns > 9) {
+      setComparisonInfo("Comparison is capped at 9 score runs. Select fewer resumes or JDs.");
+      return;
+    }
+
+    setComparisonLoading(true);
+    setComparisonInfo(`Running ${totalRuns} score-only comparison(s).`);
+    setComparisonResults([]);
+    try {
+      const nextResults: ComparisonResult[] = [];
+      for (const resume of selectedResumes) {
+        for (const jd of selectedJds) {
+          const resumeTextForRun = resume.normalizedText || resume.rawText;
+          const jdTextForRun = jd.normalizedText || jd.rawText;
+          const parsed = jd.parsedJobDescription;
+          const basePayload = buildAnalyzeRequest();
+          const payload: AnalyzeRequestPayload = {
+            ...basePayload,
+            resumeText: resumeTextForRun,
+            jobDescriptionText: jdTextForRun,
+            candidateContext: {
+              ...basePayload.candidateContext,
+              targetRole: parsed?.roleTitle || jd.title || targetRole,
+            },
+            scoringCalibrationUserId: workspaceUserId,
+            roleFamily: inferRoleFamily(`${parsed?.roleTitle ?? jd.title} ${jdTextForRun}`),
+          };
+          const response = await fetch(`${API_BASE_URL}/ai/match/score`, {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) {
+            const details = await response.text();
+            throw new Error(details || `Comparison failed for ${resume.title} and ${jd.title}`);
+          }
+          const analysis = await response.json() as AnalysisResponse;
+          nextResults.push({
+            id: `${resume.id}-${jd.id}`,
+            resumeId: resume.id,
+            resumeTitle: resume.title,
+            jobDescriptionId: jd.id,
+            jobTitle: jd.title,
+            company: jd.company,
+            score: analysis.technicalMatchScore,
+            fitCategory: analysis.fitCategory,
+            recommendedAction: analysis.recommendedAction,
+          });
+          setComparisonResults([...nextResults].sort((a, b) => b.score - a.score));
+        }
+      }
+      setComparisonInfo(`Completed ${nextResults.length} score-only comparison(s).`);
+    } catch (err) {
+      setComparisonInfo(err instanceof Error ? err.message : "Comparison failed");
+    } finally {
+      setComparisonLoading(false);
+    }
   }
 
   async function loadPrepMemory() {
@@ -2320,9 +2420,36 @@ function App() {
             </TaskPanel>
           )}
 
-          {activeTask === "extension" && (
+          {activeTask === "compare" && (
             <TaskPanel
               eyebrow="Task 5"
+              title="Saved Comparison"
+              description="Run score-only comparisons across saved resumes and saved JDs without generating premium artifacts."
+            >
+              <ComparisonPanel
+                resumes={resumeHistory}
+                jobDescriptions={jdHistory}
+                selectedResumeIds={comparisonResumeIds}
+                selectedJobDescriptionIds={comparisonJdIds}
+                results={comparisonResults}
+                accessTier={effectiveAccessTier}
+                loading={comparisonLoading}
+                info={comparisonInfo}
+                onToggleResume={toggleComparisonResume}
+                onToggleJobDescription={toggleComparisonJd}
+                onRefresh={() => {
+                  void loadResumeLibrary();
+                  void loadJdLibrary();
+                }}
+                onRun={runComparison}
+                onTierChange={updateAccountTier}
+              />
+            </TaskPanel>
+          )}
+
+          {activeTask === "extension" && (
+            <TaskPanel
+              eyebrow="Task 6"
               title="Extension Setup"
               description="Install and connect the browser extension for job-page scoring with saved resumes."
             >
@@ -2655,6 +2782,114 @@ function ProductAccessPanel({
   );
 }
 
+function ComparisonPanel({
+  resumes,
+  jobDescriptions,
+  selectedResumeIds,
+  selectedJobDescriptionIds,
+  results,
+  accessTier,
+  loading,
+  info,
+  onToggleResume,
+  onToggleJobDescription,
+  onRefresh,
+  onRun,
+  onTierChange,
+}: {
+  resumes: HistoryResumeRecord[];
+  jobDescriptions: HistoryJobDescriptionRecord[];
+  selectedResumeIds: string[];
+  selectedJobDescriptionIds: string[];
+  results: ComparisonResult[];
+  accessTier: AccessTier;
+  loading: boolean;
+  info: string;
+  onToggleResume: (id: string) => void;
+  onToggleJobDescription: (id: string) => void;
+  onRefresh: () => void;
+  onRun: () => void;
+  onTierChange: (tier: AccessTier) => void;
+}) {
+  const runCount = selectedResumeIds.length * selectedJobDescriptionIds.length;
+  return (
+    <div className="comparisonWorkspace">
+      <ProductAccessPanel active="free" accessTier={accessTier} onTierChange={onTierChange} compact />
+      <div className="comparisonToolbar">
+        <div>
+          <strong>{runCount} score-only run(s) selected</strong>
+          <span>Cap: 9 combinations. Premium artifacts are not generated here.</span>
+        </div>
+        <div className="actionBar">
+          <button type="button" className="secondaryButton" onClick={onRefresh}>Refresh Libraries</button>
+          <button type="button" disabled={loading || runCount < 1 || runCount > 9} onClick={onRun}>
+            {loading ? "Comparing..." : "Run Comparison"}
+          </button>
+        </div>
+      </div>
+
+      <div className="comparisonGrid">
+        <section className="panel">
+          <h3>Saved Resumes</h3>
+          <div className="selectionList">
+            {resumes.length ? resumes.slice(0, 12).map((resume) => (
+              <label key={resume.id} className="selectionRow">
+                <input type="checkbox" checked={selectedResumeIds.includes(resume.id)} onChange={() => onToggleResume(resume.id)} />
+                <span>
+                  <strong>{resume.title}</strong>
+                  <small>{resume.source} | {formatDate(resume.createdAt)}</small>
+                </span>
+              </label>
+            )) : <p className="hint">No saved resumes yet.</p>}
+          </div>
+        </section>
+
+        <section className="panel">
+          <h3>Saved JDs</h3>
+          <div className="selectionList">
+            {jobDescriptions.length ? jobDescriptions.slice(0, 12).map((jd) => (
+              <label key={jd.id} className="selectionRow">
+                <input type="checkbox" checked={selectedJobDescriptionIds.includes(jd.id)} onChange={() => onToggleJobDescription(jd.id)} />
+                <span>
+                  <strong>{jd.title}</strong>
+                  <small>{[jd.company, formatDate(jd.createdAt)].filter(Boolean).join(" | ")}</small>
+                </span>
+              </label>
+            )) : <p className="hint">No saved JDs yet.</p>}
+          </div>
+        </section>
+      </div>
+
+      {info && <p className="hint">{info}</p>}
+
+      <div className="panel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Results</p>
+            <h3>Ranked Comparison</h3>
+          </div>
+        </div>
+        {results.length ? (
+          <div className="comparisonResults">
+            {results.map((item, index) => (
+              <div className="comparisonResult" key={item.id}>
+                <span>#{index + 1}</span>
+                <div>
+                  <strong>{item.score}% - {item.fitCategory}</strong>
+                  <small>{item.resumeTitle} against {item.jobTitle}{item.company ? ` at ${item.company}` : ""}</small>
+                  {item.recommendedAction && <p>{item.recommendedAction}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="hint">Run a comparison to see ranked score-only results.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TaskNav({
   activeTask,
   onChange,
@@ -2711,6 +2946,12 @@ function TaskNav({
       label: "User History",
       description: "Saved resumes and reports",
       status: "PostgreSQL",
+    },
+    {
+      id: "compare",
+      label: "Saved Comparison",
+      description: "Resume/JD score grid",
+      status: "Score-only",
     },
     {
       id: "extension",
@@ -3339,7 +3580,9 @@ function ScoringSettingsPanel({
           {users.length ? users.map((user) => (
             <div key={user.id}>
               <strong>{user.displayName}</strong>
-              <span>{user.id} | {user.role} | {user.email ?? "no email"} | {formatDate(user.createdAt)}</span>
+              <span>
+                {user.id} | {user.role} | {user.subscriptionTier ?? "free"} / {user.subscriptionStatus ?? "inactive"} | {user.subscriptionPlanId ?? "no plan"} | {user.email ?? "no email"} | {formatDate(user.createdAt)}
+              </span>
             </div>
           )) : (
             <div>

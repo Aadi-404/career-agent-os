@@ -261,6 +261,8 @@ Started:
 - Free, Premium, and Admin entitlement state now controls whether optional AI modules are locked or available.
 - Saved JD snapshots can now be reused from PostgreSQL for repeat comparisons and multi-resume workflows.
 - Subscription tier is now persisted on user records and can be updated through an authenticated backend endpoint.
+- Billing-provider-ready subscription metadata is now stored on user records for future Stripe/Razorpay integration.
+- A saved comparison task can run capped score-only comparisons across saved resumes and saved JDs.
 - Backend responses now carry `X-Request-ID` and log request completion/error events for production tracing.
 - CI runs backend tests, frontend build, deployment script checks, and extension packaging on push/PR.
 - Web and extension session controls now support explicit reconnect/clear flows.

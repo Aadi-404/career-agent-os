@@ -40,6 +40,7 @@ from app.models.history import (
     PreparationSessionSaveRequest,
     ResumeRecord,
     ResumeSaveRequest,
+    UserBillingUpdateRequest,
     UserCreateRequest,
     UserRecord,
     UserSubscriptionTierUpdateRequest,
@@ -52,10 +53,10 @@ from app.models.resume_normalize import StructuredResume
 def create_or_update_user(request: UserCreateRequest) -> UserRecord:
     now = _now()
     role = _resolved_user_role(request.userId, request.role)
-    subscription_tier = _resolved_subscription_tier(request.subscriptionTier)
     with get_connection() as connection:
         existing = connection.execute("SELECT * FROM users WHERE id = ?", (request.userId,)).fetchone()
         if existing:
+            subscription_tier = _resolved_subscription_tier(request.subscriptionTier) if request.subscriptionTier else (_row_value(existing, "subscription_tier") or "free")
             connection.execute(
                 "UPDATE users SET display_name = ?, email = ?, role = ?, subscription_tier = ? WHERE id = ?",
                 (request.displayName, request.email, role, subscription_tier, request.userId),
@@ -63,6 +64,7 @@ def create_or_update_user(request: UserCreateRequest) -> UserRecord:
             row = connection.execute("SELECT * FROM users WHERE id = ?", (request.userId,)).fetchone()
             return _user_from_row(_require_row(row, "User not found after update"))
 
+        subscription_tier = _resolved_subscription_tier(request.subscriptionTier)
         try:
             connection.execute(
                 "INSERT INTO users (id, display_name, email, role, subscription_tier, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -85,11 +87,11 @@ def create_or_update_user_password(
 ) -> UserRecord:
     now = _now()
     role = _resolved_user_role(user_id, requested_role)
-    subscription_tier = _resolved_subscription_tier(requested_subscription_tier)
     password_hash = _hash_password(password)
     with get_connection() as connection:
         existing = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if existing:
+            subscription_tier = _resolved_subscription_tier(requested_subscription_tier) if requested_subscription_tier else (_row_value(existing, "subscription_tier") or "free")
             connection.execute(
                 """
                 UPDATE users
@@ -100,6 +102,7 @@ def create_or_update_user_password(
             )
             row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
             return _user_from_row(_require_row(row, "User not found after password update"))
+        subscription_tier = _resolved_subscription_tier(requested_subscription_tier)
         try:
             connection.execute(
                 """
@@ -118,11 +121,41 @@ def create_or_update_user_password(
 def update_user_subscription_tier(user_id: str, request: UserSubscriptionTierUpdateRequest) -> UserRecord:
     with get_connection() as connection:
         connection.execute(
-            "UPDATE users SET subscription_tier = ? WHERE id = ?",
-            (request.subscriptionTier, user_id),
+            "UPDATE users SET subscription_tier = ?, subscription_status = ? WHERE id = ?",
+            (request.subscriptionTier, "active" if request.subscriptionTier == "premium" else "inactive", user_id),
         )
         row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         return _user_from_row(_require_row(row, "User not found after subscription tier update"))
+
+
+def update_user_billing(user_id: str, request: UserBillingUpdateRequest) -> UserRecord:
+    tier = _resolved_subscription_tier(request.subscriptionTier)
+    if not request.subscriptionTier:
+        tier = "premium" if request.subscriptionStatus in {"trialing", "active", "past_due"} else "free"
+    with get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE users
+            SET subscription_tier = ?,
+                subscription_status = ?,
+                subscription_plan_id = ?,
+                billing_provider_customer_id = ?,
+                billing_provider_subscription_id = ?,
+                billing_period_end = ?
+            WHERE id = ?
+            """,
+            (
+                tier,
+                request.subscriptionStatus,
+                request.subscriptionPlanId,
+                request.billingProviderCustomerId,
+                request.billingProviderSubscriptionId,
+                request.billingPeriodEnd,
+                user_id,
+            ),
+        )
+        row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return _user_from_row(_require_row(row, "User not found after billing update"))
 
 
 def authenticate_user_password(identifier: str, password: str) -> UserRecord:
@@ -954,6 +987,11 @@ def _user_from_row(row: Any) -> UserRecord:
         email=row["email"],
         role=_row_value(row, "role") or "member",
         subscriptionTier=_row_value(row, "subscription_tier") or "free",
+        subscriptionStatus=_row_value(row, "subscription_status") or "inactive",
+        subscriptionPlanId=_row_value(row, "subscription_plan_id"),
+        billingProviderCustomerId=_row_value(row, "billing_provider_customer_id"),
+        billingProviderSubscriptionId=_row_value(row, "billing_provider_subscription_id"),
+        billingPeriodEnd=_row_value(row, "billing_period_end"),
         createdAt=row["created_at"],
     )
 

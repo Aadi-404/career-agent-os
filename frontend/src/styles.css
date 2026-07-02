@@ -757,6 +757,98 @@ h1 {
   white-space: nowrap;
 }
 
+.comparisonWorkspace,
+.selectionList,
+.comparisonResults {
+  display: grid;
+  gap: 14px;
+}
+
+.comparisonToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 14px;
+  box-shadow: var(--shadow-soft);
+}
+
+.comparisonToolbar div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.comparisonToolbar span,
+.selectionRow small,
+.comparisonResult small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.comparisonGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.selectionRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 10px;
+}
+
+.selectionRow input {
+  width: auto;
+  margin-top: 2px;
+}
+
+.selectionRow span,
+.comparisonResult div {
+  min-width: 0;
+}
+
+.selectionRow strong,
+.comparisonResult strong {
+  display: block;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.comparisonResult {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+
+.comparisonResult > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: #ccfbf1;
+  color: #115e59;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.comparisonResult p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .opportunityHistoryItem {
   grid-template-columns: minmax(0, 1fr) auto auto minmax(130px, 160px);
 }
@@ -2362,6 +2454,7 @@ pre {
   .checkItem,
   .placeholderGrid,
   .historyGrid,
+  .comparisonGrid,
   .opportunityMetaGrid,
   .opportunityDetailGrid,
   .premiumActionGrid,
@@ -2376,6 +2469,10 @@ pre {
   .diagnosticTiles,
   .weightEditor label {
     grid-template-columns: 1fr;
+  }
+
+  .comparisonToolbar {
+    display: grid;
   }
 
   .inputPanel {
