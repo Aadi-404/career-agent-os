@@ -67,6 +67,7 @@ Current Phase 6 groundwork:
 - Free/premium visual gating: score output is presented as the free module, while preparation, interview, cross-question, and rewrite artifacts are presented as premium modules.
 - Entitlement state: the workspace now tracks Free, Premium, and Admin access so premium actions can be locked or unlocked consistently.
 - JD library reuse: saved PostgreSQL job descriptions can be loaded back into the matching flow for repeat comparisons.
+- Persistent subscription tier: user records store the Free/Premium tier and expose a guarded tier update API for deployed sessions.
 
 ## Run AI Service
 

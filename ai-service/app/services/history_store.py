@@ -42,6 +42,7 @@ from app.models.history import (
     ResumeSaveRequest,
     UserCreateRequest,
     UserRecord,
+    UserSubscriptionTierUpdateRequest,
     WorkspaceSummary,
 )
 from app.models.jd_parse import ParsedJobDescription
@@ -51,26 +52,27 @@ from app.models.resume_normalize import StructuredResume
 def create_or_update_user(request: UserCreateRequest) -> UserRecord:
     now = _now()
     role = _resolved_user_role(request.userId, request.role)
+    subscription_tier = _resolved_subscription_tier(request.subscriptionTier)
     with get_connection() as connection:
         existing = connection.execute("SELECT * FROM users WHERE id = ?", (request.userId,)).fetchone()
         if existing:
             connection.execute(
-                "UPDATE users SET display_name = ?, email = ?, role = ? WHERE id = ?",
-                (request.displayName, request.email, role, request.userId),
+                "UPDATE users SET display_name = ?, email = ?, role = ?, subscription_tier = ? WHERE id = ?",
+                (request.displayName, request.email, role, subscription_tier, request.userId),
             )
             row = connection.execute("SELECT * FROM users WHERE id = ?", (request.userId,)).fetchone()
             return _user_from_row(_require_row(row, "User not found after update"))
 
         try:
             connection.execute(
-                "INSERT INTO users (id, display_name, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
-                (request.userId, request.displayName, request.email, role, now),
+                "INSERT INTO users (id, display_name, email, role, subscription_tier, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (request.userId, request.displayName, request.email, role, subscription_tier, now),
             )
         except Exception as exc:
             if not isinstance(exc, IntegrityError) and exc.__class__.__name__ != "UniqueViolation":
                 raise
             raise HTTPException(status_code=409, detail="A user with this email already exists") from exc
-    return UserRecord(id=request.userId, displayName=request.displayName, email=request.email, role=role, createdAt=now)
+    return UserRecord(id=request.userId, displayName=request.displayName, email=request.email, role=role, subscriptionTier=subscription_tier, createdAt=now)
 
 
 def create_or_update_user_password(
@@ -79,9 +81,11 @@ def create_or_update_user_password(
     email: str | None,
     password: str,
     requested_role: str | None = None,
+    requested_subscription_tier: str | None = None,
 ) -> UserRecord:
     now = _now()
     role = _resolved_user_role(user_id, requested_role)
+    subscription_tier = _resolved_subscription_tier(requested_subscription_tier)
     password_hash = _hash_password(password)
     with get_connection() as connection:
         existing = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -89,26 +93,36 @@ def create_or_update_user_password(
             connection.execute(
                 """
                 UPDATE users
-                SET display_name = ?, email = ?, role = ?, password_hash = ?
+                SET display_name = ?, email = ?, role = ?, subscription_tier = ?, password_hash = ?
                 WHERE id = ?
                 """,
-                (display_name, email, role, password_hash, user_id),
+                (display_name, email, role, subscription_tier, password_hash, user_id),
             )
             row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
             return _user_from_row(_require_row(row, "User not found after password update"))
         try:
             connection.execute(
                 """
-                INSERT INTO users (id, display_name, email, role, password_hash, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO users (id, display_name, email, role, subscription_tier, password_hash, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (user_id, display_name, email, role, password_hash, now),
+                (user_id, display_name, email, role, subscription_tier, password_hash, now),
             )
         except Exception as exc:
             if not isinstance(exc, IntegrityError) and exc.__class__.__name__ != "UniqueViolation":
                 raise
             raise HTTPException(status_code=409, detail="A user with this email already exists") from exc
-    return UserRecord(id=user_id, displayName=display_name, email=email, role=role, createdAt=now)
+    return UserRecord(id=user_id, displayName=display_name, email=email, role=role, subscriptionTier=subscription_tier, createdAt=now)
+
+
+def update_user_subscription_tier(user_id: str, request: UserSubscriptionTierUpdateRequest) -> UserRecord:
+    with get_connection() as connection:
+        connection.execute(
+            "UPDATE users SET subscription_tier = ? WHERE id = ?",
+            (request.subscriptionTier, user_id),
+        )
+        row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return _user_from_row(_require_row(row, "User not found after subscription tier update"))
 
 
 def authenticate_user_password(identifier: str, password: str) -> UserRecord:
@@ -171,8 +185,8 @@ def claim_anonymous_session(
         if not existing_user:
             role = _resolved_user_role(user_id, None)
             connection.execute(
-                "INSERT INTO users (id, display_name, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
-                (user_id, display_name or user_id, email, role, now),
+                "INSERT INTO users (id, display_name, email, role, subscription_tier, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, display_name or user_id, email, role, "free", now),
             )
         connection.execute(
             """
@@ -891,6 +905,10 @@ def _resolved_user_role(user_id: str, requested_role: str | None) -> str:
     return "admin" if requested_role == "admin" and not admin_ids else "member"
 
 
+def _resolved_subscription_tier(requested_tier: str | None) -> str:
+    return requested_tier if requested_tier in {"free", "premium"} else "free"
+
+
 def _hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000).hex()
@@ -935,6 +953,7 @@ def _user_from_row(row: Any) -> UserRecord:
         displayName=row["display_name"],
         email=row["email"],
         role=_row_value(row, "role") or "member",
+        subscriptionTier=_row_value(row, "subscription_tier") or "free",
         createdAt=row["created_at"],
     )
 

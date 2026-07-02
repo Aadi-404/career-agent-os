@@ -170,6 +170,7 @@ type AdminUserRecord = {
   displayName: string;
   email?: string | null;
   role: string;
+  subscriptionTier?: AccessTier | null;
   createdAt: string;
 };
 
@@ -430,6 +431,10 @@ function authHeaders(contentType = true): HeadersInit {
   };
 }
 
+function storedAccountTier(user: AdminUserRecord): AccessTier {
+  return user.subscriptionTier === "premium" ? "premium" : "free";
+}
+
 function App() {
   const [activeTask, setActiveTask] = useState<ActiveTask>("matching");
   const [workspaceUserId, setWorkspaceUserId] = useState(() => window.localStorage.getItem(workspaceUserStorageKey) || defaultWorkspaceUserId);
@@ -606,6 +611,7 @@ function App() {
         displayName: workspaceUserId,
         email: null,
         role: "admin",
+        subscriptionTier: accountTier === "premium" ? "premium" : "free",
       }),
     });
     if (response.ok) {
@@ -615,6 +621,8 @@ function App() {
       setCurrentUser(payload.user);
       setAuthDisplayName(payload.user.displayName);
       setAuthEmail(payload.user.email ?? "");
+      setAccountTier(storedAccountTier(payload.user));
+      window.localStorage.setItem(accountTierStorageKey, storedAccountTier(payload.user));
       refreshSessionInfo();
     } else if (response.status === 401 || response.status === 403) {
       clearStoredSession("Saved session was invalid. Reconnect to continue.");
@@ -686,11 +694,14 @@ function App() {
     setCurrentUser(payload.user);
     setAuthDisplayName(payload.user.displayName);
     setAuthEmail(payload.user.email ?? "");
+    setAccountTier(storedAccountTier(payload.user));
+    window.localStorage.setItem(accountTierStorageKey, storedAccountTier(payload.user));
     setAuthPassword("");
     setSessionInfo(message);
   }
 
-  function updateAccountTier(nextTier: AccessTier) {
+  async function updateAccountTier(nextTier: AccessTier) {
+    if (nextTier === "admin") return;
     setAccountTier(nextTier);
     window.localStorage.setItem(accountTierStorageKey, nextTier);
     if (nextTier === "free") {
@@ -698,6 +709,20 @@ function App() {
       setCostModeInfo("Free tier keeps AI usage to the score and requirement matrix.");
     } else {
       setCostModeInfo("Premium tier unlocked for optional coaching modules in this workspace.");
+    }
+    if (!workspaceUserId) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/users/${workspaceUserId}/subscription-tier`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ subscriptionTier: nextTier }),
+      });
+      if (response.ok) {
+        const user = await response.json() as AdminUserRecord;
+        setCurrentUser(user);
+      }
+    } catch {
+      // Local tier still controls UI if the backend is offline.
     }
   }
 
@@ -720,6 +745,7 @@ function App() {
           email: authEmail.trim() || null,
           password: authPassword,
           role: "admin",
+          subscriptionTier: accountTier === "premium" ? "premium" : "free",
         }),
       });
       if (!response.ok) {

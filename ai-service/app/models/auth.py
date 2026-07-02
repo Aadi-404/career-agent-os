@@ -16,6 +16,7 @@ class UserPasswordRegisterRequest(BaseModel):
     email: str | None = Field(default=None, max_length=180)
     password: str = Field(min_length=8, max_length=160)
     role: Literal["member", "admin"] | None = None
+    subscriptionTier: Literal["free", "premium"] | None = None
 
 
 class UserLoginRequest(BaseModel):

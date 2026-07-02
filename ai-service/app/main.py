@@ -66,6 +66,7 @@ from app.models.history import (
     ResumeSaveRequest,
     UserCreateRequest,
     UserRecord,
+    UserSubscriptionTierUpdateRequest,
     WorkspaceSummary,
 )
 from app.models.jd_parse import JdParseRequest, JdParseResponse
@@ -116,6 +117,7 @@ from app.services.history_store import (
     get_match_feedback_summary,
     export_match_feedback_dataset,
     import_match_feedback_dataset,
+    update_user_subscription_tier,
 )
 from app.services.jd_parser import parse_jd
 from app.services.optional_artifact_service import (
@@ -573,6 +575,7 @@ def register_user_password(request: UserPasswordRegisterRequest) -> UserSessionR
         request.email,
         request.password,
         request.role,
+        request.subscriptionTier,
     )
     token = create_user_session(user.id, source="password")
     return UserSessionResponse(user=user, sessionToken=token)
@@ -583,6 +586,12 @@ def login_user_password(request: UserLoginRequest) -> UserSessionResponse:
     user = authenticate_user_password(request.userIdOrEmail, request.password)
     token = create_user_session(user.id, source="password")
     return UserSessionResponse(user=user, sessionToken=token)
+
+
+@app.patch("/auth/users/{user_id}/subscription-tier", response_model=UserRecord)
+def update_subscription_tier(user_id: str, request: UserSubscriptionTierUpdateRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> UserRecord:
+    _authorize_user(user_id, session_token)
+    return update_user_subscription_tier(user_id, request)
 
 
 @app.post("/auth/anonymous", response_model=AnonymousSessionRecord)

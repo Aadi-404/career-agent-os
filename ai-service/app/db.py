@@ -76,6 +76,7 @@ def _postgres_schema() -> str:
                 display_name TEXT NOT NULL,
                 email TEXT,
                 role TEXT NOT NULL DEFAULT 'member',
+                subscription_tier TEXT NOT NULL DEFAULT 'free',
                 password_hash TEXT,
                 created_at TEXT NOT NULL
             );
@@ -85,6 +86,9 @@ def _postgres_schema() -> str:
 
             ALTER TABLE users
             ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS subscription_tier TEXT NOT NULL DEFAULT 'free';
 
             CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
             ON users(email)

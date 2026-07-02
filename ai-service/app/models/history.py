@@ -12,6 +12,7 @@ class UserCreateRequest(BaseModel):
     displayName: str = Field(min_length=2, max_length=120)
     email: str | None = Field(default=None, max_length=180)
     role: Literal["member", "admin"] | None = None
+    subscriptionTier: Literal["free", "premium"] | None = None
 
 
 class UserRecord(BaseModel):
@@ -19,7 +20,12 @@ class UserRecord(BaseModel):
     displayName: str
     email: str | None = None
     role: str = "member"
+    subscriptionTier: str = "free"
     createdAt: str
+
+
+class UserSubscriptionTierUpdateRequest(BaseModel):
+    subscriptionTier: Literal["free", "premium"]
 
 
 class AnonymousSessionCreateRequest(BaseModel):
