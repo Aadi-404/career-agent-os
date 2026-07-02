@@ -65,6 +65,8 @@ Current Phase 6 groundwork:
 - Extension auth alignment: the extension can login/register with password auth, load saved resumes through the session, parse/paste a JD, and match a saved resume.
 - Resume library reuse: the matching flow can load saved PostgreSQL resume snapshots back into the parser/review/scoring steps.
 - Free/premium visual gating: score output is presented as the free module, while preparation, interview, cross-question, and rewrite artifacts are presented as premium modules.
+- Entitlement state: the workspace now tracks Free, Premium, and Admin access so premium actions can be locked or unlocked consistently.
+- JD library reuse: saved PostgreSQL job descriptions can be loaded back into the matching flow for repeat comparisons.
 
 ## Run AI Service
 

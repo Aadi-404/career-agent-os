@@ -364,6 +364,27 @@ h1 {
 .profileActions {
   grid-column: 1 / -1;
   justify-content: flex-end;
+  align-items: center;
+}
+
+.tierBadge {
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #334155;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.tierBadge.premium {
+  background: #fff4d8;
+  color: #7c4f00;
+}
+
+.tierBadge.admin {
+  background: #ccfbf1;
+  color: #115e59;
 }
 
 @media (max-width: 720px) {
@@ -1247,6 +1268,10 @@ button.premiumButton:not(.secondaryButton) span {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.accessNote .tinyButton {
+  justify-self: start;
 }
 
 .extensionSetupGrid {

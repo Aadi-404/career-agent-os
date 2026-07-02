@@ -78,6 +78,7 @@ type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
 type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "extension" | "evaluation" | "settings";
 type CostMode = "free" | "standard" | "premium";
+type AccessTier = "free" | "premium" | "admin";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
 
 type AnalyzeRequestPayload = {
@@ -199,6 +200,9 @@ type HistoryJobDescriptionRecord = {
   title: string;
   company?: string | null;
   createdAt: string;
+  rawText: string;
+  normalizedText?: string | null;
+  parsedJobDescription?: ParsedJobDescription | null;
 };
 
 type HistoryPreparationRecord = {
@@ -416,6 +420,7 @@ const defaultWorkspaceUserId = "local-aditya";
 const workspaceUserStorageKey = "careerAgentWorkspaceUserId";
 const sessionTokenStorageKey = "careerAgentSessionToken";
 const sessionIssuedAtStorageKey = "careerAgentSessionIssuedAt";
+const accountTierStorageKey = "careerAgentAccountTier";
 
 function authHeaders(contentType = true): HeadersInit {
   const token = window.localStorage.getItem(sessionTokenStorageKey) || "";
@@ -474,6 +479,7 @@ function App() {
   const [artifactLoading, setArtifactLoading] = useState("");
   const [costMode, setCostMode] = useState<CostMode>("free");
   const [costModeInfo, setCostModeInfo] = useState("");
+  const [accountTier, setAccountTier] = useState<AccessTier>(() => (window.localStorage.getItem(accountTierStorageKey) as AccessTier | null) || "free");
   const [error, setError] = useState("");
   const [preparationInfo, setPreparationInfo] = useState("");
   const [historyInfo, setHistoryInfo] = useState("");
@@ -510,6 +516,7 @@ function App() {
     ensureLocalUser().then(() => {
       void loadWorkspaceSummary();
       void loadResumeLibrary();
+      void loadJdLibrary();
     }).catch(() => {
       setHistoryInfo("History is offline until the backend database is available.");
     });
@@ -681,6 +688,17 @@ function App() {
     setAuthEmail(payload.user.email ?? "");
     setAuthPassword("");
     setSessionInfo(message);
+  }
+
+  function updateAccountTier(nextTier: AccessTier) {
+    setAccountTier(nextTier);
+    window.localStorage.setItem(accountTierStorageKey, nextTier);
+    if (nextTier === "free") {
+      setCostMode("free");
+      setCostModeInfo("Free tier keeps AI usage to the score and requirement matrix.");
+    } else {
+      setCostModeInfo("Premium tier unlocked for optional coaching modules in this workspace.");
+    }
   }
 
   async function registerWithPassword() {
@@ -880,6 +898,17 @@ function App() {
     }
   }
 
+  async function loadJdLibrary() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/job-descriptions`, { headers: authHeaders(false) });
+      if (response.ok) {
+        setJdHistory(await response.json() as HistoryJobDescriptionRecord[]);
+      }
+    } catch {
+      // The upload step can still use pasted JDs if saved JD loading is unavailable.
+    }
+  }
+
   function useSavedResume(resume: HistoryResumeRecord) {
     const nextText = resume.normalizedText || resume.rawText;
     setResumeText(nextText);
@@ -890,6 +919,19 @@ function App() {
       resume.structuredResume
         ? `Loaded saved resume "${resume.title}" with ${resume.structuredResume.projects.length} project(s), ${resume.structuredResume.experience.length} experience item(s), and ${resume.structuredResume.skills.length} skill(s).`
         : `Loaded saved resume "${resume.title}". Parse it before review if structured sections are needed.`
+    );
+    setResult(null);
+    setScoreStep("upload");
+  }
+
+  function useSavedJd(jobDescription: HistoryJobDescriptionRecord) {
+    const nextText = jobDescription.normalizedText || jobDescription.rawText;
+    setJobDescriptionText(nextText);
+    setParsedJd(jobDescription.parsedJobDescription ?? null);
+    setJdParseInfo(
+      jobDescription.parsedJobDescription
+        ? `Loaded saved JD "${jobDescription.title}" with ${jobDescription.parsedJobDescription.requiredSkills.length} required skill(s) and ${jobDescription.parsedJobDescription.emphasizedRequirements.length} emphasized requirement(s).`
+        : `Loaded saved JD "${jobDescription.title}". Parse it before review if structured requirements are needed.`
     );
     setResult(null);
     setScoreStep("upload");
@@ -1301,6 +1343,11 @@ function App() {
   }
 
   async function buildPreparation(): Promise<boolean> {
+    if (!canUsePremium) {
+      setPreparationInfo("Premium access is required for preparation intelligence. Switch the workspace tier to Premium or use an admin session.");
+      setCostModeInfo("Premium module locked on the current tier.");
+      return false;
+    }
     if (!result || !lastAnalysisRequest) {
       setError("Run resume matching before building the preparation plan.");
       return false;
@@ -1359,6 +1406,10 @@ function App() {
     endpoint: string,
     applyResult: (current: AnalysisResponse, payload: unknown) => AnalysisResponse,
   ): Promise<boolean> {
+    if (!canUsePremium) {
+      setCostModeInfo(`${label} is a premium module. Switch the workspace tier to Premium or use an admin session.`);
+      return false;
+    }
     if (!result || !lastAnalysisRequest) {
       setError("Run resume matching before generating optional artifacts.");
       return false;
@@ -1405,6 +1456,11 @@ function App() {
   }
 
   async function runCostModeBundle(mode: Exclude<CostMode, "free">) {
+    if (!canUsePremium) {
+      setCostMode("free");
+      setCostModeInfo("Premium access is required for optional artifact bundles.");
+      return;
+    }
     if (!result || !lastAnalysisRequest) {
       setError("Run score-only matching before generating paid artifacts.");
       return;
@@ -1718,6 +1774,8 @@ function App() {
 
   const preparation = result?.preparationIntelligence ?? null;
   const canCalculateScore = Boolean(structuredResume && parsedJd && resumeText.trim().length >= 20 && jobDescriptionText.trim().length >= 20);
+  const effectiveAccessTier: AccessTier = currentUser?.role === "admin" ? "admin" : accountTier;
+  const canUsePremium = effectiveAccessTier === "premium" || effectiveAccessTier === "admin";
 
   return (
     <main className="shell appShell">
@@ -1761,11 +1819,14 @@ function App() {
             authPassword={authPassword}
             authDisplayName={authDisplayName}
             authEmail={authEmail}
+            accountTier={accountTier}
+            effectiveAccessTier={effectiveAccessTier}
             workspaceSummary={workspaceSummary}
             onDraftUserChange={setWorkspaceUserDraft}
             onPasswordChange={setAuthPassword}
             onDisplayNameChange={setAuthDisplayName}
             onEmailChange={setAuthEmail}
+            onAccountTierChange={updateAccountTier}
             onApplyUser={applyWorkspaceUser}
             onLogin={loginWithPassword}
             onRegister={registerWithPassword}
@@ -1825,6 +1886,12 @@ function App() {
                         loading={historyLoading}
                         onRefresh={loadResumeLibrary}
                         onUse={useSavedResume}
+                      />
+                      <SavedJdLibraryPanel
+                        jobDescriptions={jdHistory}
+                        loading={historyLoading}
+                        onRefresh={loadJdLibrary}
+                        onUse={useSavedJd}
                       />
                       <div className="editorSplit">
                         <label>
@@ -2057,7 +2124,7 @@ function App() {
               title="Analysis Report"
               description="Mandatory match output only. Generate coaching artifacts separately when needed."
             >
-              <ProductAccessPanel active="free" />
+              <ProductAccessPanel active="free" accessTier={effectiveAccessTier} onTierChange={updateAccountTier} />
               {historyInfo && <p className="hint">{historyInfo}</p>}
               {result && (
                 <div className="costModePanel">
@@ -2085,7 +2152,7 @@ function App() {
                     <button
                       type="button"
                       className={costMode === "standard" ? "costModeCard active" : "costModeCard"}
-                      disabled={Boolean(artifactLoading) || preparing}
+                      disabled={!canUsePremium || Boolean(artifactLoading) || preparing}
                       onClick={() => runCostModeBundle("standard")}
                     >
                       <strong>Standard</strong>
@@ -2095,7 +2162,7 @@ function App() {
                     <button
                       type="button"
                       className={costMode === "premium" ? "costModeCard active" : "costModeCard"}
-                      disabled={Boolean(artifactLoading) || preparing}
+                      disabled={!canUsePremium || Boolean(artifactLoading) || preparing}
                       onClick={() => runCostModeBundle("premium")}
                     >
                       <strong>Premium</strong>
@@ -2111,7 +2178,7 @@ function App() {
                   <button
                     type="button"
                     className="secondaryButton premiumButton"
-                    disabled={Boolean(artifactLoading) || preparing}
+                    disabled={!canUsePremium || Boolean(artifactLoading) || preparing}
                     onClick={() => buildOptionalArtifact(
                       "Resume improvements",
                       "resume_improvements",
@@ -2125,7 +2192,7 @@ function App() {
                   <button
                     type="button"
                     className="secondaryButton premiumButton"
-                    disabled={Boolean(artifactLoading) || preparing}
+                    disabled={!canUsePremium || Boolean(artifactLoading) || preparing}
                     onClick={() => buildOptionalArtifact(
                       "Interview questions",
                       "interview_questions",
@@ -2139,7 +2206,7 @@ function App() {
                   <button
                     type="button"
                     className="secondaryButton premiumButton"
-                    disabled={Boolean(artifactLoading) || preparing}
+                    disabled={!canUsePremium || Boolean(artifactLoading) || preparing}
                     onClick={() => buildOptionalArtifact(
                       "Cross questions",
                       "cross_questions",
@@ -2163,13 +2230,13 @@ function App() {
               title="Preparation Intelligence"
               description="This consumes the latest match result instead of reparsing the resume or JD, which keeps AI usage scoped."
             >
-              <ProductAccessPanel active="premium" compact />
+              <ProductAccessPanel active="premium" accessTier={effectiveAccessTier} onTierChange={updateAccountTier} compact />
               <div className="prepControls">
                 <label>
                   Preparation plan days
                   <input type="number" min={1} max={30} value={preparationPlanDays} onChange={(event) => setPreparationPlanDays(Math.max(1, Math.min(30, Number(event.target.value) || 7)))} />
                 </label>
-                <button type="button" className="premiumButton" disabled={!result || preparing || Boolean(artifactLoading)} onClick={buildPreparation}>
+                <button type="button" className="premiumButton" disabled={!canUsePremium || !result || preparing || Boolean(artifactLoading)} onClick={buildPreparation}>
                   <span>Pro</span>
                   {preparing ? "Building Plan..." : preparation ? "Rebuild Preparation Plan" : "Build Preparation Plan"}
                 </button>
@@ -2186,7 +2253,7 @@ function App() {
               title="Preparation Progress"
               description="Track daily preparation tasks, notes, confidence, and completion from saved preparation sessions."
             >
-              <ProductAccessPanel active="premium" compact />
+              <ProductAccessPanel active="premium" accessTier={effectiveAccessTier} onTierChange={updateAccountTier} compact />
               <PreparationProgressTracker
                 currentSession={activePreparationSession}
                 sessions={preparationHistory}
@@ -2308,11 +2375,14 @@ function SessionStatusPanel({
   authPassword,
   authDisplayName,
   authEmail,
+  accountTier,
+  effectiveAccessTier,
   workspaceSummary,
   onDraftUserChange,
   onPasswordChange,
   onDisplayNameChange,
   onEmailChange,
+  onAccountTierChange,
   onApplyUser,
   onLogin,
   onRegister,
@@ -2327,11 +2397,14 @@ function SessionStatusPanel({
   authPassword: string;
   authDisplayName: string;
   authEmail: string;
+  accountTier: AccessTier;
+  effectiveAccessTier: AccessTier;
   workspaceSummary: WorkspaceSummary | null;
   onDraftUserChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onDisplayNameChange: (value: string) => void;
   onEmailChange: (value: string) => void;
+  onAccountTierChange: (value: AccessTier) => void;
   onApplyUser: () => void;
   onLogin: () => void;
   onRegister: () => void;
@@ -2373,9 +2446,17 @@ function SessionStatusPanel({
           Password
           <input type="password" value={authPassword} onChange={(event) => onPasswordChange(event.target.value)} placeholder="8+ characters" />
         </label>
+        <label>
+          Access tier
+          <select value={accountTier} disabled={effectiveAccessTier === "admin"} onChange={(event) => onAccountTierChange(event.target.value as AccessTier)}>
+            <option value="free">Free</option>
+            <option value="premium">Premium</option>
+          </select>
+        </label>
       </div>
 
       <div className="sessionActions profileActions">
+        <span className={`tierBadge ${effectiveAccessTier}`}>{effectiveAccessTier}</span>
         <button type="button" className="secondaryButton" onClick={onApplyUser}>Use User</button>
         <button type="button" className="secondaryButton" onClick={onLogin}>Login</button>
         <button type="button" className="secondaryButton" onClick={onRegister}>Register</button>
@@ -2454,7 +2535,71 @@ function SavedResumeLibraryPanel({
   );
 }
 
-function ProductAccessPanel({ active, compact = false }: { active: "free" | "premium"; compact?: boolean }) {
+function SavedJdLibraryPanel({
+  jobDescriptions,
+  loading,
+  onRefresh,
+  onUse,
+}: {
+  jobDescriptions: HistoryJobDescriptionRecord[];
+  loading: boolean;
+  onRefresh: () => void;
+  onUse: (jobDescription: HistoryJobDescriptionRecord) => void;
+}) {
+  return (
+    <div className="savedResumePanel">
+      <div className="panelHeader">
+        <div>
+          <p className="eyebrow">JD Library</p>
+          <h3>Reuse Saved Job Description</h3>
+          <p className="hint">Load a previous JD to compare new resume versions or rerun scoring after edits.</p>
+        </div>
+        <button type="button" className="secondaryButton" disabled={loading} onClick={onRefresh}>
+          {loading ? "Loading..." : "Refresh"}
+        </button>
+      </div>
+      {jobDescriptions.length ? (
+        <div className="savedResumeGrid">
+          {jobDescriptions.slice(0, 6).map((jobDescription) => {
+            const parsed = jobDescription.parsedJobDescription;
+            return (
+              <div className="savedResumeCard" key={jobDescription.id}>
+                <div>
+                  <strong>{jobDescription.title}</strong>
+                  <span>{[jobDescription.company, formatDate(jobDescription.createdAt)].filter(Boolean).join(" | ")}</span>
+                </div>
+                <small>
+                  {parsed
+                    ? `${parsed.requiredSkills.length} required | ${parsed.preferredSkills.length} preferred | ${parsed.emphasizedRequirements.length} emphasized`
+                    : "Raw JD snapshot"}
+                </small>
+                <button type="button" className="secondaryButton" onClick={() => onUse(jobDescription)}>Use JD</button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="emptyLibraryState">
+          <strong>No saved JDs yet</strong>
+          <span>Run one match or save a JD snapshot, then it will be reusable here for comparison workflows.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductAccessPanel({
+  active,
+  accessTier,
+  onTierChange,
+  compact = false,
+}: {
+  active: "free" | "premium";
+  accessTier: AccessTier;
+  onTierChange: (tier: AccessTier) => void;
+  compact?: boolean;
+}) {
+  const premiumUnlocked = accessTier === "premium" || accessTier === "admin";
   return (
     <div className={compact ? "productAccessPanel compact" : "productAccessPanel"}>
       <div className={active === "free" ? "accessTier active" : "accessTier"}>
@@ -2469,11 +2614,16 @@ function ProductAccessPanel({ active, compact = false }: { active: "free" | "pre
           <span>Premium</span>
           <strong>Career Intelligence</strong>
         </div>
-        <small>Resume rewrite ideas, interview pack, cross-questions, preparation plan, progress tracking.</small>
+        <small>{premiumUnlocked ? "Unlocked for this workspace." : "Locked until the workspace tier is Premium."} Resume rewrite ideas, interview pack, cross-questions, preparation plan, progress tracking.</small>
       </div>
       <div className="accessNote">
-        <strong>{active === "free" ? "No extra AI calls by default" : "Premium module"}</strong>
-        <span>{active === "free" ? "Run paid-style artifacts only when needed." : "Visual gating only for now; payment integration can connect here later."}</span>
+        <strong>{accessTier === "admin" ? "Admin access" : premiumUnlocked ? "Premium active" : "Free tier active"}</strong>
+        <span>{premiumUnlocked ? "Optional AI modules are available and still run only after explicit clicks." : "Score stays free. Premium actions are disabled to avoid accidental AI spend."}</span>
+        {accessTier !== "admin" && (
+          <button type="button" className="tinyButton" onClick={() => onTierChange(premiumUnlocked ? "free" : "premium")}>
+            {premiumUnlocked ? "Switch to Free" : "Unlock Premium"}
+          </button>
+        )}
       </div>
     </div>
   );
