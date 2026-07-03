@@ -55,6 +55,8 @@ from app.models.history import (
     AnalysisRecord,
     AnalysisSaveRequest,
     BillingWebhookSubscriptionEvent,
+    ComparisonRunRecord,
+    ComparisonRunSaveRequest,
     JobOpportunityRecord,
     JobOpportunitySaveRequest,
     JobOpportunityStatusUpdateRequest,
@@ -96,6 +98,7 @@ from app.services.history_store import (
     get_resume,
     get_preparation_session,
     get_workspace_summary,
+    list_comparison_runs,
     list_users,
     resolve_user_session,
     list_analyses,
@@ -105,6 +108,7 @@ from app.services.history_store import (
     list_preparation_sessions,
     list_resumes,
     save_analysis,
+    save_comparison_run,
     update_analysis_optional_artifact,
     save_job_description,
     save_job_opportunity,
@@ -680,6 +684,18 @@ def lookup_analysis_record(request: AnalysisLookupRequest, session_token: str | 
 def get_analysis_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[AnalysisRecord]:
     _authorize_user(user_id, session_token)
     return list_analyses(user_id)
+
+
+@app.post("/history/comparisons", response_model=ComparisonRunRecord)
+def create_comparison_run_record(request: ComparisonRunSaveRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ComparisonRunRecord:
+    _authorize_user(request.userId, session_token)
+    return save_comparison_run(request)
+
+
+@app.get("/history/users/{user_id}/comparisons", response_model=list[ComparisonRunRecord])
+def get_comparison_run_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[ComparisonRunRecord]:
+    _authorize_user(user_id, session_token)
+    return list_comparison_runs(user_id)
 
 
 @app.patch("/history/analyses/{analysis_id}/optional-artifacts", response_model=AnalysisRecord)

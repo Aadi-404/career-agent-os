@@ -145,6 +145,36 @@ class OptionalArtifactUsageUpdateRequest(BaseModel):
     response: AnalysisResponse
 
 
+class ComparisonResultItem(BaseModel):
+    id: str = Field(min_length=3, max_length=220)
+    resumeId: str = Field(min_length=3, max_length=120)
+    resumeTitle: str = Field(min_length=1, max_length=180)
+    jobDescriptionId: str = Field(min_length=3, max_length=120)
+    jobTitle: str = Field(min_length=1, max_length=180)
+    company: str | None = Field(default=None, max_length=180)
+    score: int = Field(ge=0, le=100)
+    fitCategory: str = Field(min_length=1, max_length=120)
+    recommendedAction: str | None = Field(default=None, max_length=1000)
+
+
+class ComparisonRunSaveRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    title: str = Field(min_length=2, max_length=180)
+    resumeIds: list[str] = Field(min_length=1, max_length=9)
+    jobDescriptionIds: list[str] = Field(min_length=1, max_length=9)
+    results: list[ComparisonResultItem] = Field(min_length=1, max_length=9)
+
+
+class ComparisonRunRecord(BaseModel):
+    id: str
+    userId: str
+    title: str
+    resumeIds: list[str]
+    jobDescriptionIds: list[str]
+    results: list[ComparisonResultItem]
+    createdAt: str
+
+
 class PreparationSessionSaveRequest(BaseModel):
     userId: str = Field(min_length=2, max_length=80)
     analysisId: str | None = None

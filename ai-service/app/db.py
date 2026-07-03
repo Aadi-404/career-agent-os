@@ -192,6 +192,19 @@ def _postgres_schema() -> str:
             ON analyses(user_id, fingerprint)
             WHERE fingerprint IS NOT NULL;
 
+            CREATE TABLE IF NOT EXISTS comparison_runs (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                resume_ids_json TEXT NOT NULL,
+                job_description_ids_json TEXT NOT NULL,
+                results_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_comparison_runs_user_created
+            ON comparison_runs(user_id, created_at DESC);
+
             CREATE TABLE IF NOT EXISTS preparation_sessions (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

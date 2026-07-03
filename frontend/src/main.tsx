@@ -243,6 +243,16 @@ type ComparisonResult = {
   recommendedAction?: string | null;
 };
 
+type HistoryComparisonRecord = {
+  id: string;
+  userId: string;
+  title: string;
+  resumeIds: string[];
+  jobDescriptionIds: string[];
+  results: ComparisonResult[];
+  createdAt: string;
+};
+
 type TaskStatus = "todo" | "in_progress" | "done" | "skipped";
 type ConfidenceLevel = "low" | "medium" | "high";
 
@@ -543,6 +553,7 @@ function App() {
   const [jdHistory, setJdHistory] = useState<HistoryJobDescriptionRecord[]>([]);
   const [preparationHistory, setPreparationHistory] = useState<HistoryPreparationRecord[]>([]);
   const [jobOpportunityHistory, setJobOpportunityHistory] = useState<HistoryJobOpportunityRecord[]>([]);
+  const [comparisonHistory, setComparisonHistory] = useState<HistoryComparisonRecord[]>([]);
   const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
   const [comparisonJdIds, setComparisonJdIds] = useState<string[]>([]);
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
@@ -567,6 +578,7 @@ function App() {
     if (activeTask === "compare") {
       void loadResumeLibrary();
       void loadJdLibrary();
+      void loadComparisonHistory();
     }
     if (activeTask === "extension") {
       loadExtensionValidations();
@@ -711,6 +723,7 @@ function App() {
     setJdHistory([]);
     setPreparationHistory([]);
     setJobOpportunityHistory([]);
+    setComparisonHistory([]);
     setExtensionValidations([]);
     setEvaluationSummary(null);
     setScoringConfigs([]);
@@ -906,16 +919,17 @@ function App() {
     try {
       await ensureLocalUser();
       const getOptions = { headers: authHeaders(false) };
-      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse] = await Promise.all([
+      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, comparisonsResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/workspace`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/analyses`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resumes`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/job-descriptions`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/preparation-sessions`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/job-opportunities`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/comparisons`, getOptions),
       ]);
 
-      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok) {
+      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !comparisonsResponse.ok) {
         throw new Error("History load failed");
       }
 
@@ -929,6 +943,7 @@ function App() {
         setActivePreparationSession(savedPreparations[0]);
       }
       setJobOpportunityHistory(await opportunitiesResponse.json() as HistoryJobOpportunityRecord[]);
+      setComparisonHistory(await comparisonsResponse.json() as HistoryComparisonRecord[]);
       setHistoryInfo("Loaded saved PostgreSQL history.");
       void loadPrepMemory();
     } catch (err) {
@@ -968,6 +983,17 @@ function App() {
       }
     } catch {
       // The upload step can still use pasted JDs if saved JD loading is unavailable.
+    }
+  }
+
+  async function loadComparisonHistory() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/comparisons`, { headers: authHeaders(false) });
+      if (response.ok) {
+        setComparisonHistory(await response.json() as HistoryComparisonRecord[]);
+      }
+    } catch {
+      // Comparison can still run without saved batches.
     }
   }
 
@@ -1066,12 +1092,47 @@ function App() {
           setComparisonResults([...nextResults].sort((a, b) => b.score - a.score));
         }
       }
-      setComparisonInfo(`Completed ${nextResults.length} score-only comparison(s).`);
+      const rankedResults = [...nextResults].sort((a, b) => b.score - a.score);
+      setComparisonResults(rankedResults);
+      const savedRun = await saveComparisonRun(
+        selectedResumes.map((resume) => resume.id),
+        selectedJds.map((jd) => jd.id),
+        rankedResults,
+      );
+      setComparisonHistory((items) => [savedRun, ...items.filter((item) => item.id !== savedRun.id)]);
+      setComparisonInfo(`Completed and saved ${rankedResults.length} score-only comparison(s).`);
     } catch (err) {
       setComparisonInfo(err instanceof Error ? err.message : "Comparison failed");
     } finally {
       setComparisonLoading(false);
     }
+  }
+
+  async function saveComparisonRun(resumeIds: string[], jobDescriptionIds: string[], results: ComparisonResult[]) {
+    const top = results[0];
+    const title = top
+      ? `${top.resumeTitle} vs ${top.jobTitle}${results.length > 1 ? ` + ${results.length - 1} more` : ""}`
+      : "Saved comparison";
+    const response = await fetch(`${API_BASE_URL}/history/comparisons`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        userId: workspaceUserId,
+        title,
+        resumeIds,
+        jobDescriptionIds,
+        results,
+      }),
+    });
+    if (!response.ok) throw new Error("Comparison completed, but saving the comparison history failed.");
+    return await response.json() as HistoryComparisonRecord;
+  }
+
+  function loadComparisonRun(record: HistoryComparisonRecord) {
+    setComparisonResumeIds(record.resumeIds);
+    setComparisonJdIds(record.jobDescriptionIds);
+    setComparisonResults([...record.results].sort((a, b) => b.score - a.score));
+    setComparisonInfo(`Loaded saved comparison "${record.title}" from ${formatDate(record.createdAt)}.`);
   }
 
   async function loadPrepMemory() {
@@ -2468,6 +2529,7 @@ function App() {
                 jobDescriptions={jdHistory}
                 preparations={preparationHistory}
                 opportunities={jobOpportunityHistory}
+                comparisons={comparisonHistory}
                 currentResult={result}
                 onOpportunityStatusChange={updateJobOpportunityStatus}
                 onOpportunityArtifactBuild={buildOpportunityArtifact}
@@ -2488,6 +2550,7 @@ function App() {
                 selectedResumeIds={comparisonResumeIds}
                 selectedJobDescriptionIds={comparisonJdIds}
                 results={comparisonResults}
+                history={comparisonHistory}
                 accessTier={effectiveAccessTier}
                 loading={comparisonLoading}
                 info={comparisonInfo}
@@ -2496,7 +2559,9 @@ function App() {
                 onRefresh={() => {
                   void loadResumeLibrary();
                   void loadJdLibrary();
+                  void loadComparisonHistory();
                 }}
+                onLoadHistory={loadComparisonRun}
                 onRun={runComparison}
                 onTierChange={updateAccountTier}
               />
@@ -2849,12 +2914,14 @@ function ComparisonPanel({
   selectedResumeIds,
   selectedJobDescriptionIds,
   results,
+  history,
   accessTier,
   loading,
   info,
   onToggleResume,
   onToggleJobDescription,
   onRefresh,
+  onLoadHistory,
   onRun,
   onTierChange,
 }: {
@@ -2863,12 +2930,14 @@ function ComparisonPanel({
   selectedResumeIds: string[];
   selectedJobDescriptionIds: string[];
   results: ComparisonResult[];
+  history: HistoryComparisonRecord[];
   accessTier: AccessTier;
   loading: boolean;
   info: string;
   onToggleResume: (id: string) => void;
   onToggleJobDescription: (id: string) => void;
   onRefresh: () => void;
+  onLoadHistory: (record: HistoryComparisonRecord) => void;
   onRun: () => void;
   onTierChange: (tier: AccessTier) => void;
 }) {
@@ -2923,7 +2992,31 @@ function ComparisonPanel({
 
       {info && <p className="hint">{info}</p>}
 
-      <div className="panel">
+      <div className="comparisonGrid">
+        <section className="panel">
+          <div className="panelHeader">
+            <div>
+              <p className="eyebrow">History</p>
+              <h3>Recent Runs</h3>
+            </div>
+          </div>
+          <div className="compactList">
+            {history.length ? history.slice(0, 8).map((record) => (
+              <div key={record.id}>
+                <strong>{record.title}</strong>
+                <span>{record.results.length} result(s) | best {record.results[0]?.score ?? 0}% | {formatDate(record.createdAt)}</span>
+                <button type="button" className="tinyButton" onClick={() => onLoadHistory(record)}>Load Results</button>
+              </div>
+            )) : (
+              <div>
+                <strong>No saved comparisons</strong>
+                <span>Run a comparison to create a reusable ranked snapshot.</span>
+              </div>
+            )}
+          </div>
+        </section>
+
+      <section className="panel">
         <div className="panelHeader">
           <div>
             <p className="eyebrow">Results</p>
@@ -2946,6 +3039,7 @@ function ComparisonPanel({
         ) : (
           <p className="hint">Run a comparison to see ranked score-only results.</p>
         )}
+      </section>
       </div>
     </div>
   );
@@ -4054,6 +4148,7 @@ function HistoryPanel({
   jobDescriptions,
   preparations,
   opportunities,
+  comparisons,
   currentResult,
   onOpportunityStatusChange,
   onOpportunityArtifactBuild,
@@ -4065,6 +4160,7 @@ function HistoryPanel({
   jobDescriptions: HistoryJobDescriptionRecord[];
   preparations: HistoryPreparationRecord[];
   opportunities: HistoryJobOpportunityRecord[];
+  comparisons: HistoryComparisonRecord[];
   currentResult: AnalysisResponse | null;
   onOpportunityStatusChange: (jobOpportunityId: string, status: JobOpportunityStatus) => void;
   onOpportunityArtifactBuild: (opportunity: HistoryJobOpportunityRecord, artifactKey: "resume_improvements" | "interview_questions" | "cross_questions") => void;
@@ -4083,6 +4179,7 @@ function HistoryPanel({
           <div className="scoreTile"><span>Reports</span><strong>{summary?.analysisCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Plans</span><strong>{summary?.preparationSessionCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Jobs</span><strong>{summary?.jobOpportunityCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Comparisons</span><strong>{comparisons.length}</strong></div>
         </div>
       </div>
 
@@ -4180,6 +4277,26 @@ function HistoryPanel({
       <div className="panel">
         <h3>JD Library</h3>
         {jobDescriptions.length ? <CompactHistoryList items={jobDescriptions.map((item) => ({ id: item.id, title: item.title, meta: item.company ? `${item.company} - ${formatDate(item.createdAt)}` : formatDate(item.createdAt) }))} /> : <p className="hint">No JDs saved yet.</p>}
+      </div>
+
+      <div className="panel historyWide">
+        <h3>Saved Comparisons</h3>
+        {comparisons.length ? (
+          <div className="historyList">
+            {comparisons.slice(0, 8).map((comparison) => (
+              <div className="historyItem" key={comparison.id}>
+                <div>
+                  <strong>{comparison.title}</strong>
+                  <small>{formatDate(comparison.createdAt)}</small>
+                </div>
+                <span>{comparison.results[0]?.score ?? "--"}%</span>
+                <em>{comparison.results.length} result(s)</em>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="hint">No saved comparisons yet.</p>
+        )}
       </div>
 
       <div className="panel historyWide">

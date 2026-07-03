@@ -29,6 +29,8 @@ from app.models.history import (
     AnalysisLookupRequest,
     AnalysisRecord,
     AnalysisSaveRequest,
+    ComparisonRunRecord,
+    ComparisonRunSaveRequest,
     JobOpportunityRecord,
     JobOpportunitySaveRequest,
     JobOpportunityStatusUpdateRequest,
@@ -477,6 +479,57 @@ def list_analyses(user_id: str) -> list[AnalysisRecord]:
             (user_id,),
         ).fetchall()
     return [_analysis_from_row(row) for row in rows]
+
+
+def save_comparison_run(request: ComparisonRunSaveRequest) -> ComparisonRunRecord:
+    now = _now()
+    record_id = _id()
+    resume_ids = list(dict.fromkeys(request.resumeIds))
+    job_description_ids = list(dict.fromkeys(request.jobDescriptionIds))
+    if len(resume_ids) * len(job_description_ids) > 9:
+        raise HTTPException(status_code=400, detail="Comparison runs are capped at 9 combinations")
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        for resume_id in resume_ids:
+            _ensure_owned_record(connection, "resumes", resume_id, request.userId)
+        for job_description_id in job_description_ids:
+            _ensure_owned_record(connection, "job_descriptions", job_description_id, request.userId)
+        connection.execute(
+            """
+            INSERT INTO comparison_runs (
+                id, user_id, title, resume_ids_json, job_description_ids_json, results_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record_id,
+                request.userId,
+                request.title,
+                _json_dump(resume_ids),
+                _json_dump(job_description_ids),
+                _json_dump([item.model_dump() for item in request.results]),
+                now,
+            ),
+        )
+    return ComparisonRunRecord(
+        id=record_id,
+        userId=request.userId,
+        title=request.title,
+        resumeIds=resume_ids,
+        jobDescriptionIds=job_description_ids,
+        results=sorted(request.results, key=lambda item: item.score, reverse=True),
+        createdAt=now,
+    )
+
+
+def list_comparison_runs(user_id: str) -> list[ComparisonRunRecord]:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        rows = connection.execute(
+            "SELECT * FROM comparison_runs WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
+            (user_id,),
+        ).fetchall()
+    return [_comparison_run_from_row(row) for row in rows]
 
 
 def update_analysis_optional_artifact(record_id: str, request: OptionalArtifactUsageUpdateRequest) -> AnalysisRecord:
@@ -1046,6 +1099,18 @@ def _analysis_from_row(row: Any) -> AnalysisRecord:
         request=_json_model(row["request_json"], AnalyzeRequest),
         response=_json_model(row["response_json"], AnalysisResponse),
         optionalArtifacts=_json_load(_row_value(row, "optional_artifacts_json")) if _row_value(row, "optional_artifacts_json") else {},
+        createdAt=row["created_at"],
+    )
+
+
+def _comparison_run_from_row(row: Any) -> ComparisonRunRecord:
+    return ComparisonRunRecord(
+        id=row["id"],
+        userId=row["user_id"],
+        title=row["title"],
+        resumeIds=_json_load(row["resume_ids_json"]),
+        jobDescriptionIds=_json_load(row["job_description_ids_json"]),
+        results=_json_load(row["results_json"]),
         createdAt=row["created_at"],
     )
 
