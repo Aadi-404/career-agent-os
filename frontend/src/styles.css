@@ -1715,6 +1715,40 @@ button.premiumButton:not(.secondaryButton) span {
   text-transform: capitalize;
 }
 
+.launchChecklist {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.launchMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.launchMetrics div,
+.launchActions {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #d5e5e2;
+  border-radius: 8px;
+  background: #f7fbfa;
+  padding: 10px;
+}
+
+.launchMetrics span,
+.launchActions span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.launchMetrics strong,
+.launchActions strong {
+  color: var(--brand);
+}
+
 .readinessList {
   display: grid;
   gap: 10px;
@@ -2812,6 +2846,7 @@ pre {
   .extensionSetupGrid,
   .extensionStatusGrid,
   .diagnosticGrid,
+  .launchMetrics,
   .checkGrid,
   .evaluationGrid,
   .calibrationGrid,

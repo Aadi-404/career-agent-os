@@ -183,7 +183,7 @@ Task 5 -> Extension Setup -> Check Extension Readiness
 Package a release build with the deployed backend URL:
 
 ```powershell
-.\ai-service\.venv\Scripts\python.exe deployment\package_extension.py --api https://api.your-domain.com --version 0.1.0
+.\ai-service\.venv\Scripts\python.exe deployment\package_extension.py --api https://api.your-domain.com --web https://app.your-domain.com --version 0.1.0
 ```
 
 ## Level 1 Request Shape

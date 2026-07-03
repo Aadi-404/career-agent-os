@@ -3898,6 +3898,7 @@ function ScoringSettingsPanel({
               <strong>{productionReadiness.readyForProduction ? "Ready to deploy" : "Needs attention"}</strong>
               <span>{productionReadiness.environment} environment</span>
             </div>
+            <LaunchChecklist readiness={productionReadiness} />
             <div className="readinessList">
               {productionReadiness.checks.map((check) => (
                 <div key={check.key}>
@@ -4271,6 +4272,28 @@ function weightDeltaSummary(previous: Record<string, number>, next: Record<strin
     })
     .filter(Boolean);
   return changes.length ? changes.slice(0, 4).join(", ") : "No numeric change.";
+}
+
+function LaunchChecklist({ readiness }: { readiness: ProductionReadiness }) {
+  const blockers = readiness.checks.filter((check) => check.status === "fail");
+  const warnings = readiness.checks.filter((check) => check.status === "warn");
+  const passed = readiness.checks.filter((check) => check.status === "pass");
+  const nextItems = [...blockers, ...warnings].slice(0, 5);
+  return (
+    <div className="launchChecklist">
+      <div className="launchMetrics">
+        <div><span>Blockers</span><strong>{blockers.length}</strong></div>
+        <div><span>Warnings</span><strong>{warnings.length}</strong></div>
+        <div><span>Passed</span><strong>{passed.length}</strong></div>
+      </div>
+      <div className="launchActions">
+        <strong>{nextItems.length ? "Next launch fixes" : "Launch checklist clear"}</strong>
+        {nextItems.length ? nextItems.map((check) => (
+          <span key={check.key}>{check.label}: {check.detail}</span>
+        )) : <span>All readiness checks are passing for the current environment.</span>}
+      </div>
+    </div>
+  );
 }
 
 function inferRoleFamily(text: string) {

@@ -15,11 +15,13 @@ RELEASE_DIR = ROOT / "deployment" / "releases" / "extension"
 def main() -> int:
     parser = argparse.ArgumentParser(description="Package the Career Agent OS browser extension.")
     parser.add_argument("--api", required=True, help="Backend API base URL the extension should call.")
+    parser.add_argument("--web", default="http://127.0.0.1:5173", help="Web app URL opened from extension history links.")
     parser.add_argument("--version", default="", help="Optional manifest version override.")
     parser.add_argument("--output", default="", help="Optional output zip path.")
     args = parser.parse_args()
 
     api_base = normalize_api_base(args.api)
+    web_base = normalize_web_base(args.web)
     output_dir = RELEASE_DIR / safe_release_name(api_base, args.version)
     if output_dir.exists():
         shutil.rmtree(output_dir)
@@ -27,7 +29,8 @@ def main() -> int:
 
     copy_extension_files(output_dir)
     manifest = update_manifest(output_dir / "manifest.json", api_base, args.version)
-    write_config(output_dir / "config.js", api_base)
+    write_config(output_dir / "config.js", api_base, web_base)
+    write_release_metadata(output_dir / "release.json", manifest["version"], api_base, web_base)
 
     zip_path = Path(args.output) if args.output else Path(f"{output_dir}.zip")
     if zip_path.exists():
@@ -36,6 +39,7 @@ def main() -> int:
     create_zip(output_dir, zip_path)
 
     print(f"Packaged Career Agent OS extension {manifest['version']} for {api_base}")
+    print(f"Web app: {web_base}")
     print(f"Unpacked: {output_dir}")
     print(f"Zip: {zip_path}")
     return 0
@@ -45,6 +49,13 @@ def normalize_api_base(value: str) -> str:
     parsed = urlparse(value.strip().rstrip("/"))
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise SystemExit("--api must be an absolute http(s) URL, for example https://api.example.com")
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+
+
+def normalize_web_base(value: str) -> str:
+    parsed = urlparse(value.strip().rstrip("/"))
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise SystemExit("--web must be an absolute http(s) URL, for example https://app.example.com")
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
 
 
@@ -70,11 +81,29 @@ def update_manifest(manifest_path: Path, api_base: str, version: str) -> dict:
     return manifest
 
 
-def write_config(config_path: Path, api_base: str) -> None:
+def write_config(config_path: Path, api_base: str, web_base: str) -> None:
     config_path.write_text(
         "window.CAREER_AGENT_OS_EXTENSION_CONFIG = {\n"
         f"  apiBaseUrl: {json.dumps(api_base)},\n"
+        f"  webAppUrl: {json.dumps(web_base)},\n"
         "};\n",
+        encoding="utf-8",
+    )
+
+
+def write_release_metadata(metadata_path: Path, version: str, api_base: str, web_base: str) -> None:
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "name": "Career Agent OS Extension",
+                "version": version,
+                "apiBaseUrl": api_base,
+                "webAppUrl": web_base,
+                "packagedFor": api_origin(api_base),
+            },
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
 
