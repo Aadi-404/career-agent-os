@@ -3,6 +3,8 @@ import logging
 import re
 import time
 import hmac
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Request
@@ -614,17 +616,8 @@ def ingest_subscription_webhook(
     billing_webhook_secret: str | None = Header(default=None, alias="X-Billing-Webhook-Secret"),
 ) -> UserRecord:
     _authorize_billing_webhook(billing_webhook_secret)
-    return update_user_billing(
-        request.userId,
-        UserBillingUpdateRequest(
-            subscriptionTier=request.subscriptionTier,
-            subscriptionStatus=request.subscriptionStatus,
-            subscriptionPlanId=request.subscriptionPlanId,
-            billingProviderCustomerId=request.billingProviderCustomerId,
-            billingProviderSubscriptionId=request.billingProviderSubscriptionId,
-            billingPeriodEnd=request.billingPeriodEnd,
-        ),
-    )
+    user_id, billing_update = _billing_update_from_webhook(request)
+    return update_user_billing(user_id, billing_update)
 
 
 @app.post("/auth/anonymous", response_model=AnonymousSessionRecord)
@@ -1007,6 +1000,127 @@ def _llm_key_configured(current_settings) -> bool:
     if current_settings.llm_provider == "gemini":
         return bool(current_settings.gemini_api_key or current_settings.google_api_key or current_settings.llm_api_key)
     return bool(current_settings.llm_api_key)
+
+
+def _billing_update_from_webhook(event: BillingWebhookSubscriptionEvent) -> tuple[str, UserBillingUpdateRequest]:
+    payload = event.providerPayload or {}
+    provider_values: dict[str, Any] = {}
+    if event.provider == "stripe":
+        provider_values = _stripe_subscription_values(payload)
+    elif event.provider == "razorpay":
+        provider_values = _razorpay_subscription_values(payload)
+    elif event.provider == "paddle":
+        provider_values = _paddle_subscription_values(payload)
+
+    user_id = event.userId or _first_text(provider_values.get("userId"))
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Billing webhook must include userId directly or in provider metadata")
+
+    status = event.subscriptionStatus
+    if event.subscriptionStatus == "inactive" and provider_values.get("subscriptionStatus"):
+        status = _coerce_subscription_status(str(provider_values["subscriptionStatus"]), event.provider)
+
+    return user_id, UserBillingUpdateRequest(
+        subscriptionTier=event.subscriptionTier,
+        subscriptionStatus=status,
+        subscriptionPlanId=event.subscriptionPlanId or _first_text(provider_values.get("subscriptionPlanId")),
+        billingProviderCustomerId=event.billingProviderCustomerId or _first_text(provider_values.get("billingProviderCustomerId")),
+        billingProviderSubscriptionId=event.billingProviderSubscriptionId or _first_text(provider_values.get("billingProviderSubscriptionId")),
+        billingPeriodEnd=event.billingPeriodEnd or _billing_period_end_text(provider_values.get("billingPeriodEnd")),
+    )
+
+
+def _stripe_subscription_values(payload: dict[str, Any]) -> dict[str, Any]:
+    subscription = _nested(payload, "data", "object") or payload
+    metadata = subscription.get("metadata") if isinstance(subscription.get("metadata"), dict) else {}
+    first_item = _first_list_item(_nested(subscription, "items", "data"))
+    return {
+        "userId": _metadata_user_id(metadata),
+        "subscriptionStatus": subscription.get("status"),
+        "subscriptionPlanId": _nested(subscription, "plan", "id") or _nested(first_item, "price", "id"),
+        "billingProviderCustomerId": subscription.get("customer"),
+        "billingProviderSubscriptionId": subscription.get("id"),
+        "billingPeriodEnd": subscription.get("current_period_end"),
+    }
+
+
+def _razorpay_subscription_values(payload: dict[str, Any]) -> dict[str, Any]:
+    subscription = _nested(payload, "payload", "subscription", "entity") or payload
+    notes = subscription.get("notes") if isinstance(subscription.get("notes"), dict) else {}
+    return {
+        "userId": _metadata_user_id(notes),
+        "subscriptionStatus": subscription.get("status"),
+        "subscriptionPlanId": subscription.get("plan_id"),
+        "billingProviderCustomerId": subscription.get("customer_id"),
+        "billingProviderSubscriptionId": subscription.get("id"),
+        "billingPeriodEnd": subscription.get("current_end") or subscription.get("end_at"),
+    }
+
+
+def _paddle_subscription_values(payload: dict[str, Any]) -> dict[str, Any]:
+    subscription = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    custom_data = subscription.get("custom_data") if isinstance(subscription.get("custom_data"), dict) else {}
+    first_item = _first_list_item(subscription.get("items"))
+    return {
+        "userId": _metadata_user_id(custom_data),
+        "subscriptionStatus": subscription.get("status"),
+        "subscriptionPlanId": _nested(first_item, "price", "id"),
+        "billingProviderCustomerId": subscription.get("customer_id"),
+        "billingProviderSubscriptionId": subscription.get("id"),
+        "billingPeriodEnd": _nested(subscription, "current_billing_period", "ends_at"),
+    }
+
+
+def _coerce_subscription_status(status: str, provider: str) -> str:
+    normalized = status.strip().lower()
+    if normalized in {"active", "trialing", "past_due", "canceled", "inactive"}:
+        return normalized
+    if provider == "razorpay":
+        if normalized == "authenticated":
+            return "active"
+        if normalized in {"created", "pending"}:
+            return "trialing"
+        if normalized == "halted":
+            return "past_due"
+        if normalized in {"cancelled", "cancelled_by_user"}:
+            return "canceled"
+    if provider == "stripe" and normalized in {"unpaid", "incomplete"}:
+        return "past_due"
+    return "inactive"
+
+
+def _billing_period_end_text(value: Any) -> str | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, UTC).isoformat().replace("+00:00", "Z")
+    return str(value)
+
+
+def _metadata_user_id(metadata: dict[str, Any]) -> str | None:
+    return _first_text(metadata.get("userId") or metadata.get("user_id") or metadata.get("appUserId") or metadata.get("app_user_id"))
+
+
+def _nested(value: Any, *keys: str) -> Any:
+    current = value
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _first_list_item(value: Any) -> dict[str, Any]:
+    if isinstance(value, list) and value and isinstance(value[0], dict):
+        return value[0]
+    return {}
+
+
+def _first_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _authorize_billing_webhook(provided_secret: str | None) -> None:

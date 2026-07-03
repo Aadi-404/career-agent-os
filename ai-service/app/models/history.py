@@ -46,13 +46,14 @@ class BillingWebhookSubscriptionEvent(BaseModel):
     provider: Literal["stripe", "razorpay", "paddle", "manual", "other"] = "other"
     eventId: str | None = Field(default=None, max_length=180)
     eventType: str | None = Field(default=None, max_length=180)
-    userId: str = Field(min_length=2, max_length=80)
+    userId: str | None = Field(default=None, min_length=2, max_length=80)
     subscriptionTier: Literal["free", "premium"] | None = None
     subscriptionStatus: Literal["inactive", "trialing", "active", "past_due", "canceled"] = "inactive"
     subscriptionPlanId: str | None = Field(default=None, max_length=120)
     billingProviderCustomerId: str | None = Field(default=None, max_length=180)
     billingProviderSubscriptionId: str | None = Field(default=None, max_length=180)
     billingPeriodEnd: str | None = Field(default=None, max_length=80)
+    providerPayload: dict[str, Any] = Field(default_factory=dict)
 
 
 class AnonymousSessionCreateRequest(BaseModel):
