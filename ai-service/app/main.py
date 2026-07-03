@@ -72,6 +72,7 @@ from app.models.history import (
     PreparationSessionSaveRequest,
     ResumeRecord,
     ResumeSaveRequest,
+    UsageQuotaStatus,
     UsageSummary,
     UserBillingUpdateRequest,
     UserCreateRequest,
@@ -102,6 +103,7 @@ from app.services.history_store import (
     create_or_update_user_password,
     delete_comparison_run,
     ensure_usage_quota,
+    get_usage_quota_status,
     get_usage_summary,
     get_resume,
     get_preparation_session,
@@ -684,6 +686,12 @@ def get_admin_usage_summary(
 ) -> UsageSummary:
     _authorize_admin(session_token)
     return get_usage_summary(user_id=userId, limit=limit)
+
+
+@app.get("/usage/quota", response_model=UsageQuotaStatus)
+def get_current_usage_quota(userId: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> UsageQuotaStatus:
+    _authorize_user(userId, session_token)
+    return get_usage_quota_status(user_id=userId)
 
 
 @app.get("/history/users/{user_id}/workspace", response_model=WorkspaceSummary)

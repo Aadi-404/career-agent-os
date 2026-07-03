@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 from fastapi import HTTPException
 
-from app.main import _authorize_admin, _authorize_billing_webhook, _authorize_user, settings
-from app.models.history import UserRecord
+from app.main import _authorize_admin, _authorize_billing_webhook, _authorize_user, get_current_usage_quota, settings
+from app.models.history import UsageQuotaStatus, UserRecord
 
 
 class AuthGuardTests(unittest.TestCase):
@@ -65,6 +65,18 @@ class AuthGuardTests(unittest.TestCase):
         settings.billing_webhook_secret = "expected-secret"
 
         _authorize_billing_webhook("expected-secret")
+
+    def test_user_quota_endpoint_uses_user_guard(self):
+        quota = UsageQuotaStatus(userId="user-1", tier="free", usedUnits=4, limitUnits=50, remainingUnits=46)
+
+        with (
+            patch("app.main.resolve_user_session", return_value=UserRecord(id="user-1", displayName="User 1", createdAt="2026-06-30T00:00:00Z")),
+            patch("app.main.get_usage_quota_status", return_value=quota) as quota_mock,
+        ):
+            response = get_current_usage_quota("user-1", "token")
+
+        quota_mock.assert_called_once_with(user_id="user-1")
+        self.assertEqual(response.remainingUnits, 46)
 
 
 if __name__ == "__main__":

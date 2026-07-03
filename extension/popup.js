@@ -285,8 +285,13 @@ async function matchJob() {
     renderResult(`<strong>${analysis.analysis.technicalMatchScore}%</strong>${analysis.analysis.fitCategory}<br>${analysis.analysis.recommendedAction || ""}`);
     setStatus("Matched");
   } catch (error) {
-    renderResult(error.message || "Match failed", true);
-    setStatus("Error");
+    if (error.statusCode === 429) {
+      renderResult(`<strong>Usage limit reached</strong><br>${escapeHtml(error.message || "Monthly quota exceeded.")}<br><small>Login or upgrade from the web app to continue matching more jobs.</small>`, true);
+      setStatus("Limit reached");
+    } else {
+      renderResult(escapeHtml(error.message || "Match failed"), true);
+      setStatus("Error");
+    }
   } finally {
     els.matchJob.disabled = false;
   }
@@ -333,7 +338,7 @@ async function post(path, body, options = {}) {
     let message = text || `${path} failed`;
     try {
       const payload = JSON.parse(text);
-      message = payload.detail || payload.message || message;
+      message = normalizeApiMessage(payload.detail || payload.message || message);
       if (payload.requestId) message = `${message} (${payload.requestId})`;
     } catch {
       // Keep the raw text if the backend did not return JSON.
@@ -341,7 +346,31 @@ async function post(path, body, options = {}) {
     if (response.status === 401 || response.status === 403) {
       await clearSession("Session expired or invalid. Connect again.");
     }
-    throw new Error(message);
+    const error = new Error(message);
+    error.statusCode = response.status;
+    error.isQuotaError = response.status === 429;
+    throw error;
   }
   return response.json();
+}
+
+function normalizeApiMessage(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object" && item.msg) return item.msg;
+      return "";
+    }).filter(Boolean).join("; ") || "Request failed";
+  }
+  return "Request failed";
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }

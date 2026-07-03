@@ -573,6 +573,7 @@ function App() {
   const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
   const [adminAnalyses, setAdminAnalyses] = useState<HistoryAnalysisRecord[]>([]);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
+  const [usageQuota, setUsageQuota] = useState<UsageQuotaStatus | null>(null);
   const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [sessionInfo, setSessionInfo] = useState("");
@@ -600,6 +601,7 @@ function App() {
       void loadWorkspaceSummary();
       void loadResumeLibrary();
       void loadJdLibrary();
+      void loadCurrentQuota();
     }).catch(() => {
       setHistoryInfo("History is offline until the backend database is available.");
     });
@@ -1140,6 +1142,7 @@ function App() {
       setComparisonHistory((items) => [savedRun, ...items.filter((item) => item.id !== savedRun.id)]);
       setActiveComparisonId(savedRun.id);
       setComparisonInfo(`Completed and saved ${rankedResults.length} score-only comparison(s).`);
+      void loadCurrentQuota();
     } catch (err) {
       setComparisonInfo(err instanceof Error ? err.message : "Comparison failed");
     } finally {
@@ -1533,6 +1536,18 @@ function App() {
     }
   }
 
+  async function loadCurrentQuota() {
+    try {
+      await ensureLocalUser();
+      const params = new URLSearchParams({ userId: workspaceUserId });
+      const response = await fetch(`${API_BASE_URL}/usage/quota?${params.toString()}`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error(await readApiError(response, "Usage quota unavailable"));
+      setUsageQuota(await response.json() as UsageQuotaStatus);
+    } catch {
+      setUsageQuota(null);
+    }
+  }
+
   function startBillingEdit(user: AdminUserRecord) {
     setBillingDraft({
       userId: user.id,
@@ -1672,6 +1687,7 @@ function App() {
       }
 
       const analysis = await response.json() as AnalysisResponse;
+      void loadCurrentQuota();
       setLastAnalysisRequest(payload);
       setLastAnalysisFingerprint(fingerprint);
       setResult(analysis);
@@ -1722,6 +1738,7 @@ function App() {
       }
 
       const preparation = await response.json() as PreparationIntelligence;
+      void loadCurrentQuota();
       const updatedResult = { ...result, preparationIntelligence: preparation };
       setResult(updatedResult);
       if (lastSavedAnalysisId) {
@@ -1783,6 +1800,7 @@ function App() {
       }
 
       const payload = await response.json();
+      void loadCurrentQuota();
       const updatedResult = applyResult(result, payload);
       setResult(updatedResult);
       if (lastSavedAnalysisId) {
@@ -1903,6 +1921,7 @@ function App() {
         throw new Error(await readApiError(response, `${config.label} generation failed`));
       }
       const payload = await response.json();
+      void loadCurrentQuota();
       const updatedAnalysis = config.apply(baseAnalysis, payload);
       await persistOpportunityArtifact(opportunity.id, artifactKey, updatedAnalysis);
       if (linkedAnalysis) {
@@ -2374,6 +2393,7 @@ function App() {
                       <h3>Score Calculator</h3>
                       <span>Free mandatory output</span>
                     </div>
+                    <QuotaStatusPanel quota={usageQuota} onRefresh={loadCurrentQuota} />
                     <div className="readyGrid">
                       <div><span>Resume status</span><strong>{structuredResume ? "Reviewed structure" : "Raw text"}</strong></div>
                       <div><span>JD status</span><strong>{parsedJd ? "Parsed requirements" : "Raw text"}</strong></div>
@@ -4281,6 +4301,26 @@ function AISpendPanel({
           </select>
         </label>
       </div>
+    </div>
+  );
+}
+
+function QuotaStatusPanel({ quota, onRefresh }: { quota: UsageQuotaStatus | null; onRefresh: () => void }) {
+  const used = quota?.usedUnits ?? 0;
+  const limit = quota?.unlimited ? "Unlimited" : quota?.limitUnits ?? "--";
+  const remaining = quota?.unlimited ? "Unlimited" : quota?.remainingUnits ?? "--";
+  return (
+    <div className="quotaStatusPanel">
+      <div>
+        <p className="eyebrow">Monthly quota</p>
+        <h4>{quota ? `${formatCategory(quota.tier)} tier` : "Quota unavailable"}</h4>
+      </div>
+      <div className="quotaStatusGrid">
+        <div><span>Used</span><strong>{used}</strong></div>
+        <div><span>Limit</span><strong>{limit}</strong></div>
+        <div><span>Remaining</span><strong>{remaining}</strong></div>
+      </div>
+      <button type="button" className="tinyButton" onClick={onRefresh}>Refresh</button>
     </div>
   );
 }
