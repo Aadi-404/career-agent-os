@@ -2015,6 +2015,17 @@ button.premiumButton:not(.secondaryButton) span {
   color: var(--danger);
 }
 
+.dangerTinyButton {
+  color: var(--danger);
+}
+
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .tinyButton:disabled,
 .dangerButton:disabled {
   border-color: #d7e0ea;

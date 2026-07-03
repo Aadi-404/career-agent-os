@@ -166,6 +166,15 @@ class ComparisonRunSaveRequest(BaseModel):
     results: list[ComparisonResultItem] = Field(min_length=1, max_length=9)
 
 
+class ComparisonRunUpdateRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    title: str = Field(min_length=2, max_length=180)
+
+
+class ComparisonRunDeleteRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+
+
 class ComparisonRunRecord(BaseModel):
     id: str
     userId: str

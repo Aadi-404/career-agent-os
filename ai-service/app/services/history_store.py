@@ -29,8 +29,10 @@ from app.models.history import (
     AnalysisLookupRequest,
     AnalysisRecord,
     AnalysisSaveRequest,
+    ComparisonRunDeleteRequest,
     ComparisonRunRecord,
     ComparisonRunSaveRequest,
+    ComparisonRunUpdateRequest,
     JobOpportunityRecord,
     JobOpportunitySaveRequest,
     JobOpportunityStatusUpdateRequest,
@@ -530,6 +532,40 @@ def list_comparison_runs(user_id: str) -> list[ComparisonRunRecord]:
             (user_id,),
         ).fetchall()
     return [_comparison_run_from_row(row) for row in rows]
+
+
+def update_comparison_run(record_id: str, request: ComparisonRunUpdateRequest) -> ComparisonRunRecord:
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        existing = connection.execute(
+            "SELECT * FROM comparison_runs WHERE id = ? AND user_id = ?",
+            (record_id, request.userId),
+        ).fetchone()
+        _require_row(existing, "Comparison run not found for this user")
+        connection.execute(
+            "UPDATE comparison_runs SET title = ? WHERE id = ? AND user_id = ?",
+            (request.title, record_id, request.userId),
+        )
+        row = connection.execute(
+            "SELECT * FROM comparison_runs WHERE id = ? AND user_id = ?",
+            (record_id, request.userId),
+        ).fetchone()
+    return _comparison_run_from_row(_require_row(row, "Comparison run not found after update"))
+
+
+def delete_comparison_run(record_id: str, request: ComparisonRunDeleteRequest) -> dict[str, str]:
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        existing = connection.execute(
+            "SELECT id FROM comparison_runs WHERE id = ? AND user_id = ?",
+            (record_id, request.userId),
+        ).fetchone()
+        _require_row(existing, "Comparison run not found for this user")
+        connection.execute(
+            "DELETE FROM comparison_runs WHERE id = ? AND user_id = ?",
+            (record_id, request.userId),
+        )
+    return {"id": record_id, "status": "deleted"}
 
 
 def update_analysis_optional_artifact(record_id: str, request: OptionalArtifactUsageUpdateRequest) -> AnalysisRecord:

@@ -57,8 +57,10 @@ from app.models.history import (
     AnalysisRecord,
     AnalysisSaveRequest,
     BillingWebhookSubscriptionEvent,
+    ComparisonRunDeleteRequest,
     ComparisonRunRecord,
     ComparisonRunSaveRequest,
+    ComparisonRunUpdateRequest,
     JobOpportunityRecord,
     JobOpportunitySaveRequest,
     JobOpportunityStatusUpdateRequest,
@@ -97,6 +99,7 @@ from app.services.history_store import (
     create_user_session,
     create_or_update_user,
     create_or_update_user_password,
+    delete_comparison_run,
     get_resume,
     get_preparation_session,
     get_workspace_summary,
@@ -112,6 +115,7 @@ from app.services.history_store import (
     save_analysis,
     save_comparison_run,
     update_analysis_optional_artifact,
+    update_comparison_run,
     save_job_description,
     save_job_opportunity,
     save_preparation_session,
@@ -689,6 +693,18 @@ def create_comparison_run_record(request: ComparisonRunSaveRequest, session_toke
 def get_comparison_run_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[ComparisonRunRecord]:
     _authorize_user(user_id, session_token)
     return list_comparison_runs(user_id)
+
+
+@app.patch("/history/comparisons/{comparison_id}", response_model=ComparisonRunRecord)
+def update_comparison_run_record(comparison_id: str, request: ComparisonRunUpdateRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ComparisonRunRecord:
+    _authorize_user(request.userId, session_token)
+    return update_comparison_run(comparison_id, request)
+
+
+@app.delete("/history/comparisons/{comparison_id}")
+def delete_comparison_run_record(comparison_id: str, request: ComparisonRunDeleteRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> dict[str, str]:
+    _authorize_user(request.userId, session_token)
+    return delete_comparison_run(comparison_id, request)
 
 
 @app.patch("/history/analyses/{analysis_id}/optional-artifacts", response_model=AnalysisRecord)

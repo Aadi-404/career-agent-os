@@ -557,6 +557,7 @@ function App() {
   const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
   const [comparisonJdIds, setComparisonJdIds] = useState<string[]>([]);
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
+  const [activeComparisonId, setActiveComparisonId] = useState<string | null>(null);
   const [comparisonInfo, setComparisonInfo] = useState("");
   const [comparisonLoading, setComparisonLoading] = useState(false);
 
@@ -724,6 +725,7 @@ function App() {
     setPreparationHistory([]);
     setJobOpportunityHistory([]);
     setComparisonHistory([]);
+    setActiveComparisonId(null);
     setExtensionValidations([]);
     setEvaluationSummary(null);
     setScoringConfigs([]);
@@ -1100,6 +1102,7 @@ function App() {
         rankedResults,
       );
       setComparisonHistory((items) => [savedRun, ...items.filter((item) => item.id !== savedRun.id)]);
+      setActiveComparisonId(savedRun.id);
       setComparisonInfo(`Completed and saved ${rankedResults.length} score-only comparison(s).`);
     } catch (err) {
       setComparisonInfo(err instanceof Error ? err.message : "Comparison failed");
@@ -1132,7 +1135,48 @@ function App() {
     setComparisonResumeIds(record.resumeIds);
     setComparisonJdIds(record.jobDescriptionIds);
     setComparisonResults([...record.results].sort((a, b) => b.score - a.score));
+    setActiveComparisonId(record.id);
     setComparisonInfo(`Loaded saved comparison "${record.title}" from ${formatDate(record.createdAt)}.`);
+  }
+
+  async function renameComparisonRun(record: HistoryComparisonRecord) {
+    const nextTitle = window.prompt("Rename comparison", record.title)?.trim();
+    if (!nextTitle || nextTitle === record.title) return;
+    setComparisonInfo("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/history/comparisons/${record.id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ userId: workspaceUserId, title: nextTitle }),
+      });
+      if (!response.ok) throw new Error("Comparison rename failed");
+      const updated = await response.json() as HistoryComparisonRecord;
+      setComparisonHistory((items) => items.map((item) => item.id === updated.id ? updated : item));
+      setComparisonInfo(`Renamed comparison to "${updated.title}".`);
+    } catch (err) {
+      setComparisonInfo(err instanceof Error ? err.message : "Comparison rename failed");
+    }
+  }
+
+  async function deleteComparisonRun(record: HistoryComparisonRecord) {
+    if (!window.confirm(`Delete saved comparison "${record.title}"?`)) return;
+    setComparisonInfo("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/history/comparisons/${record.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+        body: JSON.stringify({ userId: workspaceUserId }),
+      });
+      if (!response.ok) throw new Error("Comparison delete failed");
+      setComparisonHistory((items) => items.filter((item) => item.id !== record.id));
+      if (activeComparisonId === record.id) {
+        setActiveComparisonId(null);
+        setComparisonResults([]);
+      }
+      setComparisonInfo(`Deleted comparison "${record.title}".`);
+    } catch (err) {
+      setComparisonInfo(err instanceof Error ? err.message : "Comparison delete failed");
+    }
   }
 
   async function loadPrepMemory() {
@@ -2562,6 +2606,8 @@ function App() {
                   void loadComparisonHistory();
                 }}
                 onLoadHistory={loadComparisonRun}
+                onRenameHistory={renameComparisonRun}
+                onDeleteHistory={deleteComparisonRun}
                 onRun={runComparison}
                 onTierChange={updateAccountTier}
               />
@@ -2922,6 +2968,8 @@ function ComparisonPanel({
   onToggleJobDescription,
   onRefresh,
   onLoadHistory,
+  onRenameHistory,
+  onDeleteHistory,
   onRun,
   onTierChange,
 }: {
@@ -2938,6 +2986,8 @@ function ComparisonPanel({
   onToggleJobDescription: (id: string) => void;
   onRefresh: () => void;
   onLoadHistory: (record: HistoryComparisonRecord) => void;
+  onRenameHistory: (record: HistoryComparisonRecord) => void;
+  onDeleteHistory: (record: HistoryComparisonRecord) => void;
   onRun: () => void;
   onTierChange: (tier: AccessTier) => void;
 }) {
@@ -3005,7 +3055,11 @@ function ComparisonPanel({
               <div key={record.id}>
                 <strong>{record.title}</strong>
                 <span>{record.results.length} result(s) | best {record.results[0]?.score ?? 0}% | {formatDate(record.createdAt)}</span>
-                <button type="button" className="tinyButton" onClick={() => onLoadHistory(record)}>Load Results</button>
+                <div className="inlineActions">
+                  <button type="button" className="tinyButton" onClick={() => onLoadHistory(record)}>Load Results</button>
+                  <button type="button" className="tinyButton" onClick={() => onRenameHistory(record)}>Rename</button>
+                  <button type="button" className="tinyButton dangerTinyButton" onClick={() => onDeleteHistory(record)}>Delete</button>
+                </div>
               </div>
             )) : (
               <div>
