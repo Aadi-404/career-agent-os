@@ -134,6 +134,12 @@ If `REQUIRE_USER_AUTH=true` and you want user-scoped readiness, pass:
 python deployment/smoke_check.py --api https://api.your-domain.com --user-id your-user-id --session-token your-session-token --strict-production
 ```
 
+To include saved comparison API and billing webhook checks, pass a user id and webhook secret:
+
+```powershell
+python deployment/smoke_check.py --api https://api.your-domain.com --user-id your-user-id --session-token your-session-token --billing-webhook-secret your-webhook-secret --strict-production
+```
+
 ## Production Docker Compose
 
 Use the production compose example when deploying all three services on one host:

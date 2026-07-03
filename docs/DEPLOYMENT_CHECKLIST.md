@@ -63,6 +63,12 @@ Run the smoke checker:
 .\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api https://api.your-domain.com --frontend https://app.your-domain.com
 ```
 
+Run user-scoped comparison and billing smoke checks after creating a test user:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api https://api.your-domain.com --frontend https://app.your-domain.com --user-id your-user-id --session-token your-session-token --billing-webhook-secret your-webhook-secret
+```
+
 ## Manual Product Smoke
 
 - Register or claim the first admin user from `ADMIN_USER_IDS`.
@@ -74,4 +80,3 @@ Run the smoke checker:
 - Run a saved comparison and confirm it appears in Recent Runs and History.
 - Rename and delete one saved comparison.
 - Package the extension with the deployed API URL and verify manual JD fallback.
-
