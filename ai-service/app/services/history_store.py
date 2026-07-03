@@ -44,6 +44,8 @@ from app.models.history import (
     PreparationSessionSaveRequest,
     ResumeRecord,
     ResumeSaveRequest,
+    UsageEventRecord,
+    UsageSummary,
     UserBillingUpdateRequest,
     UserCreateRequest,
     UserRecord,
@@ -160,6 +162,91 @@ def update_user_billing(user_id: str, request: UserBillingUpdateRequest) -> User
         )
         row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         return _user_from_row(_require_row(row, "User not found after billing update"))
+
+
+def record_usage_event(
+    module: str,
+    user_id: str | None = None,
+    mode: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    estimated_units: int = 1,
+) -> UsageEventRecord:
+    now = _now()
+    record_id = _id()
+    with get_connection() as connection:
+        resolved_user_id = user_id if user_id and connection.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone() else None
+        connection.execute(
+            """
+            INSERT INTO usage_events (id, user_id, module, mode, provider, model, estimated_units, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (record_id, resolved_user_id, module, mode, provider, model, max(1, estimated_units), now),
+        )
+    return UsageEventRecord(
+        id=record_id,
+        userId=resolved_user_id,
+        module=module,
+        mode=mode,
+        provider=provider,
+        model=model,
+        estimatedUnits=max(1, estimated_units),
+        createdAt=now,
+    )
+
+
+def get_usage_summary(user_id: str | None = None, limit: int = 50) -> UsageSummary:
+    filters = []
+    params: list[Any] = []
+    if user_id:
+        filters.append("user_id = ?")
+        params.append(user_id)
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    bounded_limit = max(1, min(100, limit))
+    with get_connection() as connection:
+        if user_id:
+            _get_user(connection, user_id)
+        rows = connection.execute(
+            f"""
+            SELECT *
+            FROM usage_events
+            {where_clause}
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            tuple(params + [bounded_limit]),
+        ).fetchall()
+        aggregate_rows = connection.execute(
+            f"""
+            SELECT user_id, module, COUNT(*) AS events, COALESCE(SUM(estimated_units), 0) AS units
+            FROM usage_events
+            {where_clause}
+            GROUP BY user_id, module
+            """,
+            tuple(params),
+        ).fetchall()
+
+    latest_events = [_usage_event_from_row(row) for row in rows]
+    by_module: dict[str, int] = {}
+    by_user: dict[str, int] = {}
+    total_events = 0
+    total_units = 0
+    for row in aggregate_rows:
+        module = row["module"]
+        owner = row["user_id"] or "anonymous"
+        events = int(row["events"])
+        units = int(row["units"])
+        by_module[module] = by_module.get(module, 0) + events
+        by_user[owner] = by_user.get(owner, 0) + events
+        total_events += events
+        total_units += units
+    return UsageSummary(
+        totalEvents=total_events,
+        totalEstimatedUnits=total_units,
+        byModule=by_module,
+        byUser=by_user,
+        latestEvents=latest_events,
+    )
 
 
 def authenticate_user_password(identifier: str, password: str) -> UserRecord:
@@ -1176,6 +1263,19 @@ def _comparison_run_from_row(row: Any) -> ComparisonRunRecord:
         resumeIds=_json_load(row["resume_ids_json"]),
         jobDescriptionIds=_json_load(row["job_description_ids_json"]),
         results=_json_load(row["results_json"]),
+        createdAt=row["created_at"],
+    )
+
+
+def _usage_event_from_row(row: Any) -> UsageEventRecord:
+    return UsageEventRecord(
+        id=row["id"],
+        userId=row["user_id"],
+        module=row["module"],
+        mode=row["mode"],
+        provider=row["provider"],
+        model=row["model"],
+        estimatedUnits=row["estimated_units"],
         createdAt=row["created_at"],
     )
 

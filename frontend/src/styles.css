@@ -1899,6 +1899,32 @@ button.premiumButton:not(.secondaryButton) span {
   overflow-wrap: anywhere;
 }
 
+.usageBreakdownGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.usageBreakdownGrid > div {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+
+.usageBreakdownGrid strong {
+  color: var(--brand);
+}
+
+.usageBreakdownGrid span {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .recommendationPanel {
   display: grid;
   gap: 10px;
@@ -2654,6 +2680,7 @@ pre {
   .adminUserTableHeader,
   .adminUserTableRow,
   .adminAnalysisItem,
+  .usageBreakdownGrid,
   .billingGrid,
   .weightEditor label {
     grid-template-columns: 1fr;

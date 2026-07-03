@@ -72,6 +72,7 @@ from app.models.history import (
     PreparationSessionSaveRequest,
     ResumeRecord,
     ResumeSaveRequest,
+    UsageSummary,
     UserBillingUpdateRequest,
     UserCreateRequest,
     UserRecord,
@@ -100,6 +101,7 @@ from app.services.history_store import (
     create_or_update_user,
     create_or_update_user_password,
     delete_comparison_run,
+    get_usage_summary,
     get_resume,
     get_preparation_session,
     get_workspace_summary,
@@ -115,6 +117,7 @@ from app.services.history_store import (
     save_analysis,
     save_comparison_run,
     search_analyses,
+    record_usage_event,
     update_analysis_optional_artifact,
     update_comparison_run,
     save_job_description,
@@ -306,21 +309,28 @@ def production_readiness(userId: str | None = None, session_token: str | None = 
 
 @app.post("/ai/resume-jd/analyze", response_model=AnalysisResponse)
 def analyze(request: AnalyzeRequest) -> AnalysisResponse:
-    return analyze_resume_jd(request)
+    response = analyze_resume_jd(request)
+    _record_ai_usage("full_analysis", request)
+    return response
 
 
 @app.post("/ai/resume-jd/match", response_model=AnalysisResponse)
 def match(request: AnalyzeRequest) -> AnalysisResponse:
-    return match_resume_jd(request)
+    response = match_resume_jd(request)
+    _record_ai_usage("match", request)
+    return response
 
 
 @app.post("/ai/match/score", response_model=AnalysisResponse)
 def calculate_score(request: AnalyzeRequest) -> AnalysisResponse:
-    return match_resume_jd(request)
+    response = match_resume_jd(request)
+    _record_ai_usage("score", request)
+    return response
 
 
 @app.post("/ai/analysis/gaps", response_model=list[RequirementMatch])
 def build_gap_report(request: OptionalArtifactBuildRequest) -> list[RequirementMatch]:
+    _record_ai_usage("gap_report", request.sourceRequest, estimated_units=1)
     return [
         match
         for match in request.analysis.requirementMatches
@@ -477,6 +487,7 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
         preparationPlanDays=request.preparationPlanDays,
     )
     analysis = match_resume_jd(analysis_request)
+    _record_ai_usage("extension_match", analysis_request, user_id=user_id)
     analysis_record = None
     if user_id:
         analysis_record = save_analysis(
@@ -513,11 +524,13 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
 @app.post("/ai/preparation/build", response_model=PreparationIntelligence)
 def build_preparation(request: PreparationBuildRequest) -> PreparationIntelligence:
     source_request = request.sourceRequest.model_copy(update={"preparationPlanDays": request.preparationPlanDays})
-    return build_preparation_intelligence(
+    response = build_preparation_intelligence(
         source_request,
         request.analysis.requirementMatches,
         request.analysis.scoreBreakdown,
     )
+    _record_ai_usage("preparation_plan", source_request, estimated_units=2)
+    return response
 
 
 @app.post("/ai/preparation/plan", response_model=PreparationIntelligence)
@@ -527,7 +540,9 @@ def build_preparation_plan_artifact(request: PreparationBuildRequest) -> Prepara
 
 @app.post("/ai/resume-improvements/build", response_model=list[ResumeImprovement])
 def build_resume_improvement_artifacts(request: OptionalArtifactBuildRequest) -> list[ResumeImprovement]:
-    return build_resume_improvements(request.sourceRequest, request.analysis, request.limit)
+    response = build_resume_improvements(request.sourceRequest, request.analysis, request.limit)
+    _record_ai_usage("resume_improvements", request.sourceRequest, estimated_units=2)
+    return response
 
 
 @app.post("/ai/resume-improvements", response_model=list[ResumeImprovement])
@@ -537,7 +552,9 @@ def build_resume_improvement_artifacts_alias(request: OptionalArtifactBuildReque
 
 @app.post("/ai/interview-questions/build", response_model=list[InterviewQuestion])
 def build_interview_question_artifacts(request: OptionalArtifactBuildRequest) -> list[InterviewQuestion]:
-    return build_interview_questions(request.sourceRequest, request.analysis, request.limit)
+    response = build_interview_questions(request.sourceRequest, request.analysis, request.limit)
+    _record_ai_usage("interview_questions", request.sourceRequest, estimated_units=2)
+    return response
 
 
 @app.post("/ai/interview/questions", response_model=list[InterviewQuestion])
@@ -547,7 +564,9 @@ def build_interview_question_artifacts_alias(request: OptionalArtifactBuildReque
 
 @app.post("/ai/cross-questions/build", response_model=list[CrossQuestion])
 def build_cross_question_artifacts(request: OptionalArtifactBuildRequest) -> list[CrossQuestion]:
-    return build_cross_questions(request.sourceRequest, request.analysis, request.limit)
+    response = build_cross_questions(request.sourceRequest, request.analysis, request.limit)
+    _record_ai_usage("cross_questions", request.sourceRequest, estimated_units=2)
+    return response
 
 
 @app.post("/ai/cross-questions", response_model=list[CrossQuestion])
@@ -645,6 +664,16 @@ def search_admin_analyses(
 ) -> list[AnalysisRecord]:
     _authorize_admin(session_token)
     return search_analyses(query=query, user_id=userId, limit=limit)
+
+
+@app.get("/admin/usage", response_model=UsageSummary)
+def get_admin_usage_summary(
+    userId: str | None = None,
+    limit: int = 50,
+    session_token: str | None = Header(default=None, alias="X-Session-Token"),
+) -> UsageSummary:
+    _authorize_admin(session_token)
+    return get_usage_summary(user_id=userId, limit=limit)
 
 
 @app.get("/history/users/{user_id}/workspace", response_model=WorkspaceSummary)
@@ -1028,6 +1057,21 @@ def _llm_key_configured(current_settings) -> bool:
     if current_settings.llm_provider == "gemini":
         return bool(current_settings.gemini_api_key or current_settings.google_api_key or current_settings.llm_api_key)
     return bool(current_settings.llm_api_key)
+
+
+def _record_ai_usage(module: str, request: AnalyzeRequest, user_id: str | None = None, estimated_units: int = 1) -> None:
+    options = request.llmOptions
+    try:
+        record_usage_event(
+            module=module,
+            user_id=user_id or request.scoringCalibrationUserId,
+            mode=options.mode if options else settings.llm_mode,
+            provider=options.provider if options else settings.llm_provider,
+            model=options.model if options else settings.llm_model,
+            estimated_units=estimated_units,
+        )
+    except Exception as exc:
+        logger.warning(json.dumps({"event": "usage_tracking_failed", "module": module, "error": str(exc)}))
 
 
 def _billing_update_from_webhook(event: BillingWebhookSubscriptionEvent) -> tuple[str, UserBillingUpdateRequest]:

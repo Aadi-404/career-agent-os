@@ -254,6 +254,25 @@ type HistoryComparisonRecord = {
   createdAt: string;
 };
 
+type UsageEventRecord = {
+  id: string;
+  userId?: string | null;
+  module: string;
+  mode?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  estimatedUnits: number;
+  createdAt: string;
+};
+
+type UsageSummary = {
+  totalEvents: number;
+  totalEstimatedUnits: number;
+  byModule: Record<string, number>;
+  byUser: Record<string, number>;
+  latestEvents: UsageEventRecord[];
+};
+
 type TaskStatus = "todo" | "in_progress" | "done" | "skipped";
 type ConfidenceLevel = "low" | "medium" | "high";
 
@@ -542,6 +561,7 @@ function App() {
   const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
   const [adminAnalyses, setAdminAnalyses] = useState<HistoryAnalysisRecord[]>([]);
+  const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [sessionInfo, setSessionInfo] = useState("");
@@ -595,6 +615,7 @@ function App() {
       loadProductionReadiness();
       loadAdminUsers();
       loadAdminAnalyses();
+      loadUsageSummary();
     }
   }, [activeTask, workspaceUserId]);
 
@@ -738,6 +759,7 @@ function App() {
     setProductionReadiness(null);
     setAdminUsers([]);
     setAdminAnalyses([]);
+    setUsageSummary(null);
   }
 
   function applyAuthenticatedSession(payload: { user: AdminUserRecord; sessionToken: string }, message: string) {
@@ -1485,6 +1507,19 @@ function App() {
       setAdminAnalyses(await response.json() as HistoryAnalysisRecord[]);
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "Admin analysis search unavailable");
+    }
+  }
+
+  async function loadUsageSummary(targetUserId = "") {
+    try {
+      await ensureLocalUser();
+      const params = new URLSearchParams({ limit: "25" });
+      if (targetUserId.trim()) params.set("userId", targetUserId.trim());
+      const response = await fetch(`${API_BASE_URL}/admin/usage?${params.toString()}`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error("Usage summary unavailable");
+      setUsageSummary(await response.json() as UsageSummary);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Usage summary unavailable");
     }
   }
 
@@ -2686,6 +2721,7 @@ function App() {
                 productionReadiness={productionReadiness}
                 users={adminUsers}
                 adminAnalyses={adminAnalyses}
+                usageSummary={usageSummary}
                 billingDraft={billingDraft}
                 canManageSettings={currentUser?.role === "admin"}
                 info={settingsInfo}
@@ -2698,6 +2734,7 @@ function App() {
                 onRefreshReadiness={loadProductionReadiness}
                 onRefreshUsers={loadAdminUsers}
                 onSearchAnalyses={loadAdminAnalyses}
+                onLoadUsage={loadUsageSummary}
                 onBillingEdit={startBillingEdit}
                 onBillingDraftChange={setBillingDraft}
                 onBillingSave={saveBillingMetadata}
@@ -3593,6 +3630,7 @@ function ScoringSettingsPanel({
   productionReadiness,
   users,
   adminAnalyses,
+  usageSummary,
   billingDraft,
   canManageSettings,
   info,
@@ -3605,6 +3643,7 @@ function ScoringSettingsPanel({
   onRefreshReadiness,
   onRefreshUsers,
   onSearchAnalyses,
+  onLoadUsage,
   onBillingEdit,
   onBillingDraftChange,
   onBillingSave,
@@ -3617,6 +3656,7 @@ function ScoringSettingsPanel({
   productionReadiness: ProductionReadiness | null;
   users: AdminUserRecord[];
   adminAnalyses: HistoryAnalysisRecord[];
+  usageSummary: UsageSummary | null;
   billingDraft: BillingDraft | null;
   canManageSettings: boolean;
   info: string;
@@ -3629,6 +3669,7 @@ function ScoringSettingsPanel({
   onRefreshReadiness: () => void;
   onRefreshUsers: () => void;
   onSearchAnalyses: (query?: string, userId?: string) => void;
+  onLoadUsage: (userId?: string) => void;
   onBillingEdit: (user: AdminUserRecord) => void;
   onBillingDraftChange: (draft: BillingDraft) => void;
   onBillingSave: (draft: BillingDraft) => void;
@@ -3642,6 +3683,7 @@ function ScoringSettingsPanel({
   const [userStatusFilter, setUserStatusFilter] = useState("all");
   const [analysisSearch, setAnalysisSearch] = useState("");
   const [analysisUserFilter, setAnalysisUserFilter] = useState("");
+  const [usageUserFilter, setUsageUserFilter] = useState("");
 
   useEffect(() => {
     setDraftWeights(activeConfig?.categoryWeights ?? {});
@@ -4027,6 +4069,78 @@ function ScoringSettingsPanel({
             </div>
           )}
         </div>
+      </div>
+
+      <div className="panel diagnosticsPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Usage</p>
+            <h3>AI Call Tracking</h3>
+          </div>
+          <button type="button" className="secondaryButton" disabled={!canManageSettings} onClick={() => onLoadUsage(usageUserFilter)}>Refresh Usage</button>
+        </div>
+        <div className="adminUserToolbar">
+          <label>
+            User
+            <select value={usageUserFilter} onChange={(event) => setUsageUserFilter(event.target.value)}>
+              <option value="">All users</option>
+              {users.map((user) => <option key={user.id} value={user.id}>{user.displayName}</option>)}
+            </select>
+          </label>
+          <label>
+            Events
+            <input value={usageSummary?.totalEvents ?? 0} disabled readOnly />
+          </label>
+          <label>
+            Estimated units
+            <input value={usageSummary?.totalEstimatedUnits ?? 0} disabled readOnly />
+          </label>
+        </div>
+        {usageSummary ? (
+          <>
+            <div className="usageBreakdownGrid">
+              <div>
+                <strong>By module</strong>
+                {Object.entries(usageSummary.byModule).length ? Object.entries(usageSummary.byModule).map(([module, count]) => (
+                  <span key={module}>{formatCategory(module)}: {count}</span>
+                )) : <span>No module usage yet</span>}
+              </div>
+              <div>
+                <strong>By user</strong>
+                {Object.entries(usageSummary.byUser).length ? Object.entries(usageSummary.byUser).slice(0, 8).map(([userId, count]) => (
+                  <span key={userId}>{userId}: {count}</span>
+                )) : <span>No user usage yet</span>}
+              </div>
+            </div>
+            <div className="adminAnalysisList">
+              {usageSummary.latestEvents.length ? usageSummary.latestEvents.map((event) => (
+                <div key={event.id} className="adminAnalysisItem">
+                  <div>
+                    <strong>{formatCategory(event.module)}</strong>
+                    <span>{event.userId ?? "anonymous"} | {formatDate(event.createdAt)}</span>
+                  </div>
+                  <div>
+                    <strong>{event.estimatedUnits} unit(s)</strong>
+                    <span>{event.mode ?? "mode n/a"} / {event.provider ?? "provider n/a"}</span>
+                  </div>
+                  <div>
+                    <span>{event.model ?? "model n/a"}</span>
+                  </div>
+                </div>
+              )) : (
+                <div className="adminUserEmpty">
+                  <strong>No usage events yet</strong>
+                  <span>Score, preparation, extension match, and premium artifact calls will appear here.</span>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="adminUserEmpty">
+            <strong>No usage summary loaded</strong>
+            <span>Refresh usage to inspect AI call activity.</span>
+          </div>
+        )}
       </div>
 
       <div className="panel auditPanel">

@@ -268,3 +268,22 @@ class WorkspaceSummary(BaseModel):
     preparationSessionCount: int
     jobOpportunityCount: int = 0
     latestAnalysis: AnalysisRecord | None = None
+
+
+class UsageEventRecord(BaseModel):
+    id: str
+    userId: str | None = None
+    module: str
+    mode: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    estimatedUnits: int = 1
+    createdAt: str
+
+
+class UsageSummary(BaseModel):
+    totalEvents: int
+    totalEstimatedUnits: int
+    byModule: dict[str, int]
+    byUser: dict[str, int]
+    latestEvents: list[UsageEventRecord]

@@ -293,6 +293,23 @@ def _postgres_schema() -> str:
             CREATE INDEX IF NOT EXISTS idx_match_feedback_user_role
             ON match_feedback(user_id, role_family, created_at DESC);
 
+            CREATE TABLE IF NOT EXISTS usage_events (
+                id TEXT PRIMARY KEY,
+                user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+                module TEXT NOT NULL,
+                mode TEXT,
+                provider TEXT,
+                model TEXT,
+                estimated_units INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_usage_events_user_created
+            ON usage_events(user_id, created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_usage_events_module_created
+            ON usage_events(module, created_at DESC);
+
             CREATE TABLE IF NOT EXISTS scoring_calibration_configs (
                 user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 role_family TEXT NOT NULL,
