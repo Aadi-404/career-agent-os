@@ -2,7 +2,9 @@ import unittest
 from contextlib import contextmanager
 from unittest.mock import patch
 
-from app.services.history_store import get_usage_summary, record_usage_event
+from fastapi import HTTPException
+
+from app.services.history_store import ensure_usage_quota, get_usage_quota_status, get_usage_summary, record_usage_event
 
 
 class _Rows:
@@ -65,6 +67,27 @@ class _SummaryConnection:
         return _Rows([])
 
 
+class _QuotaConnection:
+    def __init__(self, tier="free", role="member", used_units=0):
+        self.tier = tier
+        self.role = role
+        self.used_units = used_units
+
+    def execute(self, query, params=()):
+        if "SELECT * FROM users" in query:
+            return _Rows([{
+                "id": "user-1",
+                "display_name": "User 1",
+                "email": None,
+                "role": self.role,
+                "subscription_tier": self.tier,
+                "created_at": "2026-07-03T00:00:00Z",
+            }])
+        if "SELECT COALESCE(SUM(estimated_units), 0) AS units" in query:
+            return _Rows([{"units": self.used_units}])
+        return _Rows([])
+
+
 @contextmanager
 def _fake_connection(connection):
     yield connection
@@ -92,6 +115,32 @@ class UsageTrackingTests(unittest.TestCase):
         self.assertEqual(summary.byModule["preparation_plan"], 1)
         self.assertEqual(summary.byUser["user-1"], 2)
         self.assertEqual(len(summary.latestEvents), 2)
+        self.assertEqual(summary.quota.tier, "free")
+
+    def test_free_usage_quota_reports_monthly_remaining_units(self):
+        with patch("app.services.history_store.get_connection", lambda: _fake_connection(_QuotaConnection(used_units=12))):
+            status = get_usage_quota_status("user-1")
+
+        self.assertEqual(status.tier, "free")
+        self.assertEqual(status.limitUnits, 50)
+        self.assertEqual(status.usedUnits, 12)
+        self.assertEqual(status.remainingUnits, 38)
+        self.assertFalse(status.unlimited)
+
+    def test_usage_quota_blocks_when_requested_units_exceed_remaining(self):
+        with patch("app.services.history_store.get_connection", lambda: _fake_connection(_QuotaConnection(used_units=49))):
+            with self.assertRaises(HTTPException) as context:
+                ensure_usage_quota("interview_questions", "user-1", estimated_units=2)
+
+        self.assertEqual(context.exception.status_code, 429)
+        self.assertIn("quota exceeded", context.exception.detail)
+
+    def test_admin_usage_quota_is_unlimited(self):
+        with patch("app.services.history_store.get_connection", lambda: _fake_connection(_QuotaConnection(role="admin", used_units=999))):
+            status = ensure_usage_quota("score", "user-1", estimated_units=500)
+
+        self.assertTrue(status.unlimited)
+        self.assertIsNone(status.limitUnits)
 
 
 if __name__ == "__main__":

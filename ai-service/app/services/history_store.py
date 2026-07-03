@@ -45,6 +45,7 @@ from app.models.history import (
     ResumeRecord,
     ResumeSaveRequest,
     UsageEventRecord,
+    UsageQuotaStatus,
     UsageSummary,
     UserBillingUpdateRequest,
     UserCreateRequest,
@@ -54,6 +55,13 @@ from app.models.history import (
 )
 from app.models.jd_parse import ParsedJobDescription
 from app.models.resume_normalize import StructuredResume
+
+
+USAGE_QUOTA_LIMITS = {
+    "anonymous": 10,
+    "free": 50,
+    "premium": 500,
+}
 
 
 def create_or_update_user(request: UserCreateRequest) -> UserRecord:
@@ -246,7 +254,41 @@ def get_usage_summary(user_id: str | None = None, limit: int = 50) -> UsageSumma
         byModule=by_module,
         byUser=by_user,
         latestEvents=latest_events,
+        quota=get_usage_quota_status(user_id) if user_id else None,
     )
+
+
+def get_usage_quota_status(user_id: str | None = None) -> UsageQuotaStatus:
+    with get_connection() as connection:
+        tier = _usage_tier_for_user(connection, user_id)
+        used_units = _monthly_usage_units(connection, user_id)
+    limit_units = USAGE_QUOTA_LIMITS.get(tier)
+    unlimited = tier == "admin" or limit_units is None
+    remaining_units = None if unlimited else max(0, limit_units - used_units)
+    return UsageQuotaStatus(
+        userId=user_id,
+        tier=tier,
+        usedUnits=used_units,
+        limitUnits=limit_units,
+        remainingUnits=remaining_units,
+        unlimited=unlimited,
+    )
+
+
+def ensure_usage_quota(module: str, user_id: str | None = None, estimated_units: int = 1) -> UsageQuotaStatus:
+    requested_units = max(1, estimated_units)
+    status = get_usage_quota_status(user_id)
+    if status.unlimited:
+        return status
+    if status.remainingUnits is not None and requested_units > status.remainingUnits:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"AI usage quota exceeded for {status.tier} tier. "
+                f"{module} needs {requested_units} unit(s), but {status.remainingUnits} remain in this monthly window."
+            ),
+        )
+    return status
 
 
 def authenticate_user_password(identifier: str, password: str) -> UserRecord:
@@ -1147,6 +1189,38 @@ def _resolved_subscription_tier(requested_tier: str | None) -> str:
     return requested_tier if requested_tier in {"free", "premium"} else "free"
 
 
+def _usage_tier_for_user(connection, user_id: str | None) -> str:
+    if not user_id:
+        return "anonymous"
+    user = _get_user(connection, user_id)
+    if user.role == "admin":
+        return "admin"
+    return user.subscriptionTier or "free"
+
+
+def _monthly_usage_units(connection, user_id: str | None) -> int:
+    month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    if user_id:
+        row = connection.execute(
+            """
+            SELECT COALESCE(SUM(estimated_units), 0) AS units
+            FROM usage_events
+            WHERE user_id = ? AND created_at >= ?
+            """,
+            (user_id, month_start),
+        ).fetchone()
+    else:
+        row = connection.execute(
+            """
+            SELECT COALESCE(SUM(estimated_units), 0) AS units
+            FROM usage_events
+            WHERE user_id IS NULL AND created_at >= ?
+            """,
+            (month_start,),
+        ).fetchone()
+    return int(_row_value(row, "units") or 0)
+
+
 def _hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000).hex()
@@ -1375,6 +1449,8 @@ def _json_load(value):
 
 
 def _row_value(row: Any, key: str):
+    if row is None:
+        return None
     if hasattr(row, "get"):
         return row.get(key)
     try:

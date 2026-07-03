@@ -101,6 +101,7 @@ from app.services.history_store import (
     create_or_update_user,
     create_or_update_user_password,
     delete_comparison_run,
+    ensure_usage_quota,
     get_usage_summary,
     get_resume,
     get_preparation_session,
@@ -309,6 +310,7 @@ def production_readiness(userId: str | None = None, session_token: str | None = 
 
 @app.post("/ai/resume-jd/analyze", response_model=AnalysisResponse)
 def analyze(request: AnalyzeRequest) -> AnalysisResponse:
+    _enforce_ai_usage("full_analysis", request)
     response = analyze_resume_jd(request)
     _record_ai_usage("full_analysis", request)
     return response
@@ -316,6 +318,7 @@ def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 
 @app.post("/ai/resume-jd/match", response_model=AnalysisResponse)
 def match(request: AnalyzeRequest) -> AnalysisResponse:
+    _enforce_ai_usage("match", request)
     response = match_resume_jd(request)
     _record_ai_usage("match", request)
     return response
@@ -323,6 +326,7 @@ def match(request: AnalyzeRequest) -> AnalysisResponse:
 
 @app.post("/ai/match/score", response_model=AnalysisResponse)
 def calculate_score(request: AnalyzeRequest) -> AnalysisResponse:
+    _enforce_ai_usage("score", request)
     response = match_resume_jd(request)
     _record_ai_usage("score", request)
     return response
@@ -330,6 +334,7 @@ def calculate_score(request: AnalyzeRequest) -> AnalysisResponse:
 
 @app.post("/ai/analysis/gaps", response_model=list[RequirementMatch])
 def build_gap_report(request: OptionalArtifactBuildRequest) -> list[RequirementMatch]:
+    _enforce_ai_usage("gap_report", request.sourceRequest, estimated_units=1)
     _record_ai_usage("gap_report", request.sourceRequest, estimated_units=1)
     return [
         match
@@ -486,6 +491,7 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
         llmOptions=request.llmOptions,
         preparationPlanDays=request.preparationPlanDays,
     )
+    _enforce_ai_usage("extension_match", analysis_request, user_id=user_id)
     analysis = match_resume_jd(analysis_request)
     _record_ai_usage("extension_match", analysis_request, user_id=user_id)
     analysis_record = None
@@ -524,6 +530,7 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
 @app.post("/ai/preparation/build", response_model=PreparationIntelligence)
 def build_preparation(request: PreparationBuildRequest) -> PreparationIntelligence:
     source_request = request.sourceRequest.model_copy(update={"preparationPlanDays": request.preparationPlanDays})
+    _enforce_ai_usage("preparation_plan", source_request, estimated_units=2)
     response = build_preparation_intelligence(
         source_request,
         request.analysis.requirementMatches,
@@ -540,6 +547,7 @@ def build_preparation_plan_artifact(request: PreparationBuildRequest) -> Prepara
 
 @app.post("/ai/resume-improvements/build", response_model=list[ResumeImprovement])
 def build_resume_improvement_artifacts(request: OptionalArtifactBuildRequest) -> list[ResumeImprovement]:
+    _enforce_ai_usage("resume_improvements", request.sourceRequest, estimated_units=2)
     response = build_resume_improvements(request.sourceRequest, request.analysis, request.limit)
     _record_ai_usage("resume_improvements", request.sourceRequest, estimated_units=2)
     return response
@@ -552,6 +560,7 @@ def build_resume_improvement_artifacts_alias(request: OptionalArtifactBuildReque
 
 @app.post("/ai/interview-questions/build", response_model=list[InterviewQuestion])
 def build_interview_question_artifacts(request: OptionalArtifactBuildRequest) -> list[InterviewQuestion]:
+    _enforce_ai_usage("interview_questions", request.sourceRequest, estimated_units=2)
     response = build_interview_questions(request.sourceRequest, request.analysis, request.limit)
     _record_ai_usage("interview_questions", request.sourceRequest, estimated_units=2)
     return response
@@ -564,6 +573,7 @@ def build_interview_question_artifacts_alias(request: OptionalArtifactBuildReque
 
 @app.post("/ai/cross-questions/build", response_model=list[CrossQuestion])
 def build_cross_question_artifacts(request: OptionalArtifactBuildRequest) -> list[CrossQuestion]:
+    _enforce_ai_usage("cross_questions", request.sourceRequest, estimated_units=2)
     response = build_cross_questions(request.sourceRequest, request.analysis, request.limit)
     _record_ai_usage("cross_questions", request.sourceRequest, estimated_units=2)
     return response
@@ -1072,6 +1082,14 @@ def _record_ai_usage(module: str, request: AnalyzeRequest, user_id: str | None =
         )
     except Exception as exc:
         logger.warning(json.dumps({"event": "usage_tracking_failed", "module": module, "error": str(exc)}))
+
+
+def _enforce_ai_usage(module: str, request: AnalyzeRequest, user_id: str | None = None, estimated_units: int = 1) -> None:
+    ensure_usage_quota(
+        module=module,
+        user_id=user_id or request.scoringCalibrationUserId,
+        estimated_units=estimated_units,
+    )
 
 
 def _billing_update_from_webhook(event: BillingWebhookSubscriptionEvent) -> tuple[str, UserBillingUpdateRequest]:

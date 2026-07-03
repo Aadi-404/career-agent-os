@@ -265,12 +265,23 @@ type UsageEventRecord = {
   createdAt: string;
 };
 
+type UsageQuotaStatus = {
+  userId?: string | null;
+  tier: string;
+  window: string;
+  usedUnits: number;
+  limitUnits?: number | null;
+  remainingUnits?: number | null;
+  unlimited: boolean;
+};
+
 type UsageSummary = {
   totalEvents: number;
   totalEstimatedUnits: number;
   byModule: Record<string, number>;
   byUser: Record<string, number>;
   latestEvents: UsageEventRecord[];
+  quota?: UsageQuotaStatus | null;
 };
 
 type TaskStatus = "todo" | "in_progress" | "done" | "skipped";
@@ -4098,6 +4109,31 @@ function ScoringSettingsPanel({
         </div>
         {usageSummary ? (
           <>
+            {usageSummary.quota ? (
+              <div className="usageQuotaStrip">
+                <div>
+                  <span>Tier</span>
+                  <strong>{formatCategory(usageSummary.quota.tier)}</strong>
+                </div>
+                <div>
+                  <span>Monthly units</span>
+                  <strong>{usageSummary.quota.usedUnits} / {usageSummary.quota.unlimited ? "Unlimited" : usageSummary.quota.limitUnits}</strong>
+                </div>
+                <div>
+                  <span>Remaining</span>
+                  <strong>{usageSummary.quota.unlimited ? "Unlimited" : usageSummary.quota.remainingUnits}</strong>
+                </div>
+                <div>
+                  <span>Window</span>
+                  <strong>{formatCategory(usageSummary.quota.window)}</strong>
+                </div>
+              </div>
+            ) : (
+              <div className="adminUserEmpty compact">
+                <strong>Select a user to inspect quota</strong>
+                <span>All-user usage shows aggregate calls. Quotas are evaluated per subscription tier.</span>
+              </div>
+            )}
             <div className="usageBreakdownGrid">
               <div>
                 <strong>By module</strong>

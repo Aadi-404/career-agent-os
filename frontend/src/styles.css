@@ -1861,6 +1861,14 @@ button.premiumButton:not(.secondaryButton) span {
   padding: 16px;
 }
 
+.adminUserEmpty.compact {
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+
 .adminUserEmpty span {
   color: var(--muted);
   font-size: 13px;
@@ -1897,6 +1905,33 @@ button.premiumButton:not(.secondaryButton) span {
   font-size: 13px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.usageQuotaStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.usageQuotaStrip > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #cfe1de;
+  border-radius: 8px;
+  background: #f3faf8;
+  padding: 12px;
+}
+
+.usageQuotaStrip span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.usageQuotaStrip strong {
+  color: var(--brand);
+  font-size: 15px;
 }
 
 .usageBreakdownGrid {
@@ -2680,6 +2715,7 @@ pre {
   .adminUserTableHeader,
   .adminUserTableRow,
   .adminAnalysisItem,
+  .usageQuotaStrip,
   .usageBreakdownGrid,
   .billingGrid,
   .weightEditor label {

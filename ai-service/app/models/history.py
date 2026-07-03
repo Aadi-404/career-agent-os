@@ -281,9 +281,20 @@ class UsageEventRecord(BaseModel):
     createdAt: str
 
 
+class UsageQuotaStatus(BaseModel):
+    userId: str | None = None
+    tier: str
+    window: str = "monthly"
+    usedUnits: int
+    limitUnits: int | None = None
+    remainingUnits: int | None = None
+    unlimited: bool = False
+
+
 class UsageSummary(BaseModel):
     totalEvents: int
     totalEstimatedUnits: int
     byModule: dict[str, int]
     byUser: dict[str, int]
     latestEvents: list[UsageEventRecord]
+    quota: UsageQuotaStatus | None = None
