@@ -114,6 +114,7 @@ from app.services.history_store import (
     list_resumes,
     save_analysis,
     save_comparison_run,
+    search_analyses,
     update_analysis_optional_artifact,
     update_comparison_run,
     save_job_description,
@@ -633,6 +634,17 @@ def create_anonymous_session(request: AnonymousSessionCreateRequest | None = Non
 def get_admin_users(session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[UserRecord]:
     _authorize_admin(session_token)
     return list_users()
+
+
+@app.get("/admin/analyses", response_model=list[AnalysisRecord])
+def search_admin_analyses(
+    query: str | None = None,
+    userId: str | None = None,
+    limit: int = 50,
+    session_token: str | None = Header(default=None, alias="X-Session-Token"),
+) -> list[AnalysisRecord]:
+    _authorize_admin(session_token)
+    return search_analyses(query=query, user_id=userId, limit=limit)
 
 
 @app.get("/history/users/{user_id}/workspace", response_model=WorkspaceSummary)

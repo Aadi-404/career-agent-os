@@ -1866,6 +1866,39 @@ button.premiumButton:not(.secondaryButton) span {
   font-size: 13px;
 }
 
+.adminAnalysisList {
+  display: grid;
+  gap: 10px;
+}
+
+.adminAnalysisItem {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(90px, 0.45fr) minmax(220px, 1fr);
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.adminAnalysisItem > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.adminAnalysisItem strong {
+  color: var(--ink);
+}
+
+.adminAnalysisItem span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .recommendationPanel {
   display: grid;
   gap: 10px;
@@ -2620,6 +2653,7 @@ pre {
   .adminUserToolbar,
   .adminUserTableHeader,
   .adminUserTableRow,
+  .adminAnalysisItem,
   .billingGrid,
   .weightEditor label {
     grid-template-columns: 1fr;

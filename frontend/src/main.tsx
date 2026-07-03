@@ -191,6 +191,7 @@ type BillingDraft = {
 
 type HistoryAnalysisRecord = {
   id: string;
+  userId: string;
   title: string;
   fingerprint?: string | null;
   technicalMatchScore: number;
@@ -540,6 +541,7 @@ function App() {
   const [systemDiagnostics, setSystemDiagnostics] = useState<SystemDiagnostics | null>(null);
   const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
+  const [adminAnalyses, setAdminAnalyses] = useState<HistoryAnalysisRecord[]>([]);
   const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [sessionInfo, setSessionInfo] = useState("");
@@ -592,6 +594,7 @@ function App() {
       loadSystemDiagnostics();
       loadProductionReadiness();
       loadAdminUsers();
+      loadAdminAnalyses();
     }
   }, [activeTask, workspaceUserId]);
 
@@ -734,6 +737,7 @@ function App() {
     setSystemDiagnostics(null);
     setProductionReadiness(null);
     setAdminUsers([]);
+    setAdminAnalyses([]);
   }
 
   function applyAuthenticatedSession(payload: { user: AdminUserRecord; sessionToken: string }, message: string) {
@@ -1467,6 +1471,20 @@ function App() {
       setAdminUsers(await response.json() as AdminUserRecord[]);
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "User list unavailable");
+    }
+  }
+
+  async function loadAdminAnalyses(query = "", targetUserId = "") {
+    try {
+      await ensureLocalUser();
+      const params = new URLSearchParams({ limit: "25" });
+      if (query.trim()) params.set("query", query.trim());
+      if (targetUserId.trim()) params.set("userId", targetUserId.trim());
+      const response = await fetch(`${API_BASE_URL}/admin/analyses?${params.toString()}`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error("Admin analysis search unavailable");
+      setAdminAnalyses(await response.json() as HistoryAnalysisRecord[]);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Admin analysis search unavailable");
     }
   }
 
@@ -2667,6 +2685,7 @@ function App() {
                 diagnostics={systemDiagnostics}
                 productionReadiness={productionReadiness}
                 users={adminUsers}
+                adminAnalyses={adminAnalyses}
                 billingDraft={billingDraft}
                 canManageSettings={currentUser?.role === "admin"}
                 info={settingsInfo}
@@ -2678,6 +2697,7 @@ function App() {
                 onRefreshDiagnostics={loadSystemDiagnostics}
                 onRefreshReadiness={loadProductionReadiness}
                 onRefreshUsers={loadAdminUsers}
+                onSearchAnalyses={loadAdminAnalyses}
                 onBillingEdit={startBillingEdit}
                 onBillingDraftChange={setBillingDraft}
                 onBillingSave={saveBillingMetadata}
@@ -3572,6 +3592,7 @@ function ScoringSettingsPanel({
   diagnostics,
   productionReadiness,
   users,
+  adminAnalyses,
   billingDraft,
   canManageSettings,
   info,
@@ -3583,6 +3604,7 @@ function ScoringSettingsPanel({
   onRefreshDiagnostics,
   onRefreshReadiness,
   onRefreshUsers,
+  onSearchAnalyses,
   onBillingEdit,
   onBillingDraftChange,
   onBillingSave,
@@ -3594,6 +3616,7 @@ function ScoringSettingsPanel({
   diagnostics: SystemDiagnostics | null;
   productionReadiness: ProductionReadiness | null;
   users: AdminUserRecord[];
+  adminAnalyses: HistoryAnalysisRecord[];
   billingDraft: BillingDraft | null;
   canManageSettings: boolean;
   info: string;
@@ -3605,6 +3628,7 @@ function ScoringSettingsPanel({
   onRefreshDiagnostics: () => void;
   onRefreshReadiness: () => void;
   onRefreshUsers: () => void;
+  onSearchAnalyses: (query?: string, userId?: string) => void;
   onBillingEdit: (user: AdminUserRecord) => void;
   onBillingDraftChange: (draft: BillingDraft) => void;
   onBillingSave: (draft: BillingDraft) => void;
@@ -3616,6 +3640,8 @@ function ScoringSettingsPanel({
   const [userSearch, setUserSearch] = useState("");
   const [userTierFilter, setUserTierFilter] = useState<"all" | "free" | "premium">("all");
   const [userStatusFilter, setUserStatusFilter] = useState("all");
+  const [analysisSearch, setAnalysisSearch] = useState("");
+  const [analysisUserFilter, setAnalysisUserFilter] = useState("");
 
   useEffect(() => {
     setDraftWeights(activeConfig?.categoryWeights ?? {});
@@ -3950,6 +3976,55 @@ function ScoringSettingsPanel({
             </>
           ) : (
             <p className="hint">Select a known user to update billing metadata or manually unlock premium access.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="panel diagnosticsPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Support</p>
+            <h3>Analysis Search</h3>
+          </div>
+          <button type="button" className="secondaryButton" disabled={!canManageSettings} onClick={() => onSearchAnalyses(analysisSearch, analysisUserFilter)}>Search Analyses</button>
+        </div>
+        <div className="adminUserToolbar">
+          <label>
+            Search
+            <input value={analysisSearch} onChange={(event) => setAnalysisSearch(event.target.value)} placeholder="Title, user id, fit category" />
+          </label>
+          <label>
+            User
+            <select value={analysisUserFilter} onChange={(event) => setAnalysisUserFilter(event.target.value)}>
+              <option value="">All users</option>
+              {users.map((user) => <option key={user.id} value={user.id}>{user.displayName}</option>)}
+            </select>
+          </label>
+          <label>
+            Limit
+            <input value="25 latest" disabled readOnly />
+          </label>
+        </div>
+        <div className="adminAnalysisList">
+          {adminAnalyses.length ? adminAnalyses.map((analysis) => (
+            <div key={analysis.id} className="adminAnalysisItem">
+              <div>
+                <strong>{analysis.title}</strong>
+                <span>{analysis.userId} | {formatDate(analysis.createdAt)}</span>
+              </div>
+              <div>
+                <strong>{analysis.technicalMatchScore}%</strong>
+                <span>{analysis.fitCategory}</span>
+              </div>
+              <div>
+                <span>{analysis.response.recommendedAction ?? analysis.response.overallSummary}</span>
+              </div>
+            </div>
+          )) : (
+            <div className="adminUserEmpty">
+              <strong>No analyses loaded</strong>
+              <span>Search saved analyses across users for support and debugging.</span>
+            </div>
           )}
         </div>
       </div>

@@ -483,6 +483,35 @@ def list_analyses(user_id: str) -> list[AnalysisRecord]:
     return [_analysis_from_row(row) for row in rows]
 
 
+def search_analyses(query: str | None = None, user_id: str | None = None, limit: int = 50) -> list[AnalysisRecord]:
+    filters: list[str] = []
+    params: list[Any] = []
+    if user_id:
+        filters.append("user_id = ?")
+        params.append(user_id)
+    normalized_query = (query or "").strip().lower()
+    if normalized_query:
+        pattern = f"%{normalized_query}%"
+        filters.append("(lower(title) LIKE ? OR lower(user_id) LIKE ? OR lower(fit_category) LIKE ?)")
+        params.extend([pattern, pattern, pattern])
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    bounded_limit = max(1, min(100, limit))
+    with get_connection() as connection:
+        if user_id:
+            _get_user(connection, user_id)
+        rows = connection.execute(
+            f"""
+            SELECT *
+            FROM analyses
+            {where_clause}
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            tuple(params + [bounded_limit]),
+        ).fetchall()
+    return [_analysis_from_row(row) for row in rows]
+
+
 def save_comparison_run(request: ComparisonRunSaveRequest) -> ComparisonRunRecord:
     now = _now()
     record_id = _id()
