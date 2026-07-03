@@ -1758,6 +1758,114 @@ button.premiumButton:not(.secondaryButton) span {
   font-weight: 850;
 }
 
+.adminUserSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.adminUserSummary > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 10px;
+}
+
+.adminUserSummary span,
+.adminUserToolbar label,
+.adminUserTableHeader,
+.adminUserTableRow small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.adminUserSummary strong {
+  color: var(--brand);
+  font-size: 20px;
+}
+
+.adminUserToolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 150px 170px;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.adminUserToolbar label {
+  display: grid;
+  gap: 6px;
+}
+
+.adminUserTable {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.adminUserTableHeader,
+.adminUserTableRow {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.25fr) minmax(120px, 0.75fr) minmax(150px, 1fr) minmax(160px, 1fr) minmax(100px, 0.65fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+}
+
+.adminUserTableHeader {
+  background: #f7fbfb;
+  border-bottom: 1px solid var(--line);
+  text-transform: uppercase;
+}
+
+.adminUserTableRow {
+  border-bottom: 1px solid var(--line);
+}
+
+.adminUserTableRow:last-child {
+  border-bottom: 0;
+}
+
+.adminUserTableRow.active {
+  background: #f3fbf8;
+}
+
+.adminUserTableRow > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.adminUserTableRow strong {
+  color: var(--ink);
+}
+
+.adminUserTableRow span,
+.adminUserTableRow small {
+  overflow-wrap: anywhere;
+}
+
+.adminUserTableRow > div:nth-child(2) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.adminUserEmpty {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+}
+
+.adminUserEmpty span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .recommendationPanel {
   display: grid;
   gap: 10px;
@@ -2508,9 +2616,21 @@ pre {
   .calibrationGrid,
   .settingsGrid,
   .diagnosticTiles,
+  .adminUserSummary,
+  .adminUserToolbar,
+  .adminUserTableHeader,
+  .adminUserTableRow,
   .billingGrid,
   .weightEditor label {
     grid-template-columns: 1fr;
+  }
+
+  .adminUserTableHeader {
+    display: none;
+  }
+
+  .adminUserTableRow {
+    align-items: stretch;
   }
 
   .comparisonToolbar {

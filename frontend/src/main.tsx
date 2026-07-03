@@ -3613,6 +3613,9 @@ function ScoringSettingsPanel({
   const [selectedFamily, setSelectedFamily] = useState(".NET");
   const activeConfig = configs.find((config) => config.roleFamily === selectedFamily) ?? configs[0];
   const [draftWeights, setDraftWeights] = useState<Record<string, number>>(activeConfig?.categoryWeights ?? {});
+  const [userSearch, setUserSearch] = useState("");
+  const [userTierFilter, setUserTierFilter] = useState<"all" | "free" | "premium">("all");
+  const [userStatusFilter, setUserStatusFilter] = useState("all");
 
   useEffect(() => {
     setDraftWeights(activeConfig?.categoryWeights ?? {});
@@ -3622,6 +3625,28 @@ function ScoringSettingsPanel({
   const total = Object.values(draftWeights).reduce((sum, value) => sum + Number(value || 0), 0);
   const visibleAudit = audit.filter((item) => item.roleFamily === activeConfig?.roleFamily);
   const billingUser = billingDraft ? users.find((user) => user.id === billingDraft.userId) : null;
+  const normalizedUserSearch = userSearch.trim().toLowerCase();
+  const visibleUsers = users.filter((user) => {
+    const tier = user.subscriptionTier ?? "free";
+    const status = user.subscriptionStatus ?? "inactive";
+    const searchable = [
+      user.id,
+      user.displayName,
+      user.email ?? "",
+      user.role,
+      tier,
+      status,
+      user.subscriptionPlanId ?? "",
+      user.billingProviderCustomerId ?? "",
+      user.billingProviderSubscriptionId ?? "",
+    ].join(" ").toLowerCase();
+    return (!normalizedUserSearch || searchable.includes(normalizedUserSearch))
+      && (userTierFilter === "all" || tier === userTierFilter)
+      && (userStatusFilter === "all" || status === userStatusFilter);
+  });
+  const premiumUserCount = users.filter((user) => user.subscriptionTier === "premium").length;
+  const activeBillingCount = users.filter((user) => ["trialing", "active", "past_due"].includes(user.subscriptionStatus ?? "")).length;
+  const adminUserCount = users.filter((user) => user.role === "admin").length;
 
   if (!configs.length) {
     return (
@@ -3792,23 +3817,81 @@ function ScoringSettingsPanel({
         <div className="panelHeader">
           <div>
             <p className="eyebrow">Admin</p>
-            <h3>Known Users</h3>
+            <h3>User & Subscription Management</h3>
           </div>
           <button type="button" className="secondaryButton" disabled={!canManageSettings} onClick={onRefreshUsers}>Refresh Users</button>
         </div>
-        <div className="compactList">
-          {users.length ? users.map((user) => (
-            <div key={user.id}>
-              <strong>{user.displayName}</strong>
-              <span>
-                {user.id} | {user.role} | {user.subscriptionTier ?? "free"} / {user.subscriptionStatus ?? "inactive"} | {user.subscriptionPlanId ?? "no plan"} | {user.email ?? "no email"} | {formatDate(user.createdAt)}
-              </span>
-              <button type="button" className="tinyButton" disabled={!canManageSettings} onClick={() => onBillingEdit(user)}>Edit Billing</button>
+        <div className="adminUserSummary">
+          <div><span>Total users</span><strong>{users.length}</strong></div>
+          <div><span>Premium tier</span><strong>{premiumUserCount}</strong></div>
+          <div><span>Billable status</span><strong>{activeBillingCount}</strong></div>
+          <div><span>Admins</span><strong>{adminUserCount}</strong></div>
+        </div>
+        <div className="adminUserToolbar">
+          <label>
+            Search
+            <input value={userSearch} onChange={(event) => setUserSearch(event.target.value)} placeholder="Name, email, user id, plan, provider id" />
+          </label>
+          <label>
+            Tier
+            <select value={userTierFilter} onChange={(event) => setUserTierFilter(event.target.value as "all" | "free" | "premium")}>
+              <option value="all">All tiers</option>
+              <option value="free">Free</option>
+              <option value="premium">Premium</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select value={userStatusFilter} onChange={(event) => setUserStatusFilter(event.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="inactive">Inactive</option>
+              <option value="trialing">Trialing</option>
+              <option value="active">Active</option>
+              <option value="past_due">Past due</option>
+              <option value="canceled">Canceled</option>
+            </select>
+          </label>
+        </div>
+        <div className="adminUserTable" role="table" aria-label="Known users and subscription metadata">
+          <div className="adminUserTableHeader" role="row">
+            <span>User</span>
+            <span>Access</span>
+            <span>Billing</span>
+            <span>Provider</span>
+            <span>Created</span>
+            <span>Action</span>
+          </div>
+          {visibleUsers.length ? visibleUsers.map((user) => (
+            <div className={`adminUserTableRow ${billingDraft?.userId === user.id ? "active" : ""}`} role="row" key={user.id}>
+              <div>
+                <strong>{user.displayName}</strong>
+                <span>{user.email ?? "No email"}</span>
+                <small>{user.id}</small>
+              </div>
+              <div>
+                <span className={`statusPill ${user.role === "admin" ? "pass" : "warn"}`}>{user.role}</span>
+                <span className={`statusPill ${user.subscriptionTier === "premium" ? "pass" : "warn"}`}>{user.subscriptionTier ?? "free"}</span>
+              </div>
+              <div>
+                <strong>{user.subscriptionStatus ?? "inactive"}</strong>
+                <span>{user.subscriptionPlanId ?? "No plan"}</span>
+                <small>{user.billingPeriodEnd ? `Ends ${formatDate(user.billingPeriodEnd)}` : "No period end"}</small>
+              </div>
+              <div>
+                <span>{user.billingProviderCustomerId ?? "No customer id"}</span>
+                <small>{user.billingProviderSubscriptionId ?? "No subscription id"}</small>
+              </div>
+              <div>
+                <span>{formatDate(user.createdAt)}</span>
+              </div>
+              <div>
+                <button type="button" className="tinyButton" disabled={!canManageSettings} onClick={() => onBillingEdit(user)}>Edit Billing</button>
+              </div>
             </div>
           )) : (
-            <div>
-              <strong>No users loaded</strong>
-              <span>Create or claim a session to populate users.</span>
+            <div className="adminUserEmpty">
+              <strong>{users.length ? "No users match these filters" : "No users loaded"}</strong>
+              <span>{users.length ? "Clear filters or refresh users." : "Create or claim a session to populate users."}</span>
             </div>
           )}
         </div>
