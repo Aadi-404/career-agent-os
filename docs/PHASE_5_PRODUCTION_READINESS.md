@@ -66,6 +66,7 @@ For each page verify:
 - Set `CORS_ALLOW_ORIGINS` to the deployed frontend origin only.
 - Set `REQUIRE_USER_AUTH=true`.
 - Set `ADMIN_USER_IDS` to the first admin user's id.
+- Set `BILLING_WEBHOOK_SECRET` and use it as `X-Billing-Webhook-Secret` for provider webhook calls.
 - Set `LOG_LEVEL=INFO`.
 - Set provider keys only in backend environment variables.
 - Set frontend `VITE_API_BASE_URL` to the deployed backend URL before building.

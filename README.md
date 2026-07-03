@@ -135,8 +135,10 @@ frontend.staging.env.example
 frontend.production.env.example
 ```
 
-Production should use `ENVIRONMENT=production`, `REQUIRE_USER_AUTH=true`, a managed PostgreSQL `DATABASE_URL`, deployed CORS origins, and backend-only provider keys.
+Production should use `ENVIRONMENT=production`, `REQUIRE_USER_AUTH=true`, a managed PostgreSQL `DATABASE_URL`, deployed CORS origins, `BILLING_WEBHOOK_SECRET`, and backend-only provider keys.
 Set `LOG_LEVEL=INFO` for normal deployment logs or `LOG_LEVEL=DEBUG` only during short debugging sessions.
+
+Use [docs/DEPLOYMENT_CHECKLIST.md](docs/DEPLOYMENT_CHECKLIST.md) before staging or production deploys.
 
 Run deployment smoke checks with:
 
