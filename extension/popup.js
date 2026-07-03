@@ -6,6 +6,7 @@ const state = {
   sessionToken: null,
   jobDraft: null,
   quota: null,
+  lastOpportunity: null,
 };
 
 const els = {
@@ -27,6 +28,9 @@ const els = {
   sessionInfo: document.getElementById("sessionInfo"),
   parsePage: document.getElementById("parsePage"),
   matchJob: document.getElementById("matchJob"),
+  opportunityStatus: document.getElementById("opportunityStatus"),
+  updateOpportunityStatus: document.getElementById("updateOpportunityStatus"),
+  savedOpportunityInfo: document.getElementById("savedOpportunityInfo"),
   manualJd: document.getElementById("manualJd"),
   manualTitle: document.getElementById("manualTitle"),
   manualCompany: document.getElementById("manualCompany"),
@@ -51,6 +55,7 @@ els.claimSession.addEventListener("click", claimSession);
 els.clearSession.addEventListener("click", () => clearSession());
 els.parsePage.addEventListener("click", parseCurrentPage);
 els.matchJob.addEventListener("click", matchJob);
+els.updateOpportunityStatus.addEventListener("click", updateOpportunityStatus);
 els.saveParserFeedback.addEventListener("click", saveParserFeedback);
 
 async function bootstrap() {
@@ -299,7 +304,9 @@ async function matchJob() {
       status: "viewed",
     });
     state.quota = response.quota || state.quota;
+    state.lastOpportunity = response.jobOpportunity || null;
     renderQuota(state.quota);
+    renderOpportunityStatus(state.lastOpportunity);
     renderResult(renderMatchResult(response));
     setStatus("Matched");
   } catch (error) {
@@ -312,6 +319,33 @@ async function matchJob() {
     }
   } finally {
     els.matchJob.disabled = false;
+  }
+}
+
+async function updateOpportunityStatus() {
+  if (!state.lastOpportunity) {
+    setStatus("Match and save a job first");
+    return;
+  }
+  const userId = els.userId.value.trim();
+  if (!userId || !state.sessionToken) {
+    setStatus("Login before updating saved job status");
+    return;
+  }
+  els.updateOpportunityStatus.disabled = true;
+  setStatus("Updating status...");
+  try {
+    const updated = await patch(`/history/job-opportunities/${state.lastOpportunity.id}/status`, {
+      userId,
+      status: els.opportunityStatus.value,
+    });
+    state.lastOpportunity = updated;
+    renderOpportunityStatus(updated);
+    setStatus(`Marked ${updated.status}`);
+  } catch (error) {
+    setStatus(error.message || "Status update failed");
+  } finally {
+    els.updateOpportunityStatus.disabled = false;
   }
 }
 
@@ -348,6 +382,16 @@ function renderMatchResult(response) {
   return `<strong>${response.analysis.technicalMatchScore}%</strong>${escapeHtml(response.analysis.fitCategory)}<br>${escapeHtml(response.analysis.recommendedAction || "")}${savedStatus}${link}`;
 }
 
+function renderOpportunityStatus(opportunity) {
+  if (!opportunity) {
+    els.savedOpportunityInfo.textContent = "Match a job to update its status.";
+    els.opportunityStatus.value = "viewed";
+    return;
+  }
+  els.opportunityStatus.value = opportunity.status || "viewed";
+  els.savedOpportunityInfo.textContent = `${opportunity.title} saved as ${opportunity.status}.`;
+}
+
 function renderQuota(quota) {
   if (!quota) {
     els.quotaTier.textContent = "Connect to view quota";
@@ -381,9 +425,17 @@ function setStatus(value) {
 }
 
 async function post(path, body, options = {}) {
+  return requestJson("POST", path, body, options);
+}
+
+async function patch(path, body, options = {}) {
+  return requestJson("PATCH", path, body, options);
+}
+
+async function requestJson(method, path, body, options = {}) {
   const includeSessionHeader = options.includeSessionHeader !== false;
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
+    method,
     headers: {
       "Content-Type": "application/json",
       ...(includeSessionHeader && state.sessionToken ? { "X-Session-Token": state.sessionToken } : {}),

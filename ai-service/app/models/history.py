@@ -282,6 +282,10 @@ class WorkspaceSummary(BaseModel):
     interviewOpportunityCount: int = 0
     offerOpportunityCount: int = 0
     completedPreparationCount: int = 0
+    pipelineStatusCounts: dict[str, int] = Field(default_factory=dict)
+    applicationToInterviewRate: int | None = None
+    interviewToOfferRate: int | None = None
+    positiveOutcomeRate: int | None = None
     latestAnalysis: AnalysisRecord | None = None
 
 

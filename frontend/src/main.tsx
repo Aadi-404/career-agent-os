@@ -431,6 +431,10 @@ type WorkspaceSummary = {
   interviewOpportunityCount: number;
   offerOpportunityCount: number;
   completedPreparationCount: number;
+  pipelineStatusCounts: Record<JobOpportunityStatus, number>;
+  applicationToInterviewRate?: number | null;
+  interviewToOfferRate?: number | null;
+  positiveOutcomeRate?: number | null;
   latestAnalysis?: HistoryAnalysisRecord | null;
 };
 
@@ -4627,6 +4631,23 @@ function HistoryPanel({
           <div className="scoreTile"><span>Interviews</span><strong>{summary?.interviewOpportunityCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Offers</span><strong>{summary?.offerOpportunityCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Completed prep</span><strong>{summary?.completedPreparationCount ?? 0}</strong></div>
+        </div>
+      </div>
+
+      <div className="panel historyWide">
+        <h3>Application Pipeline</h3>
+        <div className="pipelineGrid">
+          {jobOpportunityStatuses.map((status) => (
+            <div key={status}>
+              <span>{formatCategory(status)}</span>
+              <strong>{summary?.pipelineStatusCounts?.[status] ?? 0}</strong>
+            </div>
+          ))}
+        </div>
+        <div className="pipelineRates">
+          <span>Positive: <strong>{summary?.positiveOutcomeRate ?? "--"}%</strong></span>
+          <span>Applied to interview: <strong>{summary?.applicationToInterviewRate ?? "--"}%</strong></span>
+          <span>Interview to offer: <strong>{summary?.interviewToOfferRate ?? "--"}%</strong></span>
         </div>
       </div>
 

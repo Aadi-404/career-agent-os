@@ -767,6 +767,47 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.pipelineGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pipelineGrid div {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+
+.pipelineGrid span,
+.pipelineRates span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pipelineGrid strong,
+.pipelineRates strong {
+  color: var(--brand);
+}
+
+.pipelineRates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.pipelineRates span {
+  border: 1px solid #d5e5e2;
+  border-radius: 8px;
+  background: #f7fbfa;
+  padding: 8px 10px;
+}
+
 .historyList,
 .compactHistoryList {
   display: grid;
@@ -2762,6 +2803,7 @@ pre {
   .checkItem,
   .placeholderGrid,
   .historyGrid,
+  .pipelineGrid,
   .comparisonGrid,
   .opportunityMetaGrid,
   .opportunityDetailGrid,

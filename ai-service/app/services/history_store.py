@@ -449,9 +449,14 @@ def get_workspace_summary(user_id: str) -> WorkspaceSummary:
         opportunity_stats = connection.execute(
             """
             SELECT
+                SUM(CASE WHEN status = 'viewed' THEN 1 ELSE 0 END) AS viewed_count,
+                SUM(CASE WHEN status = 'shortlisted' THEN 1 ELSE 0 END) AS shortlisted_count,
+                SUM(CASE WHEN status = 'applied' THEN 1 ELSE 0 END) AS applied_count,
                 SUM(CASE WHEN status IN ('viewed', 'shortlisted', 'applied', 'interview') THEN 1 ELSE 0 END) AS active_count,
                 SUM(CASE WHEN status = 'interview' THEN 1 ELSE 0 END) AS interview_count,
-                SUM(CASE WHEN status = 'offer' THEN 1 ELSE 0 END) AS offer_count
+                SUM(CASE WHEN status = 'offer' THEN 1 ELSE 0 END) AS offer_count,
+                SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
+                SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived_count
             FROM job_opportunities
             WHERE user_id = ?
             """,
@@ -470,6 +475,18 @@ def get_workspace_summary(user_id: str) -> WorkspaceSummary:
             (user_id,),
         ).fetchone()
     latest_analysis = _analysis_from_row(latest_analysis_row) if latest_analysis_row else None
+    pipeline_counts = {
+        "viewed": int(_row_value(opportunity_stats, "viewed_count") or 0),
+        "shortlisted": int(_row_value(opportunity_stats, "shortlisted_count") or 0),
+        "applied": int(_row_value(opportunity_stats, "applied_count") or 0),
+        "interview": int(_row_value(opportunity_stats, "interview_count") or 0),
+        "offer": int(_row_value(opportunity_stats, "offer_count") or 0),
+        "rejected": int(_row_value(opportunity_stats, "rejected_count") or 0),
+        "archived": int(_row_value(opportunity_stats, "archived_count") or 0),
+    }
+    applied_or_better = pipeline_counts["applied"] + pipeline_counts["interview"] + pipeline_counts["offer"]
+    interview_or_better = pipeline_counts["interview"] + pipeline_counts["offer"]
+    positive_outcomes = pipeline_counts["shortlisted"] + applied_or_better
     return WorkspaceSummary(
         user=user,
         resumeCount=resume_count,
@@ -483,6 +500,10 @@ def get_workspace_summary(user_id: str) -> WorkspaceSummary:
         interviewOpportunityCount=int(_row_value(opportunity_stats, "interview_count") or 0),
         offerOpportunityCount=int(_row_value(opportunity_stats, "offer_count") or 0),
         completedPreparationCount=int(_row_value(preparation_stats, "completed_count") or 0),
+        pipelineStatusCounts=pipeline_counts,
+        applicationToInterviewRate=_rate(interview_or_better, applied_or_better),
+        interviewToOfferRate=_rate(pipeline_counts["offer"], interview_or_better),
+        positiveOutcomeRate=_rate(positive_outcomes, opportunity_count),
         latestAnalysis=latest_analysis,
     )
 
@@ -1329,6 +1350,12 @@ def _ensure_owned_record(connection, table: str, record_id: str, user_id: str) -
 def _count(connection, table: str, user_id: str) -> int:
     row = connection.execute(f"SELECT COUNT(*) AS count FROM {table} WHERE user_id = ?", (user_id,)).fetchone()
     return int(row["count"])
+
+
+def _rate(numerator: int, denominator: int) -> int | None:
+    if denominator <= 0:
+        return None
+    return round((numerator / denominator) * 100)
 
 
 def _user_from_row(row: Any) -> UserRecord:

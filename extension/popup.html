@@ -120,6 +120,25 @@
 
     <button id="matchJob" type="button">Match Saved Resume</button>
 
+    <section class="statusBox">
+      <div>
+        <strong>Saved job status</strong>
+        <small id="savedOpportunityInfo">Match a job to update its status.</small>
+      </div>
+      <div class="statusControl">
+        <select id="opportunityStatus">
+          <option value="viewed">Viewed</option>
+          <option value="shortlisted">Shortlisted</option>
+          <option value="applied">Applied</option>
+          <option value="interview">Interview</option>
+          <option value="rejected">Rejected</option>
+          <option value="offer">Offer</option>
+          <option value="archived">Archived</option>
+        </select>
+        <button id="updateOpportunityStatus" type="button" class="secondaryButton">Update</button>
+      </div>
+    </section>
+
     <section id="result" class="result empty">No score yet.</section>
 
     <script src="config.js"></script>
