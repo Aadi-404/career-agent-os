@@ -1,4 +1,5 @@
 const API_BASE_URL = window.CAREER_AGENT_OS_EXTENSION_CONFIG?.apiBaseUrl || "http://127.0.0.1:8001";
+const WEB_APP_URL = window.CAREER_AGENT_OS_EXTENSION_CONFIG?.webAppUrl || "http://127.0.0.1:5173";
 
 const state = {
   anonymousSessionId: null,
@@ -299,7 +300,7 @@ async function matchJob() {
     });
     state.quota = response.quota || state.quota;
     renderQuota(state.quota);
-    renderResult(`<strong>${response.analysis.technicalMatchScore}%</strong>${response.analysis.fitCategory}<br>${response.analysis.recommendedAction || ""}`);
+    renderResult(renderMatchResult(response));
     setStatus("Matched");
   } catch (error) {
     if (error.statusCode === 429) {
@@ -334,6 +335,17 @@ function renderResumes(resumes) {
 function renderResult(html, isError = false) {
   els.result.classList.toggle("empty", isError);
   els.result.innerHTML = html;
+}
+
+function renderMatchResult(response) {
+  const opportunity = response.jobOpportunity;
+  const savedStatus = opportunity
+    ? `<br><small>Saved as ${escapeHtml(opportunity.status)} job ${escapeHtml(opportunity.id)}.</small>`
+    : "<br><small>Matched without saving a job opportunity.</small>";
+  const link = opportunity
+    ? `<br><a href="${escapeHtml(WEB_APP_URL)}" target="_blank" rel="noreferrer">Open web app history</a>`
+    : "";
+  return `<strong>${response.analysis.technicalMatchScore}%</strong>${escapeHtml(response.analysis.fitCategory)}<br>${escapeHtml(response.analysis.recommendedAction || "")}${savedStatus}${link}`;
 }
 
 function renderQuota(quota) {

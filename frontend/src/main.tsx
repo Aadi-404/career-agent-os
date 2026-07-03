@@ -425,6 +425,12 @@ type WorkspaceSummary = {
   analysisCount: number;
   preparationSessionCount: number;
   jobOpportunityCount: number;
+  averageMatchScore?: number | null;
+  bestMatchScore?: number | null;
+  activeOpportunityCount: number;
+  interviewOpportunityCount: number;
+  offerOpportunityCount: number;
+  completedPreparationCount: number;
   latestAnalysis?: HistoryAnalysisRecord | null;
 };
 
@@ -2863,6 +2869,8 @@ function SessionStatusPanel({
         <div><span>Reports</span><strong>{workspaceSummary?.analysisCount ?? 0}</strong></div>
         <div><span>Plans</span><strong>{workspaceSummary?.preparationSessionCount ?? 0}</strong></div>
         <div><span>Jobs</span><strong>{workspaceSummary?.jobOpportunityCount ?? 0}</strong></div>
+        <div><span>Avg score</span><strong>{workspaceSummary?.averageMatchScore ?? "--"}%</strong></div>
+        <div><span>Active jobs</span><strong>{workspaceSummary?.activeOpportunityCount ?? 0}</strong></div>
       </div>
 
       <div className="authFormGrid">
@@ -4613,6 +4621,12 @@ function HistoryPanel({
           <div className="scoreTile"><span>Plans</span><strong>{summary?.preparationSessionCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Jobs</span><strong>{summary?.jobOpportunityCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Comparisons</span><strong>{comparisons.length}</strong></div>
+          <div className="scoreTile"><span>Average score</span><strong>{summary?.averageMatchScore ?? "--"}%</strong></div>
+          <div className="scoreTile"><span>Best score</span><strong>{summary?.bestMatchScore ?? "--"}%</strong></div>
+          <div className="scoreTile"><span>Active jobs</span><strong>{summary?.activeOpportunityCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Interviews</span><strong>{summary?.interviewOpportunityCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Offers</span><strong>{summary?.offerOpportunityCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Completed prep</span><strong>{summary?.completedPreparationCount ?? 0}</strong></div>
         </div>
       </div>
 

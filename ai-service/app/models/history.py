@@ -276,6 +276,12 @@ class WorkspaceSummary(BaseModel):
     analysisCount: int
     preparationSessionCount: int
     jobOpportunityCount: int = 0
+    averageMatchScore: int | None = None
+    bestMatchScore: int | None = None
+    activeOpportunityCount: int = 0
+    interviewOpportunityCount: int = 0
+    offerOpportunityCount: int = 0
+    completedPreparationCount: int = 0
     latestAnalysis: AnalysisRecord | None = None
 
 

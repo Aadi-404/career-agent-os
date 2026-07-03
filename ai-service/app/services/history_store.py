@@ -437,6 +437,34 @@ def get_workspace_summary(user_id: str) -> WorkspaceSummary:
         analysis_count = _count(connection, "analyses", user_id)
         preparation_count = _count(connection, "preparation_sessions", user_id)
         opportunity_count = _count(connection, "job_opportunities", user_id)
+        analysis_stats = connection.execute(
+            """
+            SELECT ROUND(AVG(technical_match_score)) AS average_score,
+                   MAX(technical_match_score) AS best_score
+            FROM analyses
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+        opportunity_stats = connection.execute(
+            """
+            SELECT
+                SUM(CASE WHEN status IN ('viewed', 'shortlisted', 'applied', 'interview') THEN 1 ELSE 0 END) AS active_count,
+                SUM(CASE WHEN status = 'interview' THEN 1 ELSE 0 END) AS interview_count,
+                SUM(CASE WHEN status = 'offer' THEN 1 ELSE 0 END) AS offer_count
+            FROM job_opportunities
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+        preparation_stats = connection.execute(
+            """
+            SELECT SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_count
+            FROM preparation_sessions
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
         latest_analysis_row = connection.execute(
             "SELECT * FROM analyses WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
             (user_id,),
@@ -449,6 +477,12 @@ def get_workspace_summary(user_id: str) -> WorkspaceSummary:
         analysisCount=analysis_count,
         preparationSessionCount=preparation_count,
         jobOpportunityCount=opportunity_count,
+        averageMatchScore=int(_row_value(analysis_stats, "average_score")) if _row_value(analysis_stats, "average_score") is not None else None,
+        bestMatchScore=int(_row_value(analysis_stats, "best_score")) if _row_value(analysis_stats, "best_score") is not None else None,
+        activeOpportunityCount=int(_row_value(opportunity_stats, "active_count") or 0),
+        interviewOpportunityCount=int(_row_value(opportunity_stats, "interview_count") or 0),
+        offerOpportunityCount=int(_row_value(opportunity_stats, "offer_count") or 0),
+        completedPreparationCount=int(_row_value(preparation_stats, "completed_count") or 0),
         latestAnalysis=latest_analysis,
     )
 
