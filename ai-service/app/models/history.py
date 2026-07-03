@@ -42,6 +42,15 @@ class UserBillingUpdateRequest(BaseModel):
     billingPeriodEnd: str | None = Field(default=None, max_length=80)
 
 
+class BillingCheckoutResponse(BaseModel):
+    provider: Literal["manual", "stripe", "razorpay", "paddle"]
+    checkoutUrl: str | None = None
+    successUrl: str | None = None
+    cancelUrl: str | None = None
+    configured: bool = False
+    message: str
+
+
 class BillingWebhookSubscriptionEvent(BaseModel):
     provider: Literal["stripe", "razorpay", "paddle", "manual", "other"] = "other"
     eventId: str | None = Field(default=None, max_length=180)
@@ -287,6 +296,8 @@ class UsageQuotaStatus(BaseModel):
     anonymousSessionId: str | None = None
     tier: str
     window: str = "monthly"
+    windowStartAt: str
+    resetAt: str
     usedUnits: int
     limitUnits: int | None = None
     remainingUnits: int | None = None

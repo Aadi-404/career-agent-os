@@ -56,6 +56,7 @@ from app.models.history import (
     AnalysisLookupRequest,
     AnalysisRecord,
     AnalysisSaveRequest,
+    BillingCheckoutResponse,
     BillingWebhookSubscriptionEvent,
     ComparisonRunDeleteRequest,
     ComparisonRunRecord,
@@ -650,6 +651,24 @@ def update_user_billing_metadata(user_id: str, request: UserBillingUpdateRequest
     return update_user_billing(user_id, request)
 
 
+@app.get("/billing/checkout", response_model=BillingCheckoutResponse)
+def get_billing_checkout(userId: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> BillingCheckoutResponse:
+    _authorize_user(userId, session_token)
+    configured = bool(settings.billing_checkout_url)
+    return BillingCheckoutResponse(
+        provider=settings.billing_checkout_provider,
+        checkoutUrl=settings.billing_checkout_url or None,
+        successUrl=settings.billing_checkout_success_url or None,
+        cancelUrl=settings.billing_checkout_cancel_url or None,
+        configured=configured,
+        message=(
+            f"Open {settings.billing_checkout_provider} checkout to upgrade this workspace."
+            if configured
+            else "Checkout is not configured yet. Admin can manually unlock Premium from Settings while payment integration is pending."
+        ),
+    )
+
+
 @app.post("/billing/webhooks/subscription", response_model=UserRecord)
 def ingest_subscription_webhook(
     request: BillingWebhookSubscriptionEvent,
@@ -980,6 +999,16 @@ def _build_production_readiness_checks(database_ok: bool, database_error: str = 
             label="Billing webhook secret",
             status="pass" if settings.billing_webhook_secret else ("fail" if is_production else "warn"),
             detail="Billing webhook secret is configured." if settings.billing_webhook_secret else "BILLING_WEBHOOK_SECRET is empty; configure it before enabling paid subscription webhooks.",
+        ),
+        ReadinessCheck(
+            key="billingCheckout",
+            label="Billing checkout",
+            status="pass" if settings.billing_checkout_url else ("fail" if is_production else "warn"),
+            detail=(
+                f"{settings.billing_checkout_provider} checkout URL is configured."
+                if settings.billing_checkout_url
+                else "BILLING_CHECKOUT_URL is empty; Premium can only be unlocked manually until checkout is configured."
+            ),
         ),
         ReadinessCheck(
             key="cors",

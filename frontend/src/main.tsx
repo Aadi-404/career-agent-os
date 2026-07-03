@@ -267,12 +267,24 @@ type UsageEventRecord = {
 
 type UsageQuotaStatus = {
   userId?: string | null;
+  anonymousSessionId?: string | null;
   tier: string;
   window: string;
+  windowStartAt: string;
+  resetAt: string;
   usedUnits: number;
   limitUnits?: number | null;
   remainingUnits?: number | null;
   unlimited: boolean;
+};
+
+type BillingCheckoutResponse = {
+  provider: "manual" | "stripe" | "razorpay" | "paddle";
+  checkoutUrl?: string | null;
+  successUrl?: string | null;
+  cancelUrl?: string | null;
+  configured: boolean;
+  message: string;
 };
 
 type UsageSummary = {
@@ -813,6 +825,26 @@ function App() {
       }
     } catch {
       // Local tier still controls UI if the backend is offline.
+    }
+  }
+
+  async function startCheckoutUpgrade() {
+    try {
+      await ensureLocalUser();
+      const params = new URLSearchParams({ userId: workspaceUserId });
+      const response = await fetch(`${API_BASE_URL}/billing/checkout?${params.toString()}`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error(await readApiError(response, "Checkout unavailable"));
+      const checkout = await response.json() as BillingCheckoutResponse;
+      if (checkout.configured && checkout.checkoutUrl) {
+        window.open(checkout.checkoutUrl, "_blank", "noopener,noreferrer");
+        setCostModeInfo(checkout.message);
+        return;
+      }
+      await updateAccountTier("premium");
+      setCostModeInfo(`${checkout.message} Local Premium access is enabled for this workspace.`);
+    } catch (error) {
+      await updateAccountTier("premium");
+      setCostModeInfo(error instanceof Error ? `${error.message} Local Premium access is enabled for this workspace.` : "Checkout unavailable. Local Premium access is enabled for this workspace.");
     }
   }
 
@@ -2393,7 +2425,7 @@ function App() {
                       <h3>Score Calculator</h3>
                       <span>Free mandatory output</span>
                     </div>
-                    <QuotaStatusPanel quota={usageQuota} onRefresh={loadCurrentQuota} onUpgrade={() => updateAccountTier("premium")} />
+                    <QuotaStatusPanel quota={usageQuota} onRefresh={loadCurrentQuota} onUpgrade={startCheckoutUpgrade} />
                     <div className="readyGrid">
                       <div><span>Resume status</span><strong>{structuredResume ? "Reviewed structure" : "Raw text"}</strong></div>
                       <div><span>JD status</span><strong>{parsedJd ? "Parsed requirements" : "Raw text"}</strong></div>
@@ -4309,6 +4341,7 @@ function QuotaStatusPanel({ quota, onRefresh, onUpgrade }: { quota: UsageQuotaSt
   const used = quota?.usedUnits ?? 0;
   const limit = quota?.unlimited ? "Unlimited" : quota?.limitUnits ?? "--";
   const remaining = quota?.unlimited ? "Unlimited" : quota?.remainingUnits ?? "--";
+  const resetLabel = quota?.resetAt ? formatDate(quota.resetAt) : "--";
   const exhausted = Boolean(quota && !quota.unlimited && (quota.remainingUnits ?? 0) <= 0);
   const canUpgrade = quota?.tier === "free" || quota?.tier === "anonymous" || exhausted;
   return (
@@ -4322,6 +4355,7 @@ function QuotaStatusPanel({ quota, onRefresh, onUpgrade }: { quota: UsageQuotaSt
         <div><span>Used</span><strong>{used}</strong></div>
         <div><span>Limit</span><strong>{limit}</strong></div>
         <div><span>Remaining</span><strong>{remaining}</strong></div>
+        <div><span>Resets</span><strong>{resetLabel}</strong></div>
       </div>
       <div className="quotaActions">
         <button type="button" className="tinyButton" onClick={onRefresh}>Refresh</button>

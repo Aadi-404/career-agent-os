@@ -18,6 +18,7 @@ const els = {
   quotaUsed: document.getElementById("quotaUsed"),
   quotaLimit: document.getElementById("quotaLimit"),
   quotaRemaining: document.getElementById("quotaRemaining"),
+  quotaReset: document.getElementById("quotaReset"),
   claimSession: document.getElementById("claimSession"),
   loginSession: document.getElementById("loginSession"),
   registerSession: document.getElementById("registerSession"),
@@ -341,18 +342,26 @@ function renderQuota(quota) {
     els.quotaUsed.textContent = "--";
     els.quotaLimit.textContent = "--";
     els.quotaRemaining.textContent = "--";
+    els.quotaReset.textContent = "--";
     return;
   }
   els.quotaTier.textContent = `${formatLabel(quota.tier)} tier, ${formatLabel(quota.window || "monthly")} window`;
   els.quotaUsed.textContent = String(quota.usedUnits ?? 0);
   els.quotaLimit.textContent = quota.unlimited ? "Unlimited" : String(quota.limitUnits ?? "--");
   els.quotaRemaining.textContent = quota.unlimited ? "Unlimited" : String(quota.remainingUnits ?? "--");
+  els.quotaReset.textContent = quota.resetAt ? formatShortDate(quota.resetAt) : "--";
 }
 
 function formatLabel(value) {
   return String(value || "")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatShortDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function setStatus(value) {

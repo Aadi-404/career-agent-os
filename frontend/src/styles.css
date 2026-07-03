@@ -501,7 +501,7 @@ h1 {
 
 .quotaStatusGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(70px, 1fr));
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
   gap: 8px;
 }
 

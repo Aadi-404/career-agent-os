@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     require_user_auth: bool = False
     admin_user_ids: str = "local-aditya"
     billing_webhook_secret: str = ""
+    billing_checkout_provider: Literal["manual", "stripe", "razorpay", "paddle"] = "manual"
+    billing_checkout_url: str = ""
+    billing_checkout_success_url: str = ""
+    billing_checkout_cancel_url: str = ""
     log_level: str = "INFO"
 
     @field_validator("log_level")

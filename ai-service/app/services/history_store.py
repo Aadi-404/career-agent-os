@@ -268,9 +268,10 @@ def get_usage_summary(user_id: str | None = None, limit: int = 50) -> UsageSumma
 
 
 def get_usage_quota_status(user_id: str | None = None, anonymous_session_id: str | None = None) -> UsageQuotaStatus:
+    window_start, reset_at = _monthly_usage_window()
     with get_connection() as connection:
         tier = _usage_tier_for_user(connection, user_id, anonymous_session_id)
-        used_units = _monthly_usage_units(connection, user_id, anonymous_session_id)
+        used_units = _monthly_usage_units(connection, user_id, anonymous_session_id, window_start)
     limit_units = USAGE_QUOTA_LIMITS.get(tier)
     unlimited = tier == "admin" or limit_units is None
     remaining_units = None if unlimited else max(0, limit_units - used_units)
@@ -278,6 +279,8 @@ def get_usage_quota_status(user_id: str | None = None, anonymous_session_id: str
         userId=user_id,
         anonymousSessionId=anonymous_session_id if not user_id else None,
         tier=tier,
+        windowStartAt=window_start,
+        resetAt=reset_at,
         usedUnits=used_units,
         limitUnits=limit_units,
         remainingUnits=remaining_units,
@@ -1215,8 +1218,17 @@ def _usage_tier_for_user(connection, user_id: str | None, anonymous_session_id: 
     return user.subscriptionTier or "free"
 
 
-def _monthly_usage_units(connection, user_id: str | None, anonymous_session_id: str | None = None) -> int:
-    month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+def _monthly_usage_window() -> tuple[str, str]:
+    month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if month_start.month == 12:
+        next_month = month_start.replace(year=month_start.year + 1, month=1)
+    else:
+        next_month = month_start.replace(month=month_start.month + 1)
+    return month_start.isoformat(), next_month.isoformat()
+
+
+def _monthly_usage_units(connection, user_id: str | None, anonymous_session_id: str | None = None, month_start: str | None = None) -> int:
+    month_start = month_start or _monthly_usage_window()[0]
     if user_id:
         row = connection.execute(
             """

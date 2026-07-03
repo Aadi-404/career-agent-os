@@ -85,7 +85,7 @@ label {
 .quotaGrid {
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .quotaGrid span {
@@ -99,7 +99,7 @@ label {
 
 .quotaGrid strong {
   color: #172033;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .checkGrid {
