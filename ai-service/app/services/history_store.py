@@ -175,6 +175,7 @@ def update_user_billing(user_id: str, request: UserBillingUpdateRequest) -> User
 def record_usage_event(
     module: str,
     user_id: str | None = None,
+    anonymous_session_id: str | None = None,
     mode: str | None = None,
     provider: str | None = None,
     model: str | None = None,
@@ -184,16 +185,24 @@ def record_usage_event(
     record_id = _id()
     with get_connection() as connection:
         resolved_user_id = user_id if user_id and connection.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone() else None
+        resolved_anonymous_session_id = None
+        if not resolved_user_id and anonymous_session_id:
+            resolved_anonymous_session_id = (
+                anonymous_session_id
+                if connection.execute("SELECT id FROM anonymous_sessions WHERE id = ?", (anonymous_session_id,)).fetchone()
+                else None
+            )
         connection.execute(
             """
-            INSERT INTO usage_events (id, user_id, module, mode, provider, model, estimated_units, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO usage_events (id, user_id, anonymous_session_id, module, mode, provider, model, estimated_units, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (record_id, resolved_user_id, module, mode, provider, model, max(1, estimated_units), now),
+            (record_id, resolved_user_id, resolved_anonymous_session_id, module, mode, provider, model, max(1, estimated_units), now),
         )
     return UsageEventRecord(
         id=record_id,
         userId=resolved_user_id,
+        anonymousSessionId=resolved_anonymous_session_id,
         module=module,
         mode=mode,
         provider=provider,
@@ -258,15 +267,16 @@ def get_usage_summary(user_id: str | None = None, limit: int = 50) -> UsageSumma
     )
 
 
-def get_usage_quota_status(user_id: str | None = None) -> UsageQuotaStatus:
+def get_usage_quota_status(user_id: str | None = None, anonymous_session_id: str | None = None) -> UsageQuotaStatus:
     with get_connection() as connection:
-        tier = _usage_tier_for_user(connection, user_id)
-        used_units = _monthly_usage_units(connection, user_id)
+        tier = _usage_tier_for_user(connection, user_id, anonymous_session_id)
+        used_units = _monthly_usage_units(connection, user_id, anonymous_session_id)
     limit_units = USAGE_QUOTA_LIMITS.get(tier)
     unlimited = tier == "admin" or limit_units is None
     remaining_units = None if unlimited else max(0, limit_units - used_units)
     return UsageQuotaStatus(
         userId=user_id,
+        anonymousSessionId=anonymous_session_id if not user_id else None,
         tier=tier,
         usedUnits=used_units,
         limitUnits=limit_units,
@@ -275,9 +285,14 @@ def get_usage_quota_status(user_id: str | None = None) -> UsageQuotaStatus:
     )
 
 
-def ensure_usage_quota(module: str, user_id: str | None = None, estimated_units: int = 1) -> UsageQuotaStatus:
+def ensure_usage_quota(
+    module: str,
+    user_id: str | None = None,
+    anonymous_session_id: str | None = None,
+    estimated_units: int = 1,
+) -> UsageQuotaStatus:
     requested_units = max(1, estimated_units)
-    status = get_usage_quota_status(user_id)
+    status = get_usage_quota_status(user_id, anonymous_session_id)
     if status.unlimited:
         return status
     if status.remainingUnits is not None and requested_units > status.remainingUnits:
@@ -1189,8 +1204,10 @@ def _resolved_subscription_tier(requested_tier: str | None) -> str:
     return requested_tier if requested_tier in {"free", "premium"} else "free"
 
 
-def _usage_tier_for_user(connection, user_id: str | None) -> str:
+def _usage_tier_for_user(connection, user_id: str | None, anonymous_session_id: str | None = None) -> str:
     if not user_id:
+        if anonymous_session_id:
+            _get_anonymous_session(connection, anonymous_session_id)
         return "anonymous"
     user = _get_user(connection, user_id)
     if user.role == "admin":
@@ -1198,7 +1215,7 @@ def _usage_tier_for_user(connection, user_id: str | None) -> str:
     return user.subscriptionTier or "free"
 
 
-def _monthly_usage_units(connection, user_id: str | None) -> int:
+def _monthly_usage_units(connection, user_id: str | None, anonymous_session_id: str | None = None) -> int:
     month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
     if user_id:
         row = connection.execute(
@@ -1209,12 +1226,21 @@ def _monthly_usage_units(connection, user_id: str | None) -> int:
             """,
             (user_id, month_start),
         ).fetchone()
+    elif anonymous_session_id:
+        row = connection.execute(
+            """
+            SELECT COALESCE(SUM(estimated_units), 0) AS units
+            FROM usage_events
+            WHERE anonymous_session_id = ? AND created_at >= ?
+            """,
+            (anonymous_session_id, month_start),
+        ).fetchone()
     else:
         row = connection.execute(
             """
             SELECT COALESCE(SUM(estimated_units), 0) AS units
             FROM usage_events
-            WHERE user_id IS NULL AND created_at >= ?
+            WHERE user_id IS NULL AND anonymous_session_id IS NULL AND created_at >= ?
             """,
             (month_start,),
         ).fetchone()
@@ -1345,6 +1371,7 @@ def _usage_event_from_row(row: Any) -> UsageEventRecord:
     return UsageEventRecord(
         id=row["id"],
         userId=row["user_id"],
+        anonymousSessionId=_row_value(row, "anonymous_session_id"),
         module=row["module"],
         mode=row["mode"],
         provider=row["provider"],

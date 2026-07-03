@@ -1113,8 +1113,7 @@ function App() {
             body: JSON.stringify(payload),
           });
           if (!response.ok) {
-            const details = await response.text();
-            throw new Error(details || `Comparison failed for ${resume.title} and ${jd.title}`);
+            throw new Error(await readApiError(response, `Comparison failed for ${resume.title} and ${jd.title}`));
           }
           const analysis = await response.json() as AnalysisResponse;
           nextResults.push({
@@ -1669,8 +1668,7 @@ function App() {
       });
 
       if (!response.ok) {
-        const details = await response.text();
-        throw new Error(details || "Analysis failed");
+        throw new Error(await readApiError(response, "Analysis failed"));
       }
 
       const analysis = await response.json() as AnalysisResponse;
@@ -1720,8 +1718,7 @@ function App() {
       });
 
       if (!response.ok) {
-        const details = await response.text();
-        throw new Error(details || "Preparation build failed");
+        throw new Error(await readApiError(response, "Preparation build failed"));
       }
 
       const preparation = await response.json() as PreparationIntelligence;
@@ -1782,8 +1779,7 @@ function App() {
       });
 
       if (!response.ok) {
-        const details = await response.text();
-        throw new Error(details || `${label} generation failed`);
+        throw new Error(await readApiError(response, `${label} generation failed`));
       }
 
       const payload = await response.json();
@@ -1904,8 +1900,7 @@ function App() {
         }),
       });
       if (!response.ok) {
-        const details = await response.text();
-        throw new Error(details || `${config.label} generation failed`);
+        throw new Error(await readApiError(response, `${config.label} generation failed`));
       }
       const payload = await response.json();
       const updatedAnalysis = config.apply(baseAnalysis, payload);
@@ -1966,8 +1961,7 @@ function App() {
       });
 
       if (!response.ok) {
-        const details = await response.text();
-        throw new Error(details || "Resume extraction failed");
+        throw new Error(await readApiError(response, "Resume extraction failed"));
       }
 
       const extracted = await response.json() as {
@@ -2012,8 +2006,7 @@ function App() {
       });
 
       if (!response.ok) {
-        const details = await response.text();
-        throw new Error(details || "JD extraction failed");
+        throw new Error(await readApiError(response, "JD extraction failed"));
       }
 
       const extracted = await response.json() as {
@@ -2050,8 +2043,7 @@ function App() {
       });
 
       if (!response.ok) {
-        const details = await response.text();
-        throw new Error(details || "Resume normalization failed");
+        throw new Error(await readApiError(response, "Resume normalization failed"));
       }
 
       const normalized = await response.json() as {
@@ -2092,8 +2084,7 @@ function App() {
       });
 
       if (!response.ok) {
-        const details = await response.text();
-        throw new Error(details || "JD parsing failed");
+        throw new Error(await readApiError(response, "JD parsing failed"));
       }
 
       const parsed = await response.json() as JdParseResponse;
@@ -4861,6 +4852,29 @@ function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+async function readApiError(response: Response, fallback: string) {
+  const text = await response.text();
+  if (!text) return fallback;
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown };
+    if (typeof parsed.detail === "string") return parsed.detail;
+    if (Array.isArray(parsed.detail)) {
+      const message = parsed.detail
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object" && "msg" in item) return String((item as { msg: unknown }).msg);
+          return "";
+        })
+        .filter(Boolean)
+        .join("; ");
+      return message || fallback;
+    }
+  } catch {
+    return text;
+  }
+  return fallback;
 }
 
 async function buildAnalysisFingerprint(payload: AnalyzeRequestPayload) {

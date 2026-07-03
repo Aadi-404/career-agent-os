@@ -273,6 +273,7 @@ class WorkspaceSummary(BaseModel):
 class UsageEventRecord(BaseModel):
     id: str
     userId: str | None = None
+    anonymousSessionId: str | None = None
     module: str
     mode: str | None = None
     provider: str | None = None
@@ -283,6 +284,7 @@ class UsageEventRecord(BaseModel):
 
 class UsageQuotaStatus(BaseModel):
     userId: str | None = None
+    anonymousSessionId: str | None = None
     tier: str
     window: str = "monthly"
     usedUnits: int

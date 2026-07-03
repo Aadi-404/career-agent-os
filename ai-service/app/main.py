@@ -491,9 +491,9 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
         llmOptions=request.llmOptions,
         preparationPlanDays=request.preparationPlanDays,
     )
-    _enforce_ai_usage("extension_match", analysis_request, user_id=user_id)
+    _enforce_ai_usage("extension_match", analysis_request, user_id=user_id, anonymous_session_id=request.anonymousSessionId)
     analysis = match_resume_jd(analysis_request)
-    _record_ai_usage("extension_match", analysis_request, user_id=user_id)
+    _record_ai_usage("extension_match", analysis_request, user_id=user_id, anonymous_session_id=request.anonymousSessionId)
     analysis_record = None
     if user_id:
         analysis_record = save_analysis(
@@ -1069,12 +1069,19 @@ def _llm_key_configured(current_settings) -> bool:
     return bool(current_settings.llm_api_key)
 
 
-def _record_ai_usage(module: str, request: AnalyzeRequest, user_id: str | None = None, estimated_units: int = 1) -> None:
+def _record_ai_usage(
+    module: str,
+    request: AnalyzeRequest,
+    user_id: str | None = None,
+    anonymous_session_id: str | None = None,
+    estimated_units: int = 1,
+) -> None:
     options = request.llmOptions
     try:
         record_usage_event(
             module=module,
             user_id=user_id or request.scoringCalibrationUserId,
+            anonymous_session_id=anonymous_session_id,
             mode=options.mode if options else settings.llm_mode,
             provider=options.provider if options else settings.llm_provider,
             model=options.model if options else settings.llm_model,
@@ -1084,10 +1091,17 @@ def _record_ai_usage(module: str, request: AnalyzeRequest, user_id: str | None =
         logger.warning(json.dumps({"event": "usage_tracking_failed", "module": module, "error": str(exc)}))
 
 
-def _enforce_ai_usage(module: str, request: AnalyzeRequest, user_id: str | None = None, estimated_units: int = 1) -> None:
+def _enforce_ai_usage(
+    module: str,
+    request: AnalyzeRequest,
+    user_id: str | None = None,
+    anonymous_session_id: str | None = None,
+    estimated_units: int = 1,
+) -> None:
     ensure_usage_quota(
         module=module,
         user_id=user_id or request.scoringCalibrationUserId,
+        anonymous_session_id=anonymous_session_id,
         estimated_units=estimated_units,
     )
 

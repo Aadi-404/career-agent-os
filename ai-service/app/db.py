@@ -296,6 +296,7 @@ def _postgres_schema() -> str:
             CREATE TABLE IF NOT EXISTS usage_events (
                 id TEXT PRIMARY KEY,
                 user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+                anonymous_session_id TEXT REFERENCES anonymous_sessions(id) ON DELETE SET NULL,
                 module TEXT NOT NULL,
                 mode TEXT,
                 provider TEXT,
@@ -304,8 +305,14 @@ def _postgres_schema() -> str:
                 created_at TEXT NOT NULL
             );
 
+            ALTER TABLE usage_events
+            ADD COLUMN IF NOT EXISTS anonymous_session_id TEXT REFERENCES anonymous_sessions(id) ON DELETE SET NULL;
+
             CREATE INDEX IF NOT EXISTS idx_usage_events_user_created
             ON usage_events(user_id, created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_usage_events_anonymous_session_created
+            ON usage_events(anonymous_session_id, created_at DESC);
 
             CREATE INDEX IF NOT EXISTS idx_usage_events_module_created
             ON usage_events(module, created_at DESC);
