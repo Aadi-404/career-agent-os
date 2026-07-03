@@ -2393,7 +2393,7 @@ function App() {
                       <h3>Score Calculator</h3>
                       <span>Free mandatory output</span>
                     </div>
-                    <QuotaStatusPanel quota={usageQuota} onRefresh={loadCurrentQuota} />
+                    <QuotaStatusPanel quota={usageQuota} onRefresh={loadCurrentQuota} onUpgrade={() => updateAccountTier("premium")} />
                     <div className="readyGrid">
                       <div><span>Resume status</span><strong>{structuredResume ? "Reviewed structure" : "Raw text"}</strong></div>
                       <div><span>JD status</span><strong>{parsedJd ? "Parsed requirements" : "Raw text"}</strong></div>
@@ -4305,22 +4305,28 @@ function AISpendPanel({
   );
 }
 
-function QuotaStatusPanel({ quota, onRefresh }: { quota: UsageQuotaStatus | null; onRefresh: () => void }) {
+function QuotaStatusPanel({ quota, onRefresh, onUpgrade }: { quota: UsageQuotaStatus | null; onRefresh: () => void; onUpgrade: () => void }) {
   const used = quota?.usedUnits ?? 0;
   const limit = quota?.unlimited ? "Unlimited" : quota?.limitUnits ?? "--";
   const remaining = quota?.unlimited ? "Unlimited" : quota?.remainingUnits ?? "--";
+  const exhausted = Boolean(quota && !quota.unlimited && (quota.remainingUnits ?? 0) <= 0);
+  const canUpgrade = quota?.tier === "free" || quota?.tier === "anonymous" || exhausted;
   return (
-    <div className="quotaStatusPanel">
+    <div className={`quotaStatusPanel ${exhausted ? "exhausted" : ""}`}>
       <div>
         <p className="eyebrow">Monthly quota</p>
         <h4>{quota ? `${formatCategory(quota.tier)} tier` : "Quota unavailable"}</h4>
+        {exhausted && <span className="quotaWarning">Limit reached for this monthly window.</span>}
       </div>
       <div className="quotaStatusGrid">
         <div><span>Used</span><strong>{used}</strong></div>
         <div><span>Limit</span><strong>{limit}</strong></div>
         <div><span>Remaining</span><strong>{remaining}</strong></div>
       </div>
-      <button type="button" className="tinyButton" onClick={onRefresh}>Refresh</button>
+      <div className="quotaActions">
+        <button type="button" className="tinyButton" onClick={onRefresh}>Refresh</button>
+        {canUpgrade && <button type="button" className="tinyButton premiumTinyButton" onClick={onUpgrade}>Unlock Premium</button>}
+      </div>
     </div>
   );
 }

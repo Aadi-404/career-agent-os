@@ -470,9 +470,33 @@ h1 {
   padding: 14px;
 }
 
+.quotaStatusPanel.exhausted {
+  border-color: #f0b4a8;
+  background: #fff8f6;
+}
+
 .quotaStatusPanel h4 {
   margin: 0;
   color: var(--brand);
+}
+
+.quotaWarning {
+  display: block;
+  margin-top: 4px;
+  color: #a6422d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.quotaActions {
+  display: grid;
+  gap: 8px;
+}
+
+.premiumTinyButton {
+  border-color: #7eb7ad;
+  background: var(--brand);
+  color: #ffffff;
 }
 
 .quotaStatusGrid {

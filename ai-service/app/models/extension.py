@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.analysis import AnalysisResponse, CandidateContext, LlmOptions
-from app.models.history import AnonymousSessionRecord, JobOpportunityRecord
+from app.models.history import AnonymousSessionRecord, JobOpportunityRecord, UsageQuotaStatus
 
 
 OpportunityStatus = Literal["viewed", "shortlisted", "applied", "interview", "rejected", "offer", "archived"]
@@ -65,6 +65,7 @@ class ExtensionBootstrapResponse(BaseModel):
     resumes: list[ExtensionResumeOption] = Field(default_factory=list)
     manualPasteRequired: bool = False
     defaultCandidateContext: CandidateContext | None = None
+    quota: UsageQuotaStatus | None = None
 
 
 class ExtensionSessionClaimRequest(BaseModel):
@@ -79,6 +80,7 @@ class ExtensionSessionClaimResponse(BaseModel):
     userSession: ExtensionUserSession
     resumes: list[ExtensionResumeOption] = Field(default_factory=list)
     migratedOpportunityCount: int = Field(ge=0)
+    quota: UsageQuotaStatus | None = None
 
 
 class ExtensionMatchRequest(BaseModel):
@@ -108,6 +110,7 @@ class ExtensionMatchRequest(BaseModel):
 class ExtensionMatchResponse(BaseModel):
     analysis: AnalysisResponse
     jobOpportunity: JobOpportunityRecord | None = None
+    quota: UsageQuotaStatus | None = None
 
 
 class ExtensionDiagnosticsRequest(BaseModel):

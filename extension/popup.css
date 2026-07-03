@@ -17,6 +17,7 @@ header,
 .jobBox,
 .result,
 .feedbackBox,
+.quotaBox,
 .authBox {
   background: #ffffff;
   border: 1px solid #dbe3ef;
@@ -74,6 +75,31 @@ label {
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr 1fr;
+}
+
+.quotaBox {
+  background: #f7fbfa;
+  border-color: #cfe1de;
+}
+
+.quotaGrid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quotaGrid span {
+  background: #ffffff;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+}
+
+.quotaGrid strong {
+  color: #172033;
+  font-size: 14px;
 }
 
 .checkGrid {

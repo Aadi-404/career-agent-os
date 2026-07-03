@@ -4,6 +4,7 @@ const state = {
   anonymousSessionId: null,
   sessionToken: null,
   jobDraft: null,
+  quota: null,
 };
 
 const els = {
@@ -13,6 +14,10 @@ const els = {
   email: document.getElementById("email"),
   password: document.getElementById("password"),
   resumeSelect: document.getElementById("resumeSelect"),
+  quotaTier: document.getElementById("quotaTier"),
+  quotaUsed: document.getElementById("quotaUsed"),
+  quotaLimit: document.getElementById("quotaLimit"),
+  quotaRemaining: document.getElementById("quotaRemaining"),
   claimSession: document.getElementById("claimSession"),
   loginSession: document.getElementById("loginSession"),
   registerSession: document.getElementById("registerSession"),
@@ -61,6 +66,7 @@ async function bootstrap() {
     });
     state.anonymousSessionId = response.anonymousSession.id;
     state.sessionToken = response.userSession?.sessionToken || saved.sessionToken || null;
+    state.quota = response.quota || null;
     if (response.userSession?.userId) els.userId.value = response.userSession.userId;
     await chrome.storage.local.set({
       anonymousSessionId: state.anonymousSessionId,
@@ -70,6 +76,7 @@ async function bootstrap() {
       email: saved.email || "",
     });
     renderResumes(response.resumes);
+    renderQuota(state.quota);
     els.sessionInfo.textContent = response.userSession
       ? `Connected as ${response.userSession.displayName}. Session token active.`
       : `Anonymous session ${state.anonymousSessionId}. Connect a user to load saved resumes.`;
@@ -144,12 +151,14 @@ async function refreshConnectedWorkspace(displayName) {
   });
   state.anonymousSessionId = response.anonymousSession.id;
   state.sessionToken = response.userSession?.sessionToken || state.sessionToken;
+  state.quota = response.quota || null;
   await chrome.storage.local.set({
     anonymousSessionId: state.anonymousSessionId,
     userId: response.userSession?.userId || els.userId.value.trim(),
     sessionToken: state.sessionToken || "",
   });
   renderResumes(response.resumes);
+  renderQuota(state.quota);
   els.sessionInfo.textContent = `Connected as ${displayName || response.userSession?.displayName || els.userId.value.trim()}. ${response.resumes.length} saved resume(s).`;
   setStatus(response.resumes.length ? "Ready" : "No saved resumes");
 }
@@ -168,6 +177,7 @@ async function claimSession() {
   });
   state.anonymousSessionId = response.anonymousSession.id;
   state.sessionToken = response.userSession.sessionToken;
+  state.quota = response.quota || null;
   await chrome.storage.local.set({
     anonymousSessionId: state.anonymousSessionId,
     userId,
@@ -176,6 +186,7 @@ async function claimSession() {
     sessionToken: state.sessionToken,
   });
   renderResumes(response.resumes);
+  renderQuota(state.quota);
   els.sessionInfo.textContent = `Connected as ${userId}. Migrated ${response.migratedOpportunityCount} saved job(s).`;
   setStatus(response.resumes.length ? "Ready" : "No saved resumes");
 }
@@ -187,6 +198,7 @@ async function clearSession(message = "Session cleared. Connect again to load sa
   els.password.value = "";
   await chrome.storage.local.remove(["anonymousSessionId", "sessionToken"]);
   renderResumes([]);
+  renderQuota(null);
   els.sessionInfo.textContent = message;
   setStatus("Disconnected");
   try {
@@ -196,7 +208,9 @@ async function clearSession(message = "Session cleared. Connect again to load sa
       anonymousSessionId: null,
     });
     state.anonymousSessionId = response.anonymousSession.id;
+    state.quota = response.quota || null;
     await chrome.storage.local.set({ anonymousSessionId: state.anonymousSessionId });
+    renderQuota(state.quota);
     els.sessionInfo.textContent = `${message} Anonymous session ${state.anonymousSessionId} is ready.`;
   } catch {
     els.sessionInfo.textContent = `${message} Backend is not reachable yet.`;
@@ -267,7 +281,7 @@ async function matchJob() {
   setStatus("Matching...");
   els.matchJob.disabled = true;
   try {
-    const analysis = await post("/extension/jobs/match", {
+    const response = await post("/extension/jobs/match", {
       userId: els.userId.value.trim(),
       sessionToken: state.sessionToken,
       anonymousSessionId: state.anonymousSessionId,
@@ -282,7 +296,9 @@ async function matchJob() {
       saveOpportunity: true,
       status: "viewed",
     });
-    renderResult(`<strong>${analysis.analysis.technicalMatchScore}%</strong>${analysis.analysis.fitCategory}<br>${analysis.analysis.recommendedAction || ""}`);
+    state.quota = response.quota || state.quota;
+    renderQuota(state.quota);
+    renderResult(`<strong>${response.analysis.technicalMatchScore}%</strong>${response.analysis.fitCategory}<br>${response.analysis.recommendedAction || ""}`);
     setStatus("Matched");
   } catch (error) {
     if (error.statusCode === 429) {
@@ -317,6 +333,26 @@ function renderResumes(resumes) {
 function renderResult(html, isError = false) {
   els.result.classList.toggle("empty", isError);
   els.result.innerHTML = html;
+}
+
+function renderQuota(quota) {
+  if (!quota) {
+    els.quotaTier.textContent = "Connect to view quota";
+    els.quotaUsed.textContent = "--";
+    els.quotaLimit.textContent = "--";
+    els.quotaRemaining.textContent = "--";
+    return;
+  }
+  els.quotaTier.textContent = `${formatLabel(quota.tier)} tier, ${formatLabel(quota.window || "monthly")} window`;
+  els.quotaUsed.textContent = String(quota.usedUnits ?? 0);
+  els.quotaLimit.textContent = quota.unlimited ? "Unlimited" : String(quota.limitUnits ?? "--");
+  els.quotaRemaining.textContent = quota.unlimited ? "Unlimited" : String(quota.remainingUnits ?? "--");
+}
+
+function formatLabel(value) {
+  return String(value || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function setStatus(value) {

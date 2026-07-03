@@ -353,10 +353,12 @@ def bootstrap_extension(request: ExtensionBootstrapRequest) -> ExtensionBootstra
     user_session = _extension_user_session_from_token(request.sessionToken) if request.sessionToken else None
     user_id = user_session.userId if user_session else request.userId
     resumes = list_extension_resumes(user_id) if user_id else []
+    quota = get_usage_quota_status(user_id=user_id, anonymous_session_id=None if user_id else anonymous_session.id)
     return ExtensionBootstrapResponse(
         anonymousSession=anonymous_session,
         userSession=user_session,
         resumes=resumes,
+        quota=quota,
         manualPasteRequired=not bool(resumes),
         defaultCandidateContext=(
             CandidateContext(
@@ -438,6 +440,7 @@ def claim_extension_session(request: ExtensionSessionClaimRequest) -> ExtensionS
         ),
         resumes=list_extension_resumes(request.userId),
         migratedOpportunityCount=migrated_count,
+        quota=get_usage_quota_status(user_id=request.userId),
     )
 
 
@@ -496,6 +499,7 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
     _enforce_ai_usage("extension_match", analysis_request, user_id=user_id, anonymous_session_id=request.anonymousSessionId)
     analysis = match_resume_jd(analysis_request)
     _record_ai_usage("extension_match", analysis_request, user_id=user_id, anonymous_session_id=request.anonymousSessionId)
+    quota = get_usage_quota_status(user_id=user_id, anonymous_session_id=None if user_id else request.anonymousSessionId)
     analysis_record = None
     if user_id:
         analysis_record = save_analysis(
@@ -526,7 +530,7 @@ def match_extension_job(request: ExtensionMatchRequest) -> ExtensionMatchRespons
                 analysisResponse=analysis,
             )
         )
-    return ExtensionMatchResponse(analysis=analysis, jobOpportunity=opportunity)
+    return ExtensionMatchResponse(analysis=analysis, jobOpportunity=opportunity, quota=quota)
 
 
 @app.post("/ai/preparation/build", response_model=PreparationIntelligence)
