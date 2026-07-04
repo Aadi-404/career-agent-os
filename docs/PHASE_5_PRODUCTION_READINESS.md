@@ -59,6 +59,14 @@ For each page verify:
 - Match saves a job opportunity under the connected user.
 - Saved opportunity appears in the web app History tab.
 
+Before manual site testing, run the local parser fixtures:
+
+```powershell
+node extension\test-content-script.mjs
+```
+
+This covers representative LinkedIn, Naukri, Indeed, and generic company career page DOM shapes. It does not replace live validation because job sites frequently change selectors and login-gated layouts.
+
 ## Production Deployment Checklist
 
 - Set `ENVIRONMENT=production`.

@@ -62,3 +62,6 @@ jobs:
       - name: Frontend smoke check
         working-directory: frontend
         run: npm run smoke
+
+      - name: Extension content parser fixtures
+        run: node extension/test-content-script.mjs
