@@ -174,6 +174,7 @@ Built:
 - Admin-only demo seed endpoint and Settings button.
 - In-app launch checklist tracker.
 - Project demo guide for portfolio and interview walkthroughs.
+- GitHub-facing project status summary.
 - CI checks for backend, frontend, deployment scripts, extension packaging, and production rehearsal.
 
 Still needs:

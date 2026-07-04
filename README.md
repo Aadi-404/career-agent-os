@@ -13,6 +13,12 @@ Level 1 is a resume and job-description technical fit analyzer.
 
 ## Product Roadmap
 
+GitHub-facing project status summary:
+
+```text
+PROJECT_STATUS.md
+```
+
 The step-by-step product direction is documented in:
 
 ```text
