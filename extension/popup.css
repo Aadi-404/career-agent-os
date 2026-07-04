@@ -84,6 +84,12 @@ label {
   grid-template-columns: 1fr auto;
 }
 
+.jobActions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
 .quotaBox {
   background: #f7fbfa;
   border-color: #cfe1de;
@@ -170,6 +176,7 @@ button:disabled {
 @media (max-width: 390px) {
   .authBox,
   .manualMetaGrid,
+  .jobActions,
   .inlineControl {
     grid-template-columns: 1fr;
   }

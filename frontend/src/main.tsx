@@ -743,6 +743,10 @@ function App() {
   }, [workspaceUserId]);
 
   useEffect(() => {
+    importResearchDraftFromUrl();
+  }, []);
+
+  useEffect(() => {
     if (activeTask === "history") {
       loadHistory();
     }
@@ -876,6 +880,44 @@ function App() {
     window.localStorage.removeItem(sessionIssuedAtStorageKey);
     setCurrentUser(null);
     setSessionInfo(message);
+  }
+
+  function importResearchDraftFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("task") !== "research") return;
+    const encoded = params.get("researchDraft");
+    if (!encoded) {
+      setActiveTask("research");
+      return;
+    }
+    try {
+      const payload = decodeResearchHandoff(encoded);
+      const title = payload.title || "Imported job research";
+      const company = payload.company || "";
+      const description = payload.description || "";
+      const sourceUrl = payload.url || "";
+      setActiveTask("research");
+      setResearchTitle(`${company ? `${company} ` : ""}${title} research signals`.slice(0, 180));
+      setResearchCompany(company);
+      setResearchRoleTitle(title);
+      setResearchType("role");
+      setResearchSummary(
+        `Imported from browser extension for ${title}${company ? ` at ${company}` : ""}. Review the JD text and generate or save a research note for preparation planning.`
+      );
+      setResearchManualContext(description);
+      setResearchKeySignals([
+        "Imported from browser extension job page.",
+        sourceUrl ? "Original job source URL is attached." : "No source URL was available.",
+        payload.location ? `Location signal: ${payload.location}` : "",
+      ].filter(Boolean).join("\n"));
+      setResearchPreparationTopics(["Role-specific JD emphasis", "Company-specific interview preparation"].join("\n"));
+      setResearchSourcesDraft(sourceUrl ? `Job page | ${sourceUrl} | job_post | Imported from browser extension` : "");
+      setResearchInfo("Imported job page into Research Notes from the browser extension.");
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch {
+      setActiveTask("research");
+      setResearchInfo("Could not import the extension research payload.");
+    }
   }
 
   function applyWorkspaceUser() {
@@ -5633,6 +5675,29 @@ function toResearchContextNote(note: ResearchNoteRecord) {
     keySignals: note.keySignals,
     preparationTopics: note.preparationTopics,
     sources: note.sources,
+  };
+}
+
+function decodeResearchHandoff(encoded: string): {
+  title?: string;
+  company?: string;
+  description?: string;
+  location?: string;
+  url?: string;
+  source?: string;
+} {
+  const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(base64.length + ((4 - base64.length % 4) % 4), "=");
+  const binary = window.atob(padded);
+  const json = decodeURIComponent(Array.from(binary).map((character) => `%${character.charCodeAt(0).toString(16).padStart(2, "0")}`).join(""));
+  const parsed = JSON.parse(json) as Record<string, unknown>;
+  return {
+    title: typeof parsed.title === "string" ? parsed.title : undefined,
+    company: typeof parsed.company === "string" ? parsed.company : undefined,
+    description: typeof parsed.description === "string" ? parsed.description : undefined,
+    location: typeof parsed.location === "string" ? parsed.location : undefined,
+    url: typeof parsed.url === "string" ? parsed.url : undefined,
+    source: typeof parsed.source === "string" ? parsed.source : undefined,
   };
 }
 

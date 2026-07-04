@@ -27,6 +27,7 @@ const els = {
   clearSession: document.getElementById("clearSession"),
   sessionInfo: document.getElementById("sessionInfo"),
   parsePage: document.getElementById("parsePage"),
+  openResearch: document.getElementById("openResearch"),
   matchJob: document.getElementById("matchJob"),
   opportunityStatus: document.getElementById("opportunityStatus"),
   updateOpportunityStatus: document.getElementById("updateOpportunityStatus"),
@@ -54,6 +55,7 @@ els.registerSession.addEventListener("click", registerSession);
 els.claimSession.addEventListener("click", claimSession);
 els.clearSession.addEventListener("click", () => clearSession());
 els.parsePage.addEventListener("click", parseCurrentPage);
+els.openResearch.addEventListener("click", openResearchNotes);
 els.matchJob.addEventListener("click", matchJob);
 els.updateOpportunityStatus.addEventListener("click", updateOpportunityStatus);
 els.saveParserFeedback.addEventListener("click", saveParserFeedback);
@@ -322,6 +324,29 @@ async function matchJob() {
   }
 }
 
+async function openResearchNotes() {
+  const description = els.manualJd.value.trim() || state.jobDraft?.description || "";
+  const parsedTitle = els.manualTitle.value.trim() || state.jobDraft?.title || "";
+  const company = els.manualCompany.value.trim() || state.jobDraft?.company || "";
+  if (description.length < 20 && !parsedTitle && !company) {
+    setStatus("Parse or paste a job first");
+    return;
+  }
+  const title = parsedTitle || "Pasted job description";
+  const payload = {
+    title,
+    company,
+    description: description.slice(0, 5000),
+    location: state.jobDraft?.location || "",
+    url: state.jobDraft?.url || "",
+    source: "extension",
+  };
+  const encoded = encodePayload(payload);
+  const separator = WEB_APP_URL.includes("?") ? "&" : "?";
+  await chrome.tabs.create({ url: `${WEB_APP_URL}${separator}task=research&researchDraft=${encoded}` });
+  setStatus("Opened research notes");
+}
+
 async function updateOpportunityStatus() {
   if (!state.lastOpportunity) {
     setStatus("Match and save a job first");
@@ -482,4 +507,10 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function encodePayload(payload) {
+  const json = JSON.stringify(payload);
+  const binary = unescape(encodeURIComponent(json));
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }

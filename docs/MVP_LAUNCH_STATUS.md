@@ -200,6 +200,7 @@ Built:
 - Score-based research note draft generation from the latest analysis.
 - PostgreSQL persistence for research summaries, key signals, preparation topics, and source references.
 - Frontend Research Notes task for saving reusable research memory.
+- Browser extension handoff that opens Research Notes with role, company, JD text, and source URL prefilled.
 - Preparation intelligence can include saved research notes without rerunning the score.
 - Demo seed record showing how future cited research will be stored.
 

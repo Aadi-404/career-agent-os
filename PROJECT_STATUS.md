@@ -27,7 +27,7 @@ Core app is implemented. Remaining public-launch work is deployment-specific: st
 | Cost control | Complete | Mandatory score call separated from optional premium-style AI calls. |
 | Persistence | Complete | PostgreSQL users, resumes, JDs, analyses, comparisons, prep sessions, opportunities. |
 | Auth | Complete | Password auth, session tokens, guarded user APIs, admin guard. |
-| Browser extension | Mostly complete | Saved resume matching, page parsing, manual JD fallback, parser feedback. |
+| Browser extension | Mostly complete | Saved resume matching, page parsing, manual JD fallback, parser feedback, research handoff. |
 | Evaluation/tuning | Complete groundwork | Feedback labels, role-family calibration, audit history, rollback. |
 | Admin readiness | Complete groundwork | Diagnostics, production readiness, usage dashboard, billing handoff, launch tracker. |
 | Deployment tooling | Complete groundwork | Dockerfiles, compose examples, smoke check, production rehearsal, backup/restore. |
@@ -138,6 +138,7 @@ Built:
 
 - Manual research-note workspace memory.
 - Score-based research note draft generation.
+- Browser extension handoff can prefill research notes from parsed job pages.
 - PostgreSQL storage for company, role, market, interview, and manual notes.
 - Saved key signals, preparation topics, and source references.
 - Preparation intelligence can use saved research notes as context.
