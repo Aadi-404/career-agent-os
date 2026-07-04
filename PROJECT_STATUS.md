@@ -111,8 +111,9 @@ npm run smoke
 Deployment tooling:
 
 ```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\verify_release.py
 .\ai-service\.venv\Scripts\python.exe deployment\production_rehearsal.py --api http://127.0.0.1:8001 --web http://127.0.0.1:8080
-.\ai-service\.venv\Scripts\python.exe -m py_compile deployment\smoke_check.py deployment\package_extension.py deployment\backup_database.py deployment\restore_database.py deployment\production_rehearsal.py deployment\seed_demo_data.py
+.\ai-service\.venv\Scripts\python.exe -m py_compile deployment\smoke_check.py deployment\package_extension.py deployment\backup_database.py deployment\restore_database.py deployment\production_rehearsal.py deployment\seed_demo_data.py deployment\verify_release.py
 node extension\test-content-script.mjs
 ```
 

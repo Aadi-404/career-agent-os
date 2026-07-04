@@ -170,6 +170,12 @@ Run deployment smoke checks with:
 .\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api http://localhost:8000 --frontend http://localhost:5173
 ```
 
+Run the full local release verification bundle with:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\verify_release.py
+```
+
 For production-style smoke checks, include auth, quota, checkout, billing webhook, and extension packaging:
 
 ```powershell

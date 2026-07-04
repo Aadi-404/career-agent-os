@@ -65,6 +65,12 @@ Rehearse production deployment assets:
 
 Add `--compose-config` when Docker is installed and available.
 
+Run the full local release verifier before tagging or deploying:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\verify_release.py
+```
+
 ## Post-Deploy Smoke Check
 
 Check backend:
