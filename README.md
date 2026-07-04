@@ -31,6 +31,12 @@ MVP launch status and remaining deploy blockers are documented in:
 docs/MVP_LAUNCH_STATUS.md
 ```
 
+Project demo and interview explanation guide:
+
+```text
+docs/PROJECT_DEMO_GUIDE.md
+```
+
 Staging deployment steps are documented in:
 
 ```text

@@ -2,6 +2,12 @@
 
 Use this runbook before public production deployment. Staging should be close to production, but it can use test domains, test billing links, and non-sensitive demo data.
 
+The same manual launch checks are also trackable inside:
+
+```text
+Scoring Settings -> Launch -> Manual Launch Tracker
+```
+
 ## 1. Staging Targets
 
 Recommended staging services:

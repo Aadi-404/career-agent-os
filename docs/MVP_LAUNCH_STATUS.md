@@ -172,6 +172,8 @@ Built:
 - Staging deployment runbook.
 - Demo workspace seed script.
 - Admin-only demo seed endpoint and Settings button.
+- In-app launch checklist tracker.
+- Project demo guide for portfolio and interview walkthroughs.
 - CI checks for backend, frontend, deployment scripts, extension packaging, and production rehearsal.
 
 Still needs:

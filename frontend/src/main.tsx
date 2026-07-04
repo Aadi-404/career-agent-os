@@ -80,6 +80,7 @@ type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" 
 type CostMode = "free" | "standard" | "premium";
 type AccessTier = "free" | "premium" | "admin";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
+type LaunchChecklistState = Record<string, boolean>;
 
 type AnalyzeRequestPayload = {
   resumeText: string;
@@ -528,6 +529,50 @@ const workspaceUserStorageKey = "careerAgentWorkspaceUserId";
 const sessionTokenStorageKey = "careerAgentSessionToken";
 const sessionIssuedAtStorageKey = "careerAgentSessionIssuedAt";
 const accountTierStorageKey = "careerAgentAccountTier";
+const launchChecklistStorageKey = "careerAgentLaunchChecklist";
+
+const launchChecklistItems = [
+  {
+    id: "admin_bootstrap",
+    title: "Admin bootstrap verified",
+    detail: "First admin user can login and Settings admin controls are available.",
+  },
+  {
+    id: "demo_seed",
+    title: "Demo workspace seeded",
+    detail: "Portfolio demo user has saved resume, JD, score, prep, opportunity, evaluation, and usage records.",
+  },
+  {
+    id: "staging_smoke",
+    title: "Staging smoke check passed",
+    detail: "Run smoke_check.py against deployed staging API and frontend with a real session token.",
+  },
+  {
+    id: "extension_validation",
+    title: "Extension real-site validation done",
+    detail: "LinkedIn, Naukri, Indeed, and one company careers page tested with manual JD fallback.",
+  },
+  {
+    id: "backup_export",
+    title: "Backup export verified",
+    detail: "PostgreSQL JSON backup was generated and reviewed with non-sensitive staging data.",
+  },
+  {
+    id: "live_ai_split",
+    title: "Live AI modules tested separately",
+    detail: "Score, prep plan, gap report, interview questions, and cross-questions tested one at a time.",
+  },
+  {
+    id: "billing_handoff",
+    title: "Billing handoff checked",
+    detail: "Checkout config or manual premium unlock path verified in Settings and backend smoke checks.",
+  },
+  {
+    id: "production_readiness",
+    title: "Production readiness has no failed checks",
+    detail: "Settings readiness panel and diagnostics endpoint are clean for deployment.",
+  },
+] as const;
 
 function authHeaders(contentType = true): HeadersInit {
   const token = window.localStorage.getItem(sessionTokenStorageKey) || "";
@@ -539,6 +584,15 @@ function authHeaders(contentType = true): HeadersInit {
 
 function storedAccountTier(user: AdminUserRecord): AccessTier {
   return user.subscriptionTier === "premium" ? "premium" : "free";
+}
+
+function loadLaunchChecklist(): LaunchChecklistState {
+  try {
+    const stored = window.localStorage.getItem(launchChecklistStorageKey);
+    return stored ? JSON.parse(stored) as LaunchChecklistState : {};
+  } catch {
+    return {};
+  }
 }
 
 function App() {
@@ -614,6 +668,7 @@ function App() {
   const [usageQuota, setUsageQuota] = useState<UsageQuotaStatus | null>(null);
   const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
   const [demoSeedResult, setDemoSeedResult] = useState<DemoSeedResponse | null>(null);
+  const [launchChecklist, setLaunchChecklist] = useState<LaunchChecklistState>(() => loadLaunchChecklist());
   const [settingsInfo, setSettingsInfo] = useState("");
   const [sessionInfo, setSessionInfo] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -1631,10 +1686,25 @@ function App() {
         "Demo workspace session active.",
       );
       setSettingsInfo(`Seeded ${seeded.resumeCount} resume(s), ${seeded.jobDescriptionCount} JD(s), ${seeded.analysisCount} analysis, and ${seeded.jobOpportunityCount} opportunity record(s).`);
+      updateLaunchChecklist("demo_seed", true);
       setActiveTask("history");
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "Demo seed failed");
     }
+  }
+
+  function updateLaunchChecklist(itemId: string, checked: boolean) {
+    setLaunchChecklist((current) => {
+      const next = { ...current, [itemId]: checked };
+      window.localStorage.setItem(launchChecklistStorageKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function resetLaunchChecklist() {
+    window.localStorage.removeItem(launchChecklistStorageKey);
+    setLaunchChecklist({});
+    setSettingsInfo("Launch checklist reset for this browser.");
   }
 
   async function loadCurrentQuota() {
@@ -2847,6 +2917,7 @@ function App() {
                 usageSummary={usageSummary}
                 billingDraft={billingDraft}
                 demoSeedResult={demoSeedResult}
+                launchChecklist={launchChecklist}
                 canManageSettings={currentUser?.role === "admin"}
                 info={settingsInfo}
                 onRefresh={loadScoringConfigs}
@@ -2864,6 +2935,8 @@ function App() {
                 onBillingSave={saveBillingMetadata}
                 onBillingCancel={() => setBillingDraft(null)}
                 onSeedDemo={seedDemoWorkspace}
+                onToggleLaunchChecklist={updateLaunchChecklist}
+                onResetLaunchChecklist={resetLaunchChecklist}
               />
             </TaskPanel>
           )}
@@ -3760,6 +3833,7 @@ function ScoringSettingsPanel({
   usageSummary,
   billingDraft,
   demoSeedResult,
+  launchChecklist,
   canManageSettings,
   info,
   onRefresh,
@@ -3777,6 +3851,8 @@ function ScoringSettingsPanel({
   onBillingSave,
   onBillingCancel,
   onSeedDemo,
+  onToggleLaunchChecklist,
+  onResetLaunchChecklist,
 }: {
   configs: ScoringCalibrationConfig[];
   recommendation: ScoringCalibrationRecommendation | null;
@@ -3788,6 +3864,7 @@ function ScoringSettingsPanel({
   usageSummary: UsageSummary | null;
   billingDraft: BillingDraft | null;
   demoSeedResult: DemoSeedResponse | null;
+  launchChecklist: LaunchChecklistState;
   canManageSettings: boolean;
   info: string;
   onRefresh: () => void;
@@ -3805,6 +3882,8 @@ function ScoringSettingsPanel({
   onBillingSave: (draft: BillingDraft) => void;
   onBillingCancel: () => void;
   onSeedDemo: () => void;
+  onToggleLaunchChecklist: (itemId: string, checked: boolean) => void;
+  onResetLaunchChecklist: () => void;
 }) {
   const [selectedFamily, setSelectedFamily] = useState(".NET");
   const activeConfig = configs.find((config) => config.roleFamily === selectedFamily) ?? configs[0];
@@ -3846,6 +3925,8 @@ function ScoringSettingsPanel({
   const premiumUserCount = users.filter((user) => user.subscriptionTier === "premium").length;
   const activeBillingCount = users.filter((user) => ["trialing", "active", "past_due"].includes(user.subscriptionStatus ?? "")).length;
   const adminUserCount = users.filter((user) => user.role === "admin").length;
+  const launchDoneCount = launchChecklistItems.filter((item) => launchChecklist[item.id]).length;
+  const launchCompletion = Math.round((launchDoneCount / launchChecklistItems.length) * 100);
 
   if (!configs.length) {
     return (
@@ -3977,6 +4058,38 @@ function ScoringSettingsPanel({
         ) : (
           <p className="hint">Production readiness has not been loaded yet.</p>
         )}
+      </div>
+
+      <div className="panel diagnosticsPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Launch</p>
+            <h3>Manual Launch Tracker</h3>
+          </div>
+          <button type="button" className="secondaryButton" onClick={onResetLaunchChecklist}>Reset Tracker</button>
+        </div>
+        <div className="launchTrackerSummary">
+          <div>
+            <strong>{launchCompletion}% complete</strong>
+            <span>{launchDoneCount} of {launchChecklistItems.length} launch checks marked done in this browser.</span>
+          </div>
+          <div className="progressBar"><span style={{ width: `${launchCompletion}%` }} /></div>
+        </div>
+        <div className="launchTrackerList">
+          {launchChecklistItems.map((item) => (
+            <label key={item.id} className={launchChecklist[item.id] ? "done" : ""}>
+              <input
+                type="checkbox"
+                checked={Boolean(launchChecklist[item.id])}
+                onChange={(event) => onToggleLaunchChecklist(item.id, event.target.checked)}
+              />
+              <span>
+                <strong>{item.title}</strong>
+                <small>{item.detail}</small>
+              </span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <div className="panel diagnosticsPanel">

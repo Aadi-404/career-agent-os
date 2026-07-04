@@ -1749,6 +1749,68 @@ button.premiumButton:not(.secondaryButton) span {
   color: var(--brand);
 }
 
+.launchTrackerSummary {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d5e5e2;
+  border-radius: 8px;
+  background: #f7fbfa;
+  padding: 12px;
+}
+
+.launchTrackerSummary strong {
+  color: var(--brand);
+}
+
+.launchTrackerSummary span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.launchTrackerList {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.launchTrackerList label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 11px;
+}
+
+.launchTrackerList label.done {
+  border-color: #b8e2d2;
+  background: #f2fbf7;
+}
+
+.launchTrackerList input {
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+}
+
+.launchTrackerList span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.launchTrackerList strong {
+  color: var(--ink);
+}
+
+.launchTrackerList small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .readinessList {
   display: grid;
   gap: 10px;
