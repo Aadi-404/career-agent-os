@@ -51,6 +51,14 @@ cd ..\ai-service
 .\.venv\Scripts\python.exe -m compileall app
 ```
 
+Rehearse production deployment assets:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\production_rehearsal.py --api https://api.your-domain.com --web https://app.your-domain.com
+```
+
+Add `--compose-config` when Docker is installed and available.
+
 ## Post-Deploy Smoke Check
 
 Check backend:

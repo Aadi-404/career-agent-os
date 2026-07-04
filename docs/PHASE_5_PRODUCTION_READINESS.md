@@ -151,6 +151,12 @@ copy deployment\env\compose.production.env.example deployment\env\compose.produc
 Edit `deployment/env/compose.production.env`, then run:
 
 ```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\production_rehearsal.py --api https://api.your-domain.com --web https://app.your-domain.com --compose-config
+```
+
+Then start the stack:
+
+```powershell
 docker compose --env-file deployment/env/compose.production.env -f docker-compose.production.example.yml up --build -d
 ```
 
@@ -220,6 +226,7 @@ The GitHub Actions workflow in `.github/workflows/ci.yml` runs on pushes and pul
 - Backend compile check.
 - Backend unit tests.
 - Deployment script compile checks.
+- Production rehearsal dry run.
 - Extension packaging dry run.
 - Frontend dependency install.
 - Frontend production build.

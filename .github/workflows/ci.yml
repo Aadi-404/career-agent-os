@@ -32,7 +32,7 @@ jobs:
       - name: Compile backend and deployment scripts
         run: |
           python -m compileall ai-service/app ai-service/tests
-          python -m py_compile deployment/smoke_check.py deployment/package_extension.py deployment/backup_database.py deployment/restore_database.py
+          python -m py_compile deployment/smoke_check.py deployment/package_extension.py deployment/backup_database.py deployment/restore_database.py deployment/production_rehearsal.py
 
       - name: Run backend tests
         working-directory: ai-service
@@ -40,6 +40,9 @@ jobs:
 
       - name: Package extension dry run
         run: python deployment/package_extension.py --api http://127.0.0.1:8001 --version 0.1.0
+
+      - name: Production rehearsal dry run
+        run: python deployment/production_rehearsal.py --api http://127.0.0.1:8001 --web http://127.0.0.1:8080
 
       - name: Set up Node
         uses: actions/setup-node@v4

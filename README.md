@@ -25,6 +25,12 @@ Phase 5 deployment and extension validation details are documented in:
 docs/PHASE_5_PRODUCTION_READINESS.md
 ```
 
+MVP launch status and remaining deploy blockers are documented in:
+
+```text
+docs/MVP_LAUNCH_STATUS.md
+```
+
 Deployment environment templates are available in:
 
 ```text
@@ -168,6 +174,18 @@ For a single-host Docker deployment, copy and edit `deployment/env/compose.produ
 
 ```powershell
 docker compose --env-file deployment/env/compose.production.env -f docker-compose.production.example.yml up --build -d
+```
+
+Before running the production compose stack, rehearse the deployment assets locally:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\production_rehearsal.py --api https://api.your-domain.com --web https://app.your-domain.com
+```
+
+If Docker is installed and running, include compose validation:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\production_rehearsal.py --api https://api.your-domain.com --web https://app.your-domain.com --compose-config
 ```
 
 ## Browser Extension

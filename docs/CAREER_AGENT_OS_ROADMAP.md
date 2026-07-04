@@ -269,6 +269,8 @@ Started:
 - Deployment tooling includes PostgreSQL JSON backup export for data safety reviews.
 - Deployment tooling includes a local/dev JSON restore utility.
 - The web app has an editable workspace user selector for multi-user testing.
+- Production deployment assets can be rehearsed with `deployment/production_rehearsal.py`.
+- MVP launch status and deploy blockers are summarized in `docs/MVP_LAUNCH_STATUS.md`.
 
 Why this matters:
 
