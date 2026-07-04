@@ -223,11 +223,12 @@ Status: Started.
 Built:
 
 - Apply Decision task that combines current score, opportunity signals, and saved research notes into apply / prepare first / selective apply / skip guidance.
+- Resume Rewrite task with evidence-constrained suggestions and proof-safety labels.
 
 Still planned:
 
 - Apply-decision agent.
-- Resume rewrite agent with evidence constraints.
+- Resume rewrite agent with approval workflow and structured resume edits.
 - Interview-prep tracker agent.
 - Company research agent.
 - RAG memory over saved resumes, JDs, analyses, feedback, and preparation progress.

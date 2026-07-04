@@ -108,6 +108,29 @@ class ApplicationDecisionResponse(BaseModel):
     scoreSignals: dict[str, int | None] = Field(default_factory=dict)
 
 
+class ResumeRewriteRequest(BaseModel):
+    sourceRequest: AnalyzeRequest
+    analysis: "AnalysisResponse"
+    resumeText: str = Field(min_length=50, max_length=30000)
+    limit: int = Field(default=8, ge=1, le=20)
+
+
+class ResumeRewriteSuggestion(BaseModel):
+    targetRequirement: str
+    evidenceSource: str
+    originalEvidence: str | None = None
+    currentIssue: str
+    rewrittenBullet: str
+    proofSafety: Literal["safe_from_existing_evidence", "needs_user_verification", "gap_do_not_claim"]
+    reason: str
+
+
+class ResumeRewriteResponse(BaseModel):
+    summary: str
+    suggestions: list[ResumeRewriteSuggestion] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class MatchingSkill(BaseModel):
     skill: str
     evidenceFromResume: str

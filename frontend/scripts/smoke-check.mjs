@@ -36,6 +36,11 @@ const checks = [
     patterns: ["Apply Decision", "Build Apply Decision", "Research Signals Used"],
   },
   {
+    name: "resume rewrite workflow",
+    file: "src/main.tsx",
+    patterns: ["Resume Rewrite", "Build Rewrite Suggestions", "Evidence-Constrained Rewrite"],
+  },
+  {
     name: "extension workflow",
     file: "src/main.tsx",
     patterns: ["Extension Setup", "Check Extension Readiness", "Real Site Validation", "Record parser quality"],

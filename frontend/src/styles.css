@@ -779,8 +779,15 @@ h1 {
   gap: 18px;
 }
 
+.rewriteWorkspace {
+  display: grid;
+  gap: 18px;
+}
+
 .decisionControlPanel,
-.decisionResultPanel {
+.decisionResultPanel,
+.rewriteControlPanel,
+.rewriteResultPanel {
   display: grid;
   gap: 16px;
 }
@@ -837,6 +844,78 @@ h1 {
 .decision-skip {
   border-color: #fecaca;
   background: #fff7f7;
+}
+
+.rewriteList {
+  display: grid;
+  gap: 14px;
+}
+
+.rewriteItem {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 15px;
+}
+
+.rewriteItemHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.rewriteItemHeader div {
+  display: grid;
+  gap: 4px;
+}
+
+.rewriteItemHeader span {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.rewrite-safe_from_existing_evidence .rewriteItemHeader span {
+  background: #e8f6f4;
+  color: #115e59;
+}
+
+.rewrite-needs_user_verification .rewriteItemHeader span {
+  background: #fff7d6;
+  color: #8a5a00;
+}
+
+.rewrite-gap_do_not_claim .rewriteItemHeader span {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.rewriteItem p {
+  margin: 4px 0 0;
+}
+
+.rewriteEvidence {
+  border-left: 4px solid #b7ded8;
+  padding-left: 10px;
+}
+
+.rewriteWarningBox {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #f3d28b;
+  border-radius: 8px;
+  background: #fffdf7;
+  padding: 12px;
+}
+
+.rewriteWarningBox span {
+  color: #8a5a00;
+  font-weight: 800;
 }
 
 .researchEditorPanel,

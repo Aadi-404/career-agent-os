@@ -29,6 +29,8 @@ from app.models.analysis import (
     ResearchNoteDraft,
     RequirementMatch,
     ResumeImprovement,
+    ResumeRewriteRequest,
+    ResumeRewriteResponse,
 )
 from app.models.auth import UserLoginRequest, UserPasswordRegisterRequest, UserSessionResponse
 from app.models.demo import DemoSeedRequest, DemoSeedResponse
@@ -161,6 +163,7 @@ from app.services.optional_artifact_service import (
 from app.services.preparation_service import build_preparation_intelligence
 from app.services.prep_memory_service import build_prep_memory
 from app.services.research_service import build_research_note_draft
+from app.services.resume_rewrite_service import build_resume_rewrite
 from app.services.resume_extractor import extract_resume
 from app.services.resume_normalizer import normalize_resume
 from app.services.scoring_config_service import (
@@ -578,6 +581,14 @@ def build_application_decision_artifact(request: ApplicationDecisionRequest) -> 
     _enforce_ai_usage("application_decision", request.sourceRequest, estimated_units=1)
     response = build_application_decision(request)
     _record_ai_usage("application_decision", request.sourceRequest, estimated_units=1)
+    return response
+
+
+@app.post("/ai/resume/rewrite", response_model=ResumeRewriteResponse)
+def build_resume_rewrite_artifact(request: ResumeRewriteRequest) -> ResumeRewriteResponse:
+    _enforce_ai_usage("resume_rewrite", request.sourceRequest, estimated_units=2)
+    response = build_resume_rewrite(request)
+    _record_ai_usage("resume_rewrite", request.sourceRequest, estimated_units=2)
     return response
 
 

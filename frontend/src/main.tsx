@@ -76,7 +76,7 @@ type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
-type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "research" | "decision" | "extension" | "evaluation" | "settings";
+type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "research" | "decision" | "rewrite" | "extension" | "evaluation" | "settings";
 type CostMode = "free" | "standard" | "premium";
 type AccessTier = "free" | "premium" | "admin";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
@@ -290,6 +290,20 @@ type ApplicationDecisionResponse = {
   nextActions: string[];
   researchSignalsUsed: string[];
   scoreSignals: Record<string, number | null>;
+};
+
+type ResumeRewriteResponse = {
+  summary: string;
+  suggestions: Array<{
+    targetRequirement: string;
+    evidenceSource: string;
+    originalEvidence?: string | null;
+    currentIssue: string;
+    rewrittenBullet: string;
+    proofSafety: "safe_from_existing_evidence" | "needs_user_verification" | "gap_do_not_claim";
+    reason: string;
+  }>;
+  warnings: string[];
 };
 
 type UsageEventRecord = {
@@ -737,6 +751,9 @@ function App() {
   const [applicationDecision, setApplicationDecision] = useState<ApplicationDecisionResponse | null>(null);
   const [decisionInfo, setDecisionInfo] = useState("");
   const [decisionLoading, setDecisionLoading] = useState(false);
+  const [resumeRewrite, setResumeRewrite] = useState<ResumeRewriteResponse | null>(null);
+  const [rewriteInfo, setRewriteInfo] = useState("");
+  const [rewriteLoading, setRewriteLoading] = useState(false);
   const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
   const [comparisonJdIds, setComparisonJdIds] = useState<string[]>([]);
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
@@ -1389,6 +1406,39 @@ function App() {
       setDecisionInfo(err instanceof Error ? err.message : "Application decision failed");
     } finally {
       setDecisionLoading(false);
+    }
+  }
+
+  async function buildResumeRewrite() {
+    if (!result || !lastAnalysisRequest) {
+      setRewriteInfo("Run resume matching before building rewrite suggestions.");
+      return;
+    }
+    if (!canUsePremium) {
+      setRewriteInfo("Premium access is required for evidence-constrained resume rewrite.");
+      return;
+    }
+    setRewriteLoading(true);
+    setRewriteInfo("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/ai/resume/rewrite`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          sourceRequest: lastAnalysisRequest,
+          analysis: result,
+          resumeText: structuredResume ? formatStructuredResume(structuredResume) : resumeText,
+          limit: 10,
+        }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response, "Resume rewrite failed"));
+      setResumeRewrite(await response.json() as ResumeRewriteResponse);
+      setRewriteInfo("Rewrite suggestions generated with evidence safety labels.");
+      void loadCurrentQuota();
+    } catch (err) {
+      setRewriteInfo(err instanceof Error ? err.message : "Resume rewrite failed");
+    } finally {
+      setRewriteLoading(false);
     }
   }
 
@@ -3156,6 +3206,24 @@ function App() {
             </TaskPanel>
           )}
 
+          {activeTask === "rewrite" && (
+            <TaskPanel
+              eyebrow="Phase 8"
+              title="Resume Rewrite"
+              description="Generate evidence-constrained resume bullets tied to existing proof, with gap warnings when a claim would be unsafe."
+            >
+              <ResumeRewritePanel
+                rewrite={resumeRewrite}
+                result={result}
+                loading={rewriteLoading}
+                info={rewriteInfo}
+                accessTier={effectiveAccessTier}
+                onBuild={buildResumeRewrite}
+                onTierChange={updateAccountTier}
+              />
+            </TaskPanel>
+          )}
+
           {activeTask === "extension" && (
             <TaskPanel
               eyebrow="Task 7"
@@ -3725,6 +3793,12 @@ function TaskNav({
       id: "decision",
       label: "Apply Decision",
       description: "Apply, prep, or skip",
+      status: hasResult ? "Ready" : "Needs score",
+    },
+    {
+      id: "rewrite",
+      label: "Resume Rewrite",
+      description: "Evidence-safe bullets",
       status: hasResult ? "Ready" : "Needs score",
     },
     {
@@ -5408,6 +5482,89 @@ function ApplicationDecisionPanel({
         <section className="panel">
           <h3>Decision Output</h3>
           <p className="hint">Build the decision after scoring and adding at least one research note for better confidence.</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ResumeRewritePanel({
+  rewrite,
+  result,
+  loading,
+  info,
+  accessTier,
+  onBuild,
+  onTierChange,
+}: {
+  rewrite: ResumeRewriteResponse | null;
+  result: AnalysisResponse | null;
+  loading: boolean;
+  info: string;
+  accessTier: AccessTier;
+  onBuild: () => void;
+  onTierChange: (tier: AccessTier) => void;
+}) {
+  return (
+    <div className="rewriteWorkspace">
+      <ProductAccessPanel active="premium" accessTier={accessTier} onTierChange={onTierChange} compact />
+      <section className="panel rewriteControlPanel">
+        <div className="panelHeader">
+          <div>
+            <h3>Evidence-Constrained Rewrite</h3>
+            <p className="hint">Suggestions are labelled as safe, needs verification, or gap-only so you do not accidentally invent experience.</p>
+          </div>
+          <button type="button" className="premiumButton" disabled={loading || !result} onClick={onBuild}>
+            <span>Pro</span>
+            {loading ? "Building Rewrite..." : "Build Rewrite Suggestions"}
+          </button>
+        </div>
+        {info && <p className="hint">{info}</p>}
+        {!result && <EmptyState title="No score yet" body="Run resume matching first. Rewrite suggestions depend on the requirement match matrix." />}
+      </section>
+
+      {rewrite ? (
+        <section className="panel rewriteResultPanel">
+          <h3>Rewrite Suggestions</h3>
+          <p className="hint">{rewrite.summary}</p>
+          {rewrite.warnings.length > 0 && (
+            <div className="rewriteWarningBox">
+              {rewrite.warnings.map((warning) => <span key={warning}>{warning}</span>)}
+            </div>
+          )}
+          <div className="rewriteList">
+            {rewrite.suggestions.map((item, index) => (
+              <article className={`rewriteItem rewrite-${item.proofSafety}`} key={`${item.targetRequirement}-${index}`}>
+                <div className="rewriteItemHeader">
+                  <div>
+                    <strong>{item.targetRequirement}</strong>
+                    <small>{formatCategory(item.evidenceSource)} - {formatCategory(item.proofSafety)}</small>
+                  </div>
+                  <span>{formatCategory(item.proofSafety)}</span>
+                </div>
+                {item.originalEvidence && (
+                  <div className="rewriteEvidence">
+                    <b>Original evidence</b>
+                    <p>{item.originalEvidence}</p>
+                  </div>
+                )}
+                <div>
+                  <b>Issue</b>
+                  <p>{item.currentIssue}</p>
+                </div>
+                <div>
+                  <b>Suggested bullet</b>
+                  <p>{item.rewrittenBullet}</p>
+                </div>
+                <small>{item.reason}</small>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="panel">
+          <h3>Rewrite Output</h3>
+          <p className="hint">Build suggestions after scoring. Gap-only items are preparation warnings, not paste-ready resume claims.</p>
         </section>
       )}
     </div>
