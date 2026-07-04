@@ -197,8 +197,10 @@ Status: Started.
 Built:
 
 - Manual research notes for company, role, market, and interview signals.
+- Score-based research note draft generation from the latest analysis.
 - PostgreSQL persistence for research summaries, key signals, preparation topics, and source references.
 - Frontend Research Notes task for saving reusable research memory.
+- Preparation intelligence can include saved research notes without rerunning the score.
 - Demo seed record showing how future cited research will be stored.
 
 Still needs:

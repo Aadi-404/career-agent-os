@@ -279,6 +279,8 @@ type ResearchNoteRecord = {
   updatedAt: string;
 };
 
+type ResearchNoteDraft = Omit<ResearchNoteRecord, "id" | "userId" | "createdAt" | "updatedAt">;
+
 type UsageEventRecord = {
   id: string;
   userId?: string | null;
@@ -711,6 +713,7 @@ function App() {
   const [researchNotes, setResearchNotes] = useState<ResearchNoteRecord[]>([]);
   const [researchInfo, setResearchInfo] = useState("");
   const [researchSaving, setResearchSaving] = useState(false);
+  const [researchGenerating, setResearchGenerating] = useState(false);
   const [researchTitle, setResearchTitle] = useState("Company and role research note");
   const [researchCompany, setResearchCompany] = useState("");
   const [researchRoleTitle, setResearchRoleTitle] = useState("");
@@ -718,6 +721,7 @@ function App() {
   const [researchSummary, setResearchSummary] = useState("");
   const [researchKeySignals, setResearchKeySignals] = useState("");
   const [researchPreparationTopics, setResearchPreparationTopics] = useState("");
+  const [researchManualContext, setResearchManualContext] = useState("");
   const [researchSourcesDraft, setResearchSourcesDraft] = useState("");
   const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
   const [comparisonJdIds, setComparisonJdIds] = useState<string[]>([]);
@@ -1247,6 +1251,55 @@ function App() {
     } finally {
       setResearchSaving(false);
     }
+  }
+
+  async function generateResearchDraft() {
+    if (!result || !lastAnalysisRequest) {
+      setResearchInfo("Run resume matching before generating a research draft.");
+      return;
+    }
+    if (!canUsePremium) {
+      setResearchInfo("Premium access is required for generated research notes. Manual notes can still be saved.");
+      return;
+    }
+    setResearchGenerating(true);
+    setResearchInfo("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/ai/research/note-draft`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          sourceRequest: lastAnalysisRequest,
+          analysis: result,
+          company: researchCompany.trim() || null,
+          roleTitle: researchRoleTitle.trim() || targetRole,
+          researchType,
+          manualContext: researchManualContext.trim() || null,
+          sourceUrls: splitLines(researchSourcesDraft)
+            .map((line) => line.split("|")[1]?.trim() || line.trim())
+            .filter((value) => value.startsWith("http")),
+        }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response, "Research draft generation failed"));
+      applyResearchDraft(await response.json() as ResearchNoteDraft);
+      setResearchInfo("Generated a research draft from the current score report. Review it before saving.");
+      void loadCurrentQuota();
+    } catch (err) {
+      setResearchInfo(err instanceof Error ? err.message : "Research draft generation failed");
+    } finally {
+      setResearchGenerating(false);
+    }
+  }
+
+  function applyResearchDraft(draft: ResearchNoteDraft) {
+    setResearchTitle(draft.title);
+    setResearchCompany(draft.company ?? "");
+    setResearchRoleTitle(draft.roleTitle ?? "");
+    setResearchType((["company", "role", "market", "interview", "manual"].includes(draft.researchType) ? draft.researchType : "role") as ResearchType);
+    setResearchSummary(draft.summary);
+    setResearchKeySignals(draft.keySignals.join("\n"));
+    setResearchPreparationTopics(draft.preparationTopics.join("\n"));
+    setResearchSourcesDraft(formatResearchSources(draft.sources));
   }
 
   function useSavedResume(resume: HistoryResumeRecord) {
@@ -1998,6 +2051,7 @@ function App() {
           sourceRequest: lastAnalysisRequest,
           analysis: result,
           preparationPlanDays,
+          researchNotes: researchNotes.map(toResearchContextNote),
         }),
       });
 
@@ -2972,8 +3026,10 @@ function App() {
                 summary={researchSummary}
                 keySignals={researchKeySignals}
                 preparationTopics={researchPreparationTopics}
+                manualContext={researchManualContext}
                 sourcesDraft={researchSourcesDraft}
                 saving={researchSaving}
+                generating={researchGenerating}
                 info={researchInfo}
                 onTitleChange={setResearchTitle}
                 onCompanyChange={setResearchCompany}
@@ -2982,7 +3038,9 @@ function App() {
                 onSummaryChange={setResearchSummary}
                 onKeySignalsChange={setResearchKeySignals}
                 onPreparationTopicsChange={setResearchPreparationTopics}
+                onManualContextChange={setResearchManualContext}
                 onSourcesDraftChange={setResearchSourcesDraft}
+                onGenerate={generateResearchDraft}
                 onSave={saveResearchNote}
                 onRefresh={loadResearchNotes}
               />
@@ -4987,8 +5045,10 @@ function ResearchNotesPanel({
   summary,
   keySignals,
   preparationTopics,
+  manualContext,
   sourcesDraft,
   saving,
+  generating,
   info,
   onTitleChange,
   onCompanyChange,
@@ -4997,7 +5057,9 @@ function ResearchNotesPanel({
   onSummaryChange,
   onKeySignalsChange,
   onPreparationTopicsChange,
+  onManualContextChange,
   onSourcesDraftChange,
+  onGenerate,
   onSave,
   onRefresh,
 }: {
@@ -5009,8 +5071,10 @@ function ResearchNotesPanel({
   summary: string;
   keySignals: string;
   preparationTopics: string;
+  manualContext: string;
   sourcesDraft: string;
   saving: boolean;
+  generating: boolean;
   info: string;
   onTitleChange: (value: string) => void;
   onCompanyChange: (value: string) => void;
@@ -5019,7 +5083,9 @@ function ResearchNotesPanel({
   onSummaryChange: (value: string) => void;
   onKeySignalsChange: (value: string) => void;
   onPreparationTopicsChange: (value: string) => void;
+  onManualContextChange: (value: string) => void;
   onSourcesDraftChange: (value: string) => void;
+  onGenerate: () => void;
   onSave: () => void;
   onRefresh: () => void;
 }) {
@@ -5029,9 +5095,19 @@ function ResearchNotesPanel({
         <div className="panelHeader">
           <div>
             <h3>Manual Research Capture</h3>
-            <p className="hint">Use this for company interview signals, similar job patterns, role expectations, and market notes. Live web research will plug into the same memory later.</p>
+            <p className="hint">Generate a draft from the latest score, then edit it with company interview signals, similar job patterns, role expectations, and market notes.</p>
           </div>
           <button type="button" className="secondaryButton" disabled={saving} onClick={onRefresh}>Refresh</button>
+        </div>
+        <div className="researchGeneratorBox">
+          <label>
+            Research context for draft generation
+            <textarea value={manualContext} onChange={(event) => onManualContextChange(event.target.value)} rows={4} placeholder={"Optional context, one point per line\nCompany asks agent guardrail questions\nRecent role posts emphasize ETL reliability"} />
+          </label>
+          <button type="button" className="premiumButton" disabled={generating} onClick={onGenerate}>
+            <span>Pro</span>
+            {generating ? "Generating Draft..." : "Generate From Latest Score"}
+          </button>
         </div>
         <div className="gridTwo">
           <label>
@@ -5539,6 +5615,25 @@ function parseResearchSources(value: string): ResearchSource[] {
       note: notePart || null,
     };
   });
+}
+
+function formatResearchSources(sources: ResearchSource[]) {
+  return sources
+    .map((source) => [source.title, source.url ?? "", source.sourceType, source.note ?? ""].join(" | "))
+    .join("\n");
+}
+
+function toResearchContextNote(note: ResearchNoteRecord) {
+  return {
+    title: note.title,
+    company: note.company ?? null,
+    roleTitle: note.roleTitle ?? null,
+    researchType: note.researchType,
+    summary: note.summary,
+    keySignals: note.keySignals,
+    preparationTopics: note.preparationTopics,
+    sources: note.sources,
+  };
 }
 
 async function readApiError(response: Response, fallback: string) {

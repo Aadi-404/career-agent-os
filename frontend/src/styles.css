@@ -781,6 +781,21 @@ h1 {
   gap: 14px;
 }
 
+.researchGeneratorBox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  border: 1px solid #d7ece8;
+  border-radius: 8px;
+  background: #f5fbfa;
+  padding: 14px;
+}
+
+.researchGeneratorBox button {
+  min-width: 210px;
+}
+
 .researchNoteCard {
   display: grid;
   gap: 14px;
@@ -2967,6 +2982,7 @@ pre {
   .placeholderGrid,
   .historyGrid,
   .researchWorkspace,
+  .researchGeneratorBox,
   .pipelineGrid,
   .comparisonGrid,
   .opportunityMetaGrid,

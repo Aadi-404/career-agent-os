@@ -31,7 +31,7 @@ Core app is implemented. Remaining public-launch work is deployment-specific: st
 | Evaluation/tuning | Complete groundwork | Feedback labels, role-family calibration, audit history, rollback. |
 | Admin readiness | Complete groundwork | Diagnostics, production readiness, usage dashboard, billing handoff, launch tracker. |
 | Deployment tooling | Complete groundwork | Dockerfiles, compose examples, smoke check, production rehearsal, backup/restore. |
-| Research memory | Started | Manual company/role/interview research notes saved in PostgreSQL for future cited research agents. |
+| Research memory | Started | Manual and generated company/role/interview research notes saved in PostgreSQL for future cited research agents. |
 
 ## AI Design
 
@@ -137,8 +137,10 @@ Status: Started.
 Built:
 
 - Manual research-note workspace memory.
+- Score-based research note draft generation.
 - PostgreSQL storage for company, role, market, interview, and manual notes.
 - Saved key signals, preparation topics, and source references.
+- Preparation intelligence can use saved research notes as context.
 - Demo seed includes a research note.
 
 Remaining:

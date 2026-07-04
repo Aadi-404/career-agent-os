@@ -28,7 +28,7 @@ const checks = [
   {
     name: "research notes workflow",
     file: "src/main.tsx",
-    patterns: ["Research Notes", "Manual Research Capture", "Saved Research Memory"],
+    patterns: ["Research Notes", "Generate From Latest Score", "Saved Research Memory"],
   },
   {
     name: "extension workflow",

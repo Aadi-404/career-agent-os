@@ -40,12 +40,52 @@ class PreparationBuildRequest(BaseModel):
     sourceRequest: AnalyzeRequest
     analysis: "AnalysisResponse"
     preparationPlanDays: int = Field(default=7, ge=1, le=30)
+    researchNotes: list["ResearchContextNote"] = Field(default_factory=list, max_length=20)
 
 
 class OptionalArtifactBuildRequest(BaseModel):
     sourceRequest: AnalyzeRequest
     analysis: "AnalysisResponse"
     limit: int = Field(default=8, ge=1, le=20)
+
+
+class ResearchContextSource(BaseModel):
+    title: str = Field(min_length=1, max_length=220)
+    url: str | None = Field(default=None, max_length=1000)
+    sourceType: str = Field(default="manual", max_length=80)
+    note: str | None = Field(default=None, max_length=1200)
+
+
+class ResearchContextNote(BaseModel):
+    title: str = Field(min_length=1, max_length=180)
+    company: str | None = Field(default=None, max_length=180)
+    roleTitle: str | None = Field(default=None, max_length=180)
+    researchType: str = Field(default="manual", max_length=80)
+    summary: str = Field(min_length=1, max_length=4000)
+    keySignals: list[str] = Field(default_factory=list, max_length=30)
+    preparationTopics: list[str] = Field(default_factory=list, max_length=30)
+    sources: list[ResearchContextSource] = Field(default_factory=list, max_length=20)
+
+
+class ResearchNoteDraft(BaseModel):
+    title: str = Field(min_length=2, max_length=180)
+    company: str | None = Field(default=None, max_length=180)
+    roleTitle: str | None = Field(default=None, max_length=180)
+    researchType: str = Field(default="role", max_length=80)
+    summary: str = Field(min_length=10, max_length=4000)
+    keySignals: list[str] = Field(default_factory=list, max_length=30)
+    preparationTopics: list[str] = Field(default_factory=list, max_length=30)
+    sources: list[ResearchContextSource] = Field(default_factory=list, max_length=20)
+
+
+class ResearchBuildRequest(BaseModel):
+    sourceRequest: AnalyzeRequest
+    analysis: "AnalysisResponse"
+    company: str | None = Field(default=None, max_length=180)
+    roleTitle: str | None = Field(default=None, max_length=180)
+    researchType: str = Field(default="role", max_length=80)
+    manualContext: str | None = Field(default=None, max_length=5000)
+    sourceUrls: list[str] = Field(default_factory=list, max_length=10)
 
 
 class MatchingSkill(BaseModel):

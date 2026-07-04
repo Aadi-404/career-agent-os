@@ -94,7 +94,8 @@ Current Phase 6 groundwork:
 - Persistent subscription tier: user records store the Free/Premium tier and expose a guarded tier update API for deployed sessions.
 - Billing-ready metadata: user records can store subscription status, plan id, provider customer id, provider subscription id, and billing period end.
 - Saved comparison workflow: the web app can compare saved resumes against saved JDs with score-only runs capped to avoid accidental spend.
-- Research notes workspace: the web app can save manual company, role, market, and interview research notes with key signals, preparation topics, and source references for the future research-agent phase.
+- Research notes workspace: the web app can save manual or generated company, role, market, and interview research notes with key signals, preparation topics, and source references for the future research-agent phase.
+- Research-aware preparation: saved research notes can be passed into preparation intelligence so company/role signals influence the study plan without rerunning matching.
 
 ## Run AI Service
 

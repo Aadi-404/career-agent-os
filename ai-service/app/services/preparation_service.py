@@ -4,6 +4,7 @@ from app.models.analysis import (
     PreparationDay,
     PreparationIntelligence,
     PriorityTopic,
+    ResearchContextNote,
     RequirementMatch,
     ScoreBreakdownItem,
 )
@@ -13,20 +14,55 @@ def build_preparation_intelligence(
     request: AnalyzeRequest,
     requirement_matches: list[RequirementMatch],
     score_breakdown: list[ScoreBreakdownItem],
+    research_notes: list[ResearchContextNote] | None = None,
 ) -> PreparationIntelligence:
-    priority_topics = _priority_topics(request, requirement_matches, score_breakdown)
+    research_notes = research_notes or []
+    priority_topics = _research_priority_topics(research_notes) + _priority_topics(request, requirement_matches, score_breakdown)
+    priority_topics = _dedupe_priority_topics(priority_topics)
     daily_plan = _daily_plan(request.preparationPlanDays, priority_topics)
     cross_question_chains = _cross_question_chains(request, priority_topics, requirement_matches)
     return PreparationIntelligence(
-        summary=_summary(priority_topics, request.preparationPlanDays),
+        summary=_summary(priority_topics, request.preparationPlanDays, research_notes),
         priorityTopics=priority_topics,
         dailyPlan=daily_plan,
         crossQuestionChains=cross_question_chains,
-        phase5ResearchBacklog=[
-            "Research similar job interview questions from recent web sources.",
-            "Research company-specific interview experiences and frequently asked topics.",
-        ],
+        phase5ResearchBacklog=_research_backlog(research_notes),
     )
+
+
+def _research_priority_topics(research_notes: list[ResearchContextNote]) -> list[PriorityTopic]:
+    topics: list[PriorityTopic] = []
+    for note in research_notes[:8]:
+        source = note.company or note.roleTitle or note.title
+        for topic in note.preparationTopics[:4]:
+            topics.append(
+                PriorityTopic(
+                    topic=_clean_topic(topic),
+                    priority="high",
+                    sourceRequirement=f"Research note: {note.title}",
+                    reason=f"Saved {note.researchType} research for {source} highlights this as interview preparation.",
+                    currentEvidence=note.summary[:240],
+                    targetDepth="Prepare a company/role-specific answer with project proof, tradeoffs, and follow-up handling.",
+                    actions=[
+                        "Connect this topic to one resume project or work example.",
+                        "Prepare one likely follow-up question from the research signal.",
+                        "Write an honest gap answer if the resume does not prove it yet.",
+                    ],
+                )
+            )
+        for signal in note.keySignals[:3]:
+            topics.append(
+                PriorityTopic(
+                    topic=_clean_topic(signal),
+                    priority="medium",
+                    sourceRequirement=f"Research signal: {note.title}",
+                    reason=f"Saved research signal from {source}.",
+                    currentEvidence=note.summary[:240],
+                    targetDepth="Be ready to explain why this signal matters for the target role and how your experience maps to it.",
+                    actions=["Prepare one concise explanation.", "Map it to resume evidence.", "Prepare one cross-question."],
+                )
+            )
+    return topics[:10]
 
 
 def _priority_topics(
@@ -155,12 +191,37 @@ def _cross_question_chains(
     return chains
 
 
-def _summary(topics: list[PriorityTopic], days: int) -> str:
+def _summary(topics: list[PriorityTopic], days: int, research_notes: list[ResearchContextNote]) -> str:
     if not topics:
         return f"Preparation plan is set for {days} day(s). No major weak requirement was detected, so focus on project explanation depth."
     critical = sum(1 for topic in topics if topic.priority == "critical")
     high = sum(1 for topic in topics if topic.priority == "high")
-    return f"Preparation plan is set for {days} day(s), prioritizing {critical} critical and {high} high-priority topic(s) from the JD match matrix."
+    research_part = f" It includes {len(research_notes)} saved research note(s)." if research_notes else ""
+    return f"Preparation plan is set for {days} day(s), prioritizing {critical} critical and {high} high-priority topic(s) from the JD match matrix and research memory.{research_part}"
+
+
+def _research_backlog(research_notes: list[ResearchContextNote]) -> list[str]:
+    if research_notes:
+        return [
+            "Add cited web sources to validate the saved manual research signals.",
+            "Compare this role with similar recent job posts before final application prioritization.",
+        ]
+    return [
+        "Research similar job interview questions from recent web sources.",
+        "Research company-specific interview experiences and frequently asked topics.",
+    ]
+
+
+def _dedupe_priority_topics(topics: list[PriorityTopic]) -> list[PriorityTopic]:
+    seen: set[str] = set()
+    deduped: list[PriorityTopic] = []
+    for topic in topics:
+        key = _clean_topic(topic.topic).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(topic)
+    return deduped[:10]
 
 
 def _priority(match: RequirementMatch) -> str:

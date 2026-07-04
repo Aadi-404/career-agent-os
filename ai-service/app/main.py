@@ -23,6 +23,8 @@ from app.models.analysis import (
     OptionalArtifactBuildRequest,
     PreparationBuildRequest,
     PreparationIntelligence,
+    ResearchBuildRequest,
+    ResearchNoteDraft,
     RequirementMatch,
     ResumeImprovement,
 )
@@ -155,6 +157,7 @@ from app.services.optional_artifact_service import (
 )
 from app.services.preparation_service import build_preparation_intelligence
 from app.services.prep_memory_service import build_prep_memory
+from app.services.research_service import build_research_note_draft
 from app.services.resume_extractor import extract_resume
 from app.services.resume_normalizer import normalize_resume
 from app.services.scoring_config_service import (
@@ -548,6 +551,7 @@ def build_preparation(request: PreparationBuildRequest) -> PreparationIntelligen
         source_request,
         request.analysis.requirementMatches,
         request.analysis.scoreBreakdown,
+        request.researchNotes,
     )
     _record_ai_usage("preparation_plan", source_request, estimated_units=2)
     return response
@@ -556,6 +560,14 @@ def build_preparation(request: PreparationBuildRequest) -> PreparationIntelligen
 @app.post("/ai/preparation/plan", response_model=PreparationIntelligence)
 def build_preparation_plan_artifact(request: PreparationBuildRequest) -> PreparationIntelligence:
     return build_preparation(request)
+
+
+@app.post("/ai/research/note-draft", response_model=ResearchNoteDraft)
+def build_research_note_artifact(request: ResearchBuildRequest) -> ResearchNoteDraft:
+    _enforce_ai_usage("research_note", request.sourceRequest, estimated_units=1)
+    response = build_research_note_draft(request)
+    _record_ai_usage("research_note", request.sourceRequest, estimated_units=1)
+    return response
 
 
 @app.post("/ai/resume-improvements/build", response_model=list[ResumeImprovement])
