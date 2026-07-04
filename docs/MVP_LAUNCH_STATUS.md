@@ -218,9 +218,13 @@ Why the remaining work is later:
 
 ### Phase 8: Agentic Career OS
 
-Status: Not started.
+Status: Started.
 
-Planned:
+Built:
+
+- Apply Decision task that combines current score, opportunity signals, and saved research notes into apply / prepare first / selective apply / skip guidance.
+
+Still planned:
 
 - Apply-decision agent.
 - Resume rewrite agent with evidence constraints.

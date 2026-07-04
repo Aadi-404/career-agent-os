@@ -17,6 +17,8 @@ from app.core.config import get_settings
 from app.models.analysis import (
     AnalyzeRequest,
     AnalysisResponse,
+    ApplicationDecisionRequest,
+    ApplicationDecisionResponse,
     CandidateContext,
     CrossQuestion,
     InterviewQuestion,
@@ -100,6 +102,7 @@ from app.models.scoring_config import (
 )
 from app.models.system import ProductionReadinessResponse, ReadinessCheck, SystemDiagnostics
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
+from app.services.application_decision_service import build_application_decision
 from app.services.demo_seed_service import seed_demo_workspace
 from app.services.history_store import (
     create_or_touch_anonymous_session,
@@ -567,6 +570,14 @@ def build_research_note_artifact(request: ResearchBuildRequest) -> ResearchNoteD
     _enforce_ai_usage("research_note", request.sourceRequest, estimated_units=1)
     response = build_research_note_draft(request)
     _record_ai_usage("research_note", request.sourceRequest, estimated_units=1)
+    return response
+
+
+@app.post("/ai/application-decision", response_model=ApplicationDecisionResponse)
+def build_application_decision_artifact(request: ApplicationDecisionRequest) -> ApplicationDecisionResponse:
+    _enforce_ai_usage("application_decision", request.sourceRequest, estimated_units=1)
+    response = build_application_decision(request)
+    _record_ai_usage("application_decision", request.sourceRequest, estimated_units=1)
     return response
 
 

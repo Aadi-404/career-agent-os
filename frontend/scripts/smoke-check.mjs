@@ -31,6 +31,11 @@ const checks = [
     patterns: ["Research Notes", "Generate From Latest Score", "decodeResearchHandoff", "Saved Research Memory"],
   },
   {
+    name: "application decision workflow",
+    file: "src/main.tsx",
+    patterns: ["Apply Decision", "Build Apply Decision", "Research Signals Used"],
+  },
+  {
     name: "extension workflow",
     file: "src/main.tsx",
     patterns: ["Extension Setup", "Check Extension Readiness", "Real Site Validation", "Record parser quality"],

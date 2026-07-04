@@ -76,7 +76,7 @@ type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
-type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "research" | "extension" | "evaluation" | "settings";
+type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "research" | "decision" | "extension" | "evaluation" | "settings";
 type CostMode = "free" | "standard" | "premium";
 type AccessTier = "free" | "premium" | "admin";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
@@ -280,6 +280,17 @@ type ResearchNoteRecord = {
 };
 
 type ResearchNoteDraft = Omit<ResearchNoteRecord, "id" | "userId" | "createdAt" | "updatedAt">;
+
+type ApplicationDecisionResponse = {
+  decision: "apply" | "prepare_first" | "selective_apply" | "skip";
+  confidence: "low" | "medium" | "high";
+  headline: string;
+  reasoning: string[];
+  blockers: string[];
+  nextActions: string[];
+  researchSignalsUsed: string[];
+  scoreSignals: Record<string, number | null>;
+};
 
 type UsageEventRecord = {
   id: string;
@@ -723,6 +734,9 @@ function App() {
   const [researchPreparationTopics, setResearchPreparationTopics] = useState("");
   const [researchManualContext, setResearchManualContext] = useState("");
   const [researchSourcesDraft, setResearchSourcesDraft] = useState("");
+  const [applicationDecision, setApplicationDecision] = useState<ApplicationDecisionResponse | null>(null);
+  const [decisionInfo, setDecisionInfo] = useState("");
+  const [decisionLoading, setDecisionLoading] = useState(false);
   const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
   const [comparisonJdIds, setComparisonJdIds] = useState<string[]>([]);
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
@@ -1342,6 +1356,40 @@ function App() {
     setResearchKeySignals(draft.keySignals.join("\n"));
     setResearchPreparationTopics(draft.preparationTopics.join("\n"));
     setResearchSourcesDraft(formatResearchSources(draft.sources));
+  }
+
+  async function buildApplicationDecision() {
+    if (!result || !lastAnalysisRequest) {
+      setDecisionInfo("Run resume matching before building an application decision.");
+      return;
+    }
+    if (!canUsePremium) {
+      setDecisionInfo("Premium access is required for application decisioning.");
+      return;
+    }
+    setDecisionLoading(true);
+    setDecisionInfo("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/ai/application-decision`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          sourceRequest: lastAnalysisRequest,
+          analysis: result,
+          researchNotes: researchNotes.map(toResearchContextNote),
+          company: researchCompany.trim() || null,
+          roleTitle: researchRoleTitle.trim() || targetRole,
+        }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response, "Application decision failed"));
+      setApplicationDecision(await response.json() as ApplicationDecisionResponse);
+      setDecisionInfo("Decision built from current score and saved research notes.");
+      void loadCurrentQuota();
+    } catch (err) {
+      setDecisionInfo(err instanceof Error ? err.message : "Application decision failed");
+    } finally {
+      setDecisionLoading(false);
+    }
   }
 
   function useSavedResume(resume: HistoryResumeRecord) {
@@ -3089,6 +3137,25 @@ function App() {
             </TaskPanel>
           )}
 
+          {activeTask === "decision" && (
+            <TaskPanel
+              eyebrow="Phase 8"
+              title="Apply Decision"
+              description="Combine the match score, shortlisting signals, and saved research notes into an apply / prepare / skip decision."
+            >
+              <ApplicationDecisionPanel
+                decision={applicationDecision}
+                result={result}
+                researchNotes={researchNotes}
+                loading={decisionLoading}
+                info={decisionInfo}
+                accessTier={effectiveAccessTier}
+                onBuild={buildApplicationDecision}
+                onTierChange={updateAccountTier}
+              />
+            </TaskPanel>
+          )}
+
           {activeTask === "extension" && (
             <TaskPanel
               eyebrow="Task 7"
@@ -3653,6 +3720,12 @@ function TaskNav({
       label: "Research Notes",
       description: "Company and role signals",
       status: "Phase 7",
+    },
+    {
+      id: "decision",
+      label: "Apply Decision",
+      description: "Apply, prep, or skip",
+      status: hasResult ? "Ready" : "Needs score",
     },
     {
       id: "extension",
@@ -5250,6 +5323,93 @@ function ResearchNotesPanel({
           <EmptyState title="No research notes yet" body="Save manual research now. Later, company and web-research agents will write cited notes into this same workspace memory." />
         )}
       </section>
+    </div>
+  );
+}
+
+function ApplicationDecisionPanel({
+  decision,
+  result,
+  researchNotes,
+  loading,
+  info,
+  accessTier,
+  onBuild,
+  onTierChange,
+}: {
+  decision: ApplicationDecisionResponse | null;
+  result: AnalysisResponse | null;
+  researchNotes: ResearchNoteRecord[];
+  loading: boolean;
+  info: string;
+  accessTier: AccessTier;
+  onBuild: () => void;
+  onTierChange: (tier: AccessTier) => void;
+}) {
+  return (
+    <div className="decisionWorkspace">
+      <ProductAccessPanel active="premium" accessTier={accessTier} onTierChange={onTierChange} compact />
+      <section className="panel decisionControlPanel">
+        <div className="panelHeader">
+          <div>
+            <h3>Decision Inputs</h3>
+            <p className="hint">Uses the latest score report plus {researchNotes.length} saved research note(s).</p>
+          </div>
+          <button type="button" className="premiumButton" disabled={loading || !result} onClick={onBuild}>
+            <span>Pro</span>
+            {loading ? "Building Decision..." : "Build Apply Decision"}
+          </button>
+        </div>
+        {result ? (
+          <div className="scoreGrid">
+            <div className="scoreTile"><span>Technical</span><strong>{result.technicalMatchScore}%</strong></div>
+            <div className="scoreTile"><span>Shortlisting</span><strong>{result.shortlistingScore ?? "--"}%</strong></div>
+            <div className="scoreTile"><span>Readiness</span><strong>{result.interviewReadinessScore ?? "--"}%</strong></div>
+            <div className="scoreTile"><span>Opportunity</span><strong>{result.overallOpportunityScore ?? "--"}%</strong></div>
+          </div>
+        ) : (
+          <EmptyState title="No score yet" body="Run resume matching first. Decisioning depends on the score, requirement matrix, and research notes." />
+        )}
+        {info && <p className="hint">{info}</p>}
+      </section>
+
+      {decision ? (
+        <section className={`panel decisionResultPanel decision-${decision.decision}`}>
+          <div className="decisionHeader">
+            <div>
+              <p className="eyebrow">Decision</p>
+              <h3>{decision.headline}</h3>
+              <small>{formatCategory(decision.decision)} confidence: {decision.confidence}</small>
+            </div>
+            <span>{formatCategory(decision.decision)}</span>
+          </div>
+          <div className="decisionColumns">
+            <div>
+              <h4>Reasoning</h4>
+              <ul>{decision.reasoning.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+            <div>
+              <h4>Blockers</h4>
+              {decision.blockers.length ? <ul>{decision.blockers.map((item) => <li key={item}>{item}</li>)}</ul> : <p className="hint">No major blocker detected.</p>}
+            </div>
+            <div>
+              <h4>Next Actions</h4>
+              <ul>{decision.nextActions.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+          </div>
+          {decision.researchSignalsUsed.length > 0 && (
+            <div className="prepSection">
+              <h4>Research Signals Used</h4>
+              <div className="tags">{decision.researchSignalsUsed.map((item) => <span key={item}>{item}</span>)}</div>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="panel">
+          <h3>Decision Output</h3>
+          <p className="hint">Build the decision after scoring and adding at least one research note for better confidence.</p>
+        </section>
+      )}
     </div>
   );
 }

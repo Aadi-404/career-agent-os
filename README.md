@@ -97,6 +97,7 @@ Current Phase 6 groundwork:
 - Research notes workspace: the web app can save manual or generated company, role, market, and interview research notes with key signals, preparation topics, and source references for the future research-agent phase.
 - Research-aware preparation: saved research notes can be passed into preparation intelligence so company/role signals influence the study plan without rerunning matching.
 - Extension research handoff: parsed or manually pasted job pages can open the web Research Notes task with role, company, JD text, and source URL prefilled.
+- Apply decisioning: the web app can combine score, opportunity signals, and saved research notes into apply / prepare first / selective apply / skip guidance.
 
 ## Run AI Service
 

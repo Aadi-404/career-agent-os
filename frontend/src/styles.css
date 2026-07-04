@@ -774,6 +774,71 @@ h1 {
   align-items: start;
 }
 
+.decisionWorkspace {
+  display: grid;
+  gap: 18px;
+}
+
+.decisionControlPanel,
+.decisionResultPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.decisionHeader {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.decisionHeader h3 {
+  margin: 0;
+}
+
+.decisionHeader span {
+  border-radius: 999px;
+  background: #e8f6f4;
+  color: #115e59;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+
+.decisionColumns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.decisionColumns > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 14px;
+}
+
+.decisionColumns h4 {
+  margin: 0 0 10px;
+}
+
+.decision-apply {
+  border-color: #b7ded8;
+  background: #f5fbfa;
+}
+
+.decision-prepare_first,
+.decision-selective_apply {
+  border-color: #ead89e;
+  background: #fffdf7;
+}
+
+.decision-skip {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
 .researchEditorPanel,
 .researchListPanel,
 .researchNoteList {
@@ -2983,6 +3048,7 @@ pre {
   .historyGrid,
   .researchWorkspace,
   .researchGeneratorBox,
+  .decisionColumns,
   .pipelineGrid,
   .comparisonGrid,
   .opportunityMetaGrid,

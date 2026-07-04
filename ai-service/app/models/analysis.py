@@ -88,6 +88,26 @@ class ResearchBuildRequest(BaseModel):
     sourceUrls: list[str] = Field(default_factory=list, max_length=10)
 
 
+class ApplicationDecisionRequest(BaseModel):
+    sourceRequest: AnalyzeRequest
+    analysis: "AnalysisResponse"
+    researchNotes: list[ResearchContextNote] = Field(default_factory=list, max_length=20)
+    opportunityStatus: str | None = Field(default=None, max_length=80)
+    company: str | None = Field(default=None, max_length=180)
+    roleTitle: str | None = Field(default=None, max_length=180)
+
+
+class ApplicationDecisionResponse(BaseModel):
+    decision: Literal["apply", "prepare_first", "selective_apply", "skip"]
+    confidence: Literal["low", "medium", "high"]
+    headline: str
+    reasoning: list[str] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+    nextActions: list[str] = Field(default_factory=list)
+    researchSignalsUsed: list[str] = Field(default_factory=list)
+    scoreSignals: dict[str, int | None] = Field(default_factory=dict)
+
+
 class MatchingSkill(BaseModel):
     skill: str
     evidenceFromResume: str
