@@ -287,6 +287,22 @@ type BillingCheckoutResponse = {
   message: string;
 };
 
+type DemoSeedResponse = {
+  userId: string;
+  displayName: string;
+  email?: string | null;
+  password: string;
+  subscriptionTier: "free" | "premium";
+  resumeCount: number;
+  jobDescriptionCount: number;
+  analysisCount: number;
+  preparationSessionCount: number;
+  jobOpportunityCount: number;
+  averageMatchScore?: number | null;
+  sessionToken: string;
+  message: string;
+};
+
 type UsageSummary = {
   totalEvents: number;
   totalEstimatedUnits: number;
@@ -597,6 +613,7 @@ function App() {
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [usageQuota, setUsageQuota] = useState<UsageQuotaStatus | null>(null);
   const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
+  const [demoSeedResult, setDemoSeedResult] = useState<DemoSeedResponse | null>(null);
   const [settingsInfo, setSettingsInfo] = useState("");
   const [sessionInfo, setSessionInfo] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -1575,6 +1592,48 @@ function App() {
       setUsageSummary(await response.json() as UsageSummary);
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "Usage summary unavailable");
+    }
+  }
+
+  async function seedDemoWorkspace() {
+    setSettingsInfo("");
+    setDemoSeedResult(null);
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/admin/demo/seed`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          userId: "demo-aditya",
+          displayName: "Aditya Demo",
+          email: "demo.aditya@example.com",
+          password: "DemoPass123!",
+          subscriptionTier: "premium",
+          reset: true,
+        }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response, "Demo seed failed. Admin access is required."));
+      const seeded = await response.json() as DemoSeedResponse;
+      setDemoSeedResult(seeded);
+      applyAuthenticatedSession(
+        {
+          user: {
+            id: seeded.userId,
+            displayName: seeded.displayName,
+            email: seeded.email,
+            role: "member",
+            subscriptionTier: seeded.subscriptionTier,
+            subscriptionStatus: "inactive",
+            createdAt: new Date().toISOString(),
+          },
+          sessionToken: seeded.sessionToken,
+        },
+        "Demo workspace session active.",
+      );
+      setSettingsInfo(`Seeded ${seeded.resumeCount} resume(s), ${seeded.jobDescriptionCount} JD(s), ${seeded.analysisCount} analysis, and ${seeded.jobOpportunityCount} opportunity record(s).`);
+      setActiveTask("history");
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Demo seed failed");
     }
   }
 
@@ -2787,6 +2846,7 @@ function App() {
                 adminAnalyses={adminAnalyses}
                 usageSummary={usageSummary}
                 billingDraft={billingDraft}
+                demoSeedResult={demoSeedResult}
                 canManageSettings={currentUser?.role === "admin"}
                 info={settingsInfo}
                 onRefresh={loadScoringConfigs}
@@ -2803,6 +2863,7 @@ function App() {
                 onBillingDraftChange={setBillingDraft}
                 onBillingSave={saveBillingMetadata}
                 onBillingCancel={() => setBillingDraft(null)}
+                onSeedDemo={seedDemoWorkspace}
               />
             </TaskPanel>
           )}
@@ -3698,6 +3759,7 @@ function ScoringSettingsPanel({
   adminAnalyses,
   usageSummary,
   billingDraft,
+  demoSeedResult,
   canManageSettings,
   info,
   onRefresh,
@@ -3714,6 +3776,7 @@ function ScoringSettingsPanel({
   onBillingDraftChange,
   onBillingSave,
   onBillingCancel,
+  onSeedDemo,
 }: {
   configs: ScoringCalibrationConfig[];
   recommendation: ScoringCalibrationRecommendation | null;
@@ -3724,6 +3787,7 @@ function ScoringSettingsPanel({
   adminAnalyses: HistoryAnalysisRecord[];
   usageSummary: UsageSummary | null;
   billingDraft: BillingDraft | null;
+  demoSeedResult: DemoSeedResponse | null;
   canManageSettings: boolean;
   info: string;
   onRefresh: () => void;
@@ -3740,6 +3804,7 @@ function ScoringSettingsPanel({
   onBillingDraftChange: (draft: BillingDraft) => void;
   onBillingSave: (draft: BillingDraft) => void;
   onBillingCancel: () => void;
+  onSeedDemo: () => void;
 }) {
   const [selectedFamily, setSelectedFamily] = useState(".NET");
   const activeConfig = configs.find((config) => config.roleFamily === selectedFamily) ?? configs[0];
@@ -3912,6 +3977,62 @@ function ScoringSettingsPanel({
         ) : (
           <p className="hint">Production readiness has not been loaded yet.</p>
         )}
+      </div>
+
+      <div className="panel diagnosticsPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Staging</p>
+            <h3>Smoke Runbook</h3>
+          </div>
+          <span className="statusPill warn">manual</span>
+        </div>
+        <div className="compactList">
+          <div>
+            <strong>1. Rehearse deployment assets</strong>
+            <code>python deployment/production_rehearsal.py --api {API_BASE_URL} --web {window.location.origin}</code>
+          </div>
+          <div>
+            <strong>2. Run backend/frontend smoke checks</strong>
+            <code>python deployment/smoke_check.py --api {API_BASE_URL} --frontend {window.location.origin} --user-id {users[0]?.id ?? "staging-admin"} --session-token &lt;session-token&gt; --check-extension-package --strict-production</code>
+          </div>
+          <div>
+            <strong>3. Package staging extension</strong>
+            <code>python deployment/package_extension.py --api {API_BASE_URL} --web {window.location.origin} --version 0.1.0-staging</code>
+          </div>
+        </div>
+        <ul className="diagnosticWarnings">
+          <li>Create or login as the first admin listed in ADMIN_USER_IDS.</li>
+          <li>Confirm Settings readiness has no failed checks before enabling live LLM mode.</li>
+          <li>Validate extension parsing on LinkedIn, Naukri, Indeed, and one company careers page.</li>
+        </ul>
+      </div>
+
+      <div className="panel diagnosticsPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Demo</p>
+            <h3>Portfolio Workspace</h3>
+          </div>
+          <button type="button" className="secondaryButton" disabled={!canManageSettings} onClick={onSeedDemo}>Seed Demo Data</button>
+        </div>
+        <p className="hint">Creates a resettable Premium demo workspace for project reviews, then switches this browser session to the demo user.</p>
+        <div className="usageQuotaStrip">
+          <div><span>User</span><strong>demo-aditya</strong></div>
+          <div><span>Password</span><strong>DemoPass123!</strong></div>
+          <div><span>Tier</span><strong>Premium</strong></div>
+          <div><span>Reset</span><strong>Yes</strong></div>
+        </div>
+        {demoSeedResult && (
+          <div className="recommendationPanel">
+            <div>
+              <strong>{demoSeedResult.displayName}</strong>
+              <span>{demoSeedResult.resumeCount} resume(s), {demoSeedResult.jobDescriptionCount} JD(s), {demoSeedResult.analysisCount} analysis, {demoSeedResult.jobOpportunityCount} opportunity record(s)</span>
+            </div>
+            <p>{demoSeedResult.message}</p>
+          </div>
+        )}
+        {!canManageSettings && <p className="hint">Admin role is required to reset and seed demo data.</p>}
       </div>
 
       <div className="panel diagnosticsPanel">

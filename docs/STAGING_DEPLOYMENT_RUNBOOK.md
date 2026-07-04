@@ -141,6 +141,14 @@ For staging demos, seed a dedicated demo user:
 .\ai-service\.venv\Scripts\python.exe deployment\seed_demo_data.py --reset --premium --print-token
 ```
 
+Or use the web app:
+
+```text
+Scoring Settings -> Demo -> Seed Demo Data
+```
+
+The web action calls `POST /admin/demo/seed`, requires an admin session when `REQUIRE_USER_AUTH=true`, and switches the browser session to the seeded demo user.
+
 Default login:
 
 ```text

@@ -171,6 +171,7 @@ Built:
 - Production rehearsal script.
 - Staging deployment runbook.
 - Demo workspace seed script.
+- Admin-only demo seed endpoint and Settings button.
 - CI checks for backend, frontend, deployment scripts, extension packaging, and production rehearsal.
 
 Still needs:

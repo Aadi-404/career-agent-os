@@ -27,6 +27,7 @@ from app.models.analysis import (
     ResumeImprovement,
 )
 from app.models.auth import UserLoginRequest, UserPasswordRegisterRequest, UserSessionResponse
+from app.models.demo import DemoSeedRequest, DemoSeedResponse
 from app.models.evaluation import (
     MatchFeedbackDataset,
     MatchFeedbackImportRequest,
@@ -95,6 +96,7 @@ from app.models.scoring_config import (
 )
 from app.models.system import ProductionReadinessResponse, ReadinessCheck, SystemDiagnostics
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
+from app.services.demo_seed_service import seed_demo_workspace
 from app.services.history_store import (
     create_or_touch_anonymous_session,
     claim_anonymous_session,
@@ -709,6 +711,15 @@ def get_admin_usage_summary(
 ) -> UsageSummary:
     _authorize_admin(session_token)
     return get_usage_summary(user_id=userId, limit=limit)
+
+
+@app.post("/admin/demo/seed", response_model=DemoSeedResponse)
+def seed_admin_demo_workspace(
+    request: DemoSeedRequest,
+    session_token: str | None = Header(default=None, alias="X-Session-Token"),
+) -> DemoSeedResponse:
+    _authorize_admin(session_token)
+    return seed_demo_workspace(request)
 
 
 @app.get("/usage/quota", response_model=UsageQuotaStatus)

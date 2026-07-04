@@ -3,7 +3,8 @@ from unittest.mock import patch
 
 from fastapi import HTTPException
 
-from app.main import _authorize_admin, _authorize_billing_webhook, _authorize_user, get_billing_checkout, get_current_usage_quota, settings
+from app.main import _authorize_admin, _authorize_billing_webhook, _authorize_user, get_billing_checkout, get_current_usage_quota, seed_admin_demo_workspace, settings
+from app.models.demo import DemoSeedRequest, DemoSeedResponse
 from app.models.history import UsageQuotaStatus, UserRecord
 
 
@@ -108,6 +109,38 @@ class AuthGuardTests(unittest.TestCase):
 
         self.assertFalse(response.configured)
         self.assertIn("not configured", response.message)
+
+    def test_demo_seed_endpoint_requires_admin(self):
+        with patch("app.main.resolve_user_session", return_value=UserRecord(id="user-1", displayName="User 1", role="member", createdAt="2026-06-30T00:00:00Z")):
+            with self.assertRaises(HTTPException) as context:
+                seed_admin_demo_workspace(DemoSeedRequest(), "token")
+
+        self.assertEqual(context.exception.status_code, 403)
+
+    def test_demo_seed_endpoint_allows_admin(self):
+        seeded = DemoSeedResponse(
+            userId="demo-aditya",
+            displayName="Aditya Demo",
+            email="demo.aditya@example.com",
+            password="DemoPass123!",
+            subscriptionTier="premium",
+            resumeCount=1,
+            jobDescriptionCount=1,
+            analysisCount=1,
+            preparationSessionCount=1,
+            jobOpportunityCount=1,
+            averageMatchScore=84,
+            sessionToken="token",
+            message="seeded",
+        )
+        with (
+            patch("app.main.resolve_user_session", return_value=UserRecord(id="admin-1", displayName="Admin 1", role="admin", createdAt="2026-06-30T00:00:00Z")),
+            patch("app.main.seed_demo_workspace", return_value=seeded) as seed_mock,
+        ):
+            response = seed_admin_demo_workspace(DemoSeedRequest(), "token")
+
+        seed_mock.assert_called_once()
+        self.assertEqual(response.userId, "demo-aditya")
 
 
 if __name__ == "__main__":

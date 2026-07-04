@@ -176,6 +176,12 @@ Seed a demo workspace for project reviews with:
 .\ai-service\.venv\Scripts\python.exe deployment\seed_demo_data.py --reset --premium --print-token
 ```
 
+Admins can also seed the demo workspace from:
+
+```text
+Task: Scoring Settings -> Demo -> Seed Demo Data
+```
+
 Restore a local/dev database from a JSON backup with:
 
 ```powershell
