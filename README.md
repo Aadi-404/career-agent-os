@@ -31,6 +31,12 @@ MVP launch status and remaining deploy blockers are documented in:
 docs/MVP_LAUNCH_STATUS.md
 ```
 
+Staging deployment steps are documented in:
+
+```text
+docs/STAGING_DEPLOYMENT_RUNBOOK.md
+```
+
 Deployment environment templates are available in:
 
 ```text
@@ -162,6 +168,12 @@ Export a PostgreSQL JSON backup with:
 
 ```powershell
 .\ai-service\.venv\Scripts\python.exe deployment\backup_database.py --pretty
+```
+
+Seed a demo workspace for project reviews with:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\seed_demo_data.py --reset --premium --print-token
 ```
 
 Restore a local/dev database from a JSON backup with:

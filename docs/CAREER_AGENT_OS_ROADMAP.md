@@ -271,6 +271,8 @@ Started:
 - The web app has an editable workspace user selector for multi-user testing.
 - Production deployment assets can be rehearsed with `deployment/production_rehearsal.py`.
 - MVP launch status and deploy blockers are summarized in `docs/MVP_LAUNCH_STATUS.md`.
+- Staging setup is documented in `docs/STAGING_DEPLOYMENT_RUNBOOK.md`.
+- A demo workspace can be seeded with `deployment/seed_demo_data.py`.
 
 Why this matters:
 

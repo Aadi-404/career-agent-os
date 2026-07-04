@@ -41,6 +41,12 @@ The endpoint accepts normalized app payloads and native `stripe`, `razorpay`, or
 
 ## Pre-Deploy Verification
 
+For staging-specific setup, use:
+
+```text
+docs/STAGING_DEPLOYMENT_RUNBOOK.md
+```
+
 Run locally before shipping:
 
 ```powershell
@@ -84,6 +90,12 @@ Run user-scoped comparison and billing smoke checks after creating a test user:
 This covers production readiness, frontend reachability, saved comparison history, usage quota, checkout handoff, billing webhook mapping, and extension packaging.
 
 ## Manual Product Smoke
+
+- For a repeatable demo workspace, run:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\seed_demo_data.py --reset --premium --print-token
+```
 
 - Register or claim the first admin user from `ADMIN_USER_IDS`.
 - Confirm Settings shows production readiness with no failed checks.

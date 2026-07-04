@@ -169,6 +169,8 @@ Built:
 - Backup and restore utilities.
 - Production deployment checklist.
 - Production rehearsal script.
+- Staging deployment runbook.
+- Demo workspace seed script.
 - CI checks for backend, frontend, deployment scripts, extension packaging, and production rehearsal.
 
 Still needs:
