@@ -129,6 +129,7 @@ class AuthGuardTests(unittest.TestCase):
             analysisCount=1,
             preparationSessionCount=1,
             jobOpportunityCount=1,
+            researchNoteCount=1,
             averageMatchScore=84,
             sessionToken="token",
             message="seeded",

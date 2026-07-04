@@ -20,6 +20,7 @@ class _WorkspaceSummaryConnection:
         "analyses": 4,
         "preparation_sessions": 5,
         "job_opportunities": 6,
+        "research_notes": 7,
     }
 
     def execute(self, query, params=()):
@@ -67,6 +68,7 @@ class WorkspaceSummaryTests(unittest.TestCase):
             summary = get_workspace_summary("user-1")
 
         self.assertEqual(summary.resumeCount, 2)
+        self.assertEqual(summary.researchNoteCount, 7)
         self.assertEqual(summary.averageMatchScore, 72)
         self.assertEqual(summary.bestMatchScore, 91)
         self.assertEqual(summary.activeOpportunityCount, 4)

@@ -26,6 +26,11 @@ const checks = [
     patterns: ["Saved Comparisons", "Application Pipeline", "Preparation Progress"],
   },
   {
+    name: "research notes workflow",
+    file: "src/main.tsx",
+    patterns: ["Research Notes", "Manual Research Capture", "Saved Research Memory"],
+  },
+  {
     name: "extension workflow",
     file: "src/main.tsx",
     patterns: ["Extension Setup", "Check Extension Readiness", "Real Site Validation", "Record parser quality"],

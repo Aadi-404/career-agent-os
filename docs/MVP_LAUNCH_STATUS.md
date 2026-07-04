@@ -192,9 +192,16 @@ Why it matters:
 
 ### Phase 7: Research-Grounded Market and Company Intelligence
 
-Status: Not started.
+Status: Started.
 
-Planned:
+Built:
+
+- Manual research notes for company, role, market, and interview signals.
+- PostgreSQL persistence for research summaries, key signals, preparation topics, and source references.
+- Frontend Research Notes task for saving reusable research memory.
+- Demo seed record showing how future cited research will be stored.
+
+Still needs:
 
 - Search similar job postings.
 - Search recent company interview experiences.
@@ -202,7 +209,7 @@ Planned:
 - Cite sources.
 - Produce market opportunity signals.
 
-Why it is later:
+Why the remaining work is later:
 
 - It needs web search, citation handling, and likely more AI cost. The scoring engine should remain stable before adding research agents.
 

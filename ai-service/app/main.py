@@ -72,6 +72,8 @@ from app.models.history import (
     PreparationSessionRecord,
     PreparationSessionProgressUpdateRequest,
     PreparationSessionSaveRequest,
+    ResearchNoteRecord,
+    ResearchNoteSaveRequest,
     ResumeRecord,
     ResumeSaveRequest,
     UsageQuotaStatus,
@@ -119,6 +121,7 @@ from app.services.history_store import (
     list_job_opportunities_for_anonymous_session,
     list_job_opportunities_for_user,
     list_preparation_sessions,
+    list_research_notes,
     list_resumes,
     save_analysis,
     save_comparison_run,
@@ -129,6 +132,7 @@ from app.services.history_store import (
     save_job_description,
     save_job_opportunity,
     save_preparation_session,
+    save_research_note,
     lookup_analysis,
     save_resume,
     update_preparation_session_progress,
@@ -816,6 +820,18 @@ def create_preparation_session_record(request: PreparationSessionSaveRequest, se
 def get_preparation_session_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[PreparationSessionRecord]:
     _authorize_user(user_id, session_token)
     return list_preparation_sessions(user_id)
+
+
+@app.post("/history/research-notes", response_model=ResearchNoteRecord)
+def create_research_note_record(request: ResearchNoteSaveRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ResearchNoteRecord:
+    _authorize_user(request.userId, session_token)
+    return save_research_note(request)
+
+
+@app.get("/history/users/{user_id}/research-notes", response_model=list[ResearchNoteRecord])
+def get_research_note_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[ResearchNoteRecord]:
+    _authorize_user(user_id, session_token)
+    return list_research_notes(user_id)
 
 
 @app.get("/ai/preparation/memory/{user_id}", response_model=PrepMemoryResponse)

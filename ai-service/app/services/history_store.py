@@ -42,6 +42,8 @@ from app.models.history import (
     PreparationSessionRecord,
     PreparationSessionProgressUpdateRequest,
     PreparationSessionSaveRequest,
+    ResearchNoteRecord,
+    ResearchNoteSaveRequest,
     ResumeRecord,
     ResumeSaveRequest,
     UsageEventRecord,
@@ -437,6 +439,7 @@ def get_workspace_summary(user_id: str) -> WorkspaceSummary:
         analysis_count = _count(connection, "analyses", user_id)
         preparation_count = _count(connection, "preparation_sessions", user_id)
         opportunity_count = _count(connection, "job_opportunities", user_id)
+        research_note_count = _count(connection, "research_notes", user_id)
         analysis_stats = connection.execute(
             """
             SELECT ROUND(AVG(technical_match_score)) AS average_score,
@@ -494,6 +497,7 @@ def get_workspace_summary(user_id: str) -> WorkspaceSummary:
         analysisCount=analysis_count,
         preparationSessionCount=preparation_count,
         jobOpportunityCount=opportunity_count,
+        researchNoteCount=research_note_count,
         averageMatchScore=int(_row_value(analysis_stats, "average_score")) if _row_value(analysis_stats, "average_score") is not None else None,
         bestMatchScore=int(_row_value(analysis_stats, "best_score")) if _row_value(analysis_stats, "best_score") is not None else None,
         activeOpportunityCount=int(_row_value(opportunity_stats, "active_count") or 0),
@@ -683,6 +687,48 @@ def list_analyses(user_id: str) -> list[AnalysisRecord]:
             (user_id,),
         ).fetchall()
     return [_analysis_from_row(row) for row in rows]
+
+
+def save_research_note(request: ResearchNoteSaveRequest) -> ResearchNoteRecord:
+    now = _now()
+    record_id = _id()
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        connection.execute(
+            """
+            INSERT INTO research_notes (
+                id, user_id, title, company, role_title, research_type, summary,
+                key_signals_json, preparation_topics_json, sources_json, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record_id,
+                request.userId,
+                request.title,
+                request.company,
+                request.roleTitle,
+                request.researchType,
+                request.summary,
+                _json_dump(request.keySignals) or "[]",
+                _json_dump(request.preparationTopics) or "[]",
+                _json_dump(request.sources) or "[]",
+                now,
+                now,
+            ),
+        )
+        row = connection.execute("SELECT * FROM research_notes WHERE id = ?", (record_id,)).fetchone()
+    return _research_note_from_row(_require_row(row, "Research note not found after save"))
+
+
+def list_research_notes(user_id: str) -> list[ResearchNoteRecord]:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        rows = connection.execute(
+            "SELECT * FROM research_notes WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
+            (user_id,),
+        ).fetchall()
+    return [_research_note_from_row(row) for row in rows]
 
 
 def search_analyses(query: str | None = None, user_id: str | None = None, limit: int = 50) -> list[AnalysisRecord]:
@@ -1490,6 +1536,23 @@ def _job_opportunity_from_row(row: Any) -> JobOpportunityRecord:
     )
 
 
+def _research_note_from_row(row: Any) -> ResearchNoteRecord:
+    return ResearchNoteRecord(
+        id=row["id"],
+        userId=row["user_id"],
+        title=row["title"],
+        company=row["company"],
+        roleTitle=_row_value(row, "role_title"),
+        researchType=row["research_type"],
+        summary=row["summary"],
+        keySignals=_json_load(row["key_signals_json"]) if _row_value(row, "key_signals_json") else [],
+        preparationTopics=_json_load(row["preparation_topics_json"]) if _row_value(row, "preparation_topics_json") else [],
+        sources=_json_load(row["sources_json"]) if _row_value(row, "sources_json") else [],
+        createdAt=row["created_at"],
+        updatedAt=row["updated_at"],
+    )
+
+
 def _extension_validation_from_row(row: Any) -> ExtensionValidationRecord:
     return ExtensionValidationRecord(
         id=row["id"],
@@ -1529,6 +1592,8 @@ def _json_dump(value) -> str | None:
         return None
     if isinstance(value, BaseModel):
         return value.model_dump_json()
+    if isinstance(value, list):
+        return json.dumps([item.model_dump() if isinstance(item, BaseModel) else item for item in value])
     return json.dumps(value)
 
 

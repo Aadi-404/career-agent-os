@@ -30,6 +30,8 @@ from app.models.history import (
     JobDescriptionSaveRequest,
     JobOpportunitySaveRequest,
     PreparationSessionSaveRequest,
+    ResearchNoteSaveRequest,
+    ResearchSource,
     ResumeSaveRequest,
 )
 from app.models.jd_parse import ExperienceRange, ParsedJobDescription
@@ -46,6 +48,7 @@ from app.services.history_store import (
     save_job_opportunity,
     save_match_feedback,
     save_preparation_session,
+    save_research_note,
     save_resume,
 )
 
@@ -155,6 +158,34 @@ def seed_demo_workspace(request: DemoSeedRequest) -> DemoSeedResponse:
             notes="Demo feedback label for calibration dashboard.",
         )
     )
+    save_research_note(
+        ResearchNoteSaveRequest(
+            userId=request.userId,
+            title="DemoFin Python AI interview signals",
+            company="DemoFin Analytics",
+            roleTitle="Python AI Full Stack Engineer",
+            researchType="interview",
+            summary="Manual research note for the future research-agent phase. The role emphasizes AI-agent guardrails, ETL reliability, API ownership, and cloud fundamentals.",
+            keySignals=[
+                "AI-agent guardrails and tool permissions are likely differentiators.",
+                "ETL validation and data quality stories should be prepared with metrics.",
+                "Cloud fundamentals are enough for baseline fit, but deployment ownership would strengthen the profile.",
+            ],
+            preparationTopics=[
+                "Agent tool permission design",
+                "ETL retry, reconciliation, and rollback strategy",
+                "Django API idempotency and background jobs",
+                "Azure fundamentals and monitoring basics",
+            ],
+            sources=[
+                ResearchSource(
+                    title="Manual demo research note",
+                    sourceType="manual",
+                    note="Seeded example showing where cited company research will be stored.",
+                )
+            ],
+        )
+    )
     for module in ("score", "prep_plan", "gap_report", "interview_questions", "extension_match"):
         record_usage_event(module=module, user_id=request.userId, mode="mock", provider="demo", model="seed-data")
 
@@ -171,6 +202,7 @@ def seed_demo_workspace(request: DemoSeedRequest) -> DemoSeedResponse:
         analysisCount=summary.analysisCount,
         preparationSessionCount=summary.preparationSessionCount,
         jobOpportunityCount=summary.jobOpportunityCount,
+        researchNoteCount=summary.researchNoteCount,
         averageMatchScore=summary.averageMatchScore,
         sessionToken=token,
         message="Demo workspace seeded. Use the returned login to show history, score, prep, extension, evaluation, and usage dashboards.",

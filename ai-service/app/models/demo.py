@@ -21,6 +21,7 @@ class DemoSeedResponse(BaseModel):
     analysisCount: int
     preparationSessionCount: int
     jobOpportunityCount: int
+    researchNoteCount: int
     averageMatchScore: int | None = None
     sessionToken: str
     message: str

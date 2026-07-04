@@ -31,6 +31,7 @@ Core app is implemented. Remaining public-launch work is deployment-specific: st
 | Evaluation/tuning | Complete groundwork | Feedback labels, role-family calibration, audit history, rollback. |
 | Admin readiness | Complete groundwork | Diagnostics, production readiness, usage dashboard, billing handoff, launch tracker. |
 | Deployment tooling | Complete groundwork | Dockerfiles, compose examples, smoke check, production rehearsal, backup/restore. |
+| Research memory | Started | Manual company/role/interview research notes saved in PostgreSQL for future cited research agents. |
 
 ## AI Design
 
@@ -131,9 +132,20 @@ node extension\test-content-script.mjs
 
 ### Phase 7: Research-Grounded Intelligence
 
+Status: Started.
+
+Built:
+
+- Manual research-note workspace memory.
+- PostgreSQL storage for company, role, market, interview, and manual notes.
+- Saved key signals, preparation topics, and source references.
+- Demo seed includes a research note.
+
+Remaining:
+
 - Search similar job postings.
 - Search recent company interview experiences.
-- Extract role/company preparation topics.
+- Extract role/company preparation topics from live sources.
 - Produce cited research-backed preparation signals.
 
 ### Phase 8: Agentic Career OS

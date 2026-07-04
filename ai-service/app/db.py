@@ -252,6 +252,24 @@ def _postgres_schema() -> str:
             ALTER TABLE job_opportunities
             ADD COLUMN IF NOT EXISTS optional_artifacts_json TEXT;
 
+            CREATE TABLE IF NOT EXISTS research_notes (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                company TEXT,
+                role_title TEXT,
+                research_type TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                key_signals_json TEXT NOT NULL,
+                preparation_topics_json TEXT NOT NULL,
+                sources_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_research_notes_user_created
+            ON research_notes(user_id, created_at DESC);
+
             CREATE TABLE IF NOT EXISTS extension_validation_runs (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

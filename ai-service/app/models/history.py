@@ -269,6 +269,40 @@ class JobOpportunityRecord(BaseModel):
     updatedAt: str
 
 
+class ResearchSource(BaseModel):
+    title: str = Field(min_length=1, max_length=220)
+    url: str | None = Field(default=None, max_length=1000)
+    sourceType: Literal["manual", "job_post", "interview_experience", "company_page", "market_signal", "other"] = "manual"
+    note: str | None = Field(default=None, max_length=1200)
+
+
+class ResearchNoteSaveRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    title: str = Field(min_length=2, max_length=180)
+    company: str | None = Field(default=None, max_length=180)
+    roleTitle: str | None = Field(default=None, max_length=180)
+    researchType: Literal["company", "role", "market", "interview", "manual"] = "manual"
+    summary: str = Field(min_length=10, max_length=4000)
+    keySignals: list[str] = Field(default_factory=list, max_length=30)
+    preparationTopics: list[str] = Field(default_factory=list, max_length=30)
+    sources: list[ResearchSource] = Field(default_factory=list, max_length=20)
+
+
+class ResearchNoteRecord(BaseModel):
+    id: str
+    userId: str
+    title: str
+    company: str | None = None
+    roleTitle: str | None = None
+    researchType: str
+    summary: str
+    keySignals: list[str] = Field(default_factory=list)
+    preparationTopics: list[str] = Field(default_factory=list)
+    sources: list[ResearchSource] = Field(default_factory=list)
+    createdAt: str
+    updatedAt: str
+
+
 class WorkspaceSummary(BaseModel):
     user: UserRecord
     resumeCount: int
@@ -276,6 +310,7 @@ class WorkspaceSummary(BaseModel):
     analysisCount: int
     preparationSessionCount: int
     jobOpportunityCount: int = 0
+    researchNoteCount: int = 0
     averageMatchScore: int | None = None
     bestMatchScore: int | None = None
     activeOpportunityCount: int = 0

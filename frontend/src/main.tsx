@@ -76,7 +76,7 @@ type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
-type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "extension" | "evaluation" | "settings";
+type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "research" | "extension" | "evaluation" | "settings";
 type CostMode = "free" | "standard" | "premium";
 type AccessTier = "free" | "premium" | "admin";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
@@ -255,6 +255,30 @@ type HistoryComparisonRecord = {
   createdAt: string;
 };
 
+type ResearchSource = {
+  title: string;
+  url?: string | null;
+  sourceType: "manual" | "job_post" | "interview_experience" | "company_page" | "market_signal" | "other";
+  note?: string | null;
+};
+
+type ResearchType = "company" | "role" | "market" | "interview" | "manual";
+
+type ResearchNoteRecord = {
+  id: string;
+  userId: string;
+  title: string;
+  company?: string | null;
+  roleTitle?: string | null;
+  researchType: ResearchType;
+  summary: string;
+  keySignals: string[];
+  preparationTopics: string[];
+  sources: ResearchSource[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 type UsageEventRecord = {
   id: string;
   userId?: string | null;
@@ -299,6 +323,7 @@ type DemoSeedResponse = {
   analysisCount: number;
   preparationSessionCount: number;
   jobOpportunityCount: number;
+  researchNoteCount: number;
   averageMatchScore?: number | null;
   sessionToken: string;
   message: string;
@@ -442,6 +467,7 @@ type WorkspaceSummary = {
   analysisCount: number;
   preparationSessionCount: number;
   jobOpportunityCount: number;
+  researchNoteCount: number;
   averageMatchScore?: number | null;
   bestMatchScore?: number | null;
   activeOpportunityCount: number;
@@ -682,6 +708,17 @@ function App() {
   const [preparationHistory, setPreparationHistory] = useState<HistoryPreparationRecord[]>([]);
   const [jobOpportunityHistory, setJobOpportunityHistory] = useState<HistoryJobOpportunityRecord[]>([]);
   const [comparisonHistory, setComparisonHistory] = useState<HistoryComparisonRecord[]>([]);
+  const [researchNotes, setResearchNotes] = useState<ResearchNoteRecord[]>([]);
+  const [researchInfo, setResearchInfo] = useState("");
+  const [researchSaving, setResearchSaving] = useState(false);
+  const [researchTitle, setResearchTitle] = useState("Company and role research note");
+  const [researchCompany, setResearchCompany] = useState("");
+  const [researchRoleTitle, setResearchRoleTitle] = useState("");
+  const [researchType, setResearchType] = useState<ResearchType>("manual");
+  const [researchSummary, setResearchSummary] = useState("");
+  const [researchKeySignals, setResearchKeySignals] = useState("");
+  const [researchPreparationTopics, setResearchPreparationTopics] = useState("");
+  const [researchSourcesDraft, setResearchSourcesDraft] = useState("");
   const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
   const [comparisonJdIds, setComparisonJdIds] = useState<string[]>([]);
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
@@ -709,6 +746,9 @@ function App() {
       void loadResumeLibrary();
       void loadJdLibrary();
       void loadComparisonHistory();
+    }
+    if (activeTask === "research") {
+      void loadResearchNotes();
     }
     if (activeTask === "extension") {
       loadExtensionValidations();
@@ -856,6 +896,7 @@ function App() {
     setPreparationHistory([]);
     setJobOpportunityHistory([]);
     setComparisonHistory([]);
+    setResearchNotes([]);
     setActiveComparisonId(null);
     setExtensionValidations([]);
     setEvaluationSummary(null);
@@ -1074,7 +1115,7 @@ function App() {
     try {
       await ensureLocalUser();
       const getOptions = { headers: authHeaders(false) };
-      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, comparisonsResponse] = await Promise.all([
+      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, comparisonsResponse, researchResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/workspace`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/analyses`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resumes`, getOptions),
@@ -1082,9 +1123,10 @@ function App() {
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/preparation-sessions`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/job-opportunities`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/comparisons`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/research-notes`, getOptions),
       ]);
 
-      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !comparisonsResponse.ok) {
+      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !comparisonsResponse.ok || !researchResponse.ok) {
         throw new Error("History load failed");
       }
 
@@ -1099,6 +1141,7 @@ function App() {
       }
       setJobOpportunityHistory(await opportunitiesResponse.json() as HistoryJobOpportunityRecord[]);
       setComparisonHistory(await comparisonsResponse.json() as HistoryComparisonRecord[]);
+      setResearchNotes(await researchResponse.json() as ResearchNoteRecord[]);
       setHistoryInfo("Loaded saved PostgreSQL history.");
       void loadPrepMemory();
     } catch (err) {
@@ -1149,6 +1192,60 @@ function App() {
       }
     } catch {
       // Comparison can still run without saved batches.
+    }
+  }
+
+  async function loadResearchNotes() {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/research-notes`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error(await readApiError(response, "Research notes load failed"));
+      setResearchNotes(await response.json() as ResearchNoteRecord[]);
+      setResearchInfo("Loaded saved research notes.");
+    } catch (err) {
+      setResearchInfo(err instanceof Error ? err.message : "Research notes load failed");
+    }
+  }
+
+  async function saveResearchNote() {
+    const title = researchTitle.trim();
+    const summary = researchSummary.trim();
+    if (title.length < 2 || summary.length < 10) {
+      setResearchInfo("Add a title and a summary of at least 10 characters.");
+      return;
+    }
+    setResearchSaving(true);
+    setResearchInfo("");
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/history/research-notes`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          userId: workspaceUserId,
+          title,
+          company: researchCompany.trim() || null,
+          roleTitle: researchRoleTitle.trim() || null,
+          researchType,
+          summary,
+          keySignals: splitLines(researchKeySignals),
+          preparationTopics: splitLines(researchPreparationTopics),
+          sources: parseResearchSources(researchSourcesDraft),
+        }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response, "Research note save failed"));
+      const saved = await response.json() as ResearchNoteRecord;
+      setResearchNotes((items) => [saved, ...items.filter((item) => item.id !== saved.id)]);
+      setResearchInfo("Research note saved to workspace memory.");
+      setResearchSummary("");
+      setResearchKeySignals("");
+      setResearchPreparationTopics("");
+      setResearchSourcesDraft("");
+      void loadWorkspaceSummary();
+    } catch (err) {
+      setResearchInfo(err instanceof Error ? err.message : "Research note save failed");
+    } finally {
+      setResearchSaving(false);
     }
   }
 
@@ -1685,7 +1782,7 @@ function App() {
         },
         "Demo workspace session active.",
       );
-      setSettingsInfo(`Seeded ${seeded.resumeCount} resume(s), ${seeded.jobDescriptionCount} JD(s), ${seeded.analysisCount} analysis, and ${seeded.jobOpportunityCount} opportunity record(s).`);
+      setSettingsInfo(`Seeded ${seeded.resumeCount} resume(s), ${seeded.jobDescriptionCount} JD(s), ${seeded.analysisCount} analysis, ${seeded.jobOpportunityCount} opportunity, and ${seeded.researchNoteCount} research note(s).`);
       updateLaunchChecklist("demo_seed", true);
       setActiveTask("history");
     } catch (err) {
@@ -2860,9 +2957,41 @@ function App() {
             </TaskPanel>
           )}
 
+          {activeTask === "research" && (
+            <TaskPanel
+              eyebrow="Phase 7"
+              title="Research Notes"
+              description="Save company, role, market, and interview signals as reusable workspace memory before live research agents are added."
+            >
+              <ResearchNotesPanel
+                notes={researchNotes}
+                title={researchTitle}
+                company={researchCompany}
+                roleTitle={researchRoleTitle}
+                researchType={researchType}
+                summary={researchSummary}
+                keySignals={researchKeySignals}
+                preparationTopics={researchPreparationTopics}
+                sourcesDraft={researchSourcesDraft}
+                saving={researchSaving}
+                info={researchInfo}
+                onTitleChange={setResearchTitle}
+                onCompanyChange={setResearchCompany}
+                onRoleTitleChange={setResearchRoleTitle}
+                onResearchTypeChange={setResearchType}
+                onSummaryChange={setResearchSummary}
+                onKeySignalsChange={setResearchKeySignals}
+                onPreparationTopicsChange={setResearchPreparationTopics}
+                onSourcesDraftChange={setResearchSourcesDraft}
+                onSave={saveResearchNote}
+                onRefresh={loadResearchNotes}
+              />
+            </TaskPanel>
+          )}
+
           {activeTask === "extension" && (
             <TaskPanel
-              eyebrow="Task 6"
+              eyebrow="Task 7"
               title="Extension Setup"
               description="Install and connect the browser extension for job-page scoring with saved resumes."
             >
@@ -3418,6 +3547,12 @@ function TaskNav({
       label: "Saved Comparison",
       description: "Resume/JD score grid",
       status: "Score-only",
+    },
+    {
+      id: "research",
+      label: "Research Notes",
+      description: "Company and role signals",
+      status: "Phase 7",
     },
     {
       id: "extension",
@@ -4843,6 +4978,164 @@ function PrepMemoryPanel({ memory, onRefresh }: { memory: PrepMemoryResponse | n
   );
 }
 
+function ResearchNotesPanel({
+  notes,
+  title,
+  company,
+  roleTitle,
+  researchType,
+  summary,
+  keySignals,
+  preparationTopics,
+  sourcesDraft,
+  saving,
+  info,
+  onTitleChange,
+  onCompanyChange,
+  onRoleTitleChange,
+  onResearchTypeChange,
+  onSummaryChange,
+  onKeySignalsChange,
+  onPreparationTopicsChange,
+  onSourcesDraftChange,
+  onSave,
+  onRefresh,
+}: {
+  notes: ResearchNoteRecord[];
+  title: string;
+  company: string;
+  roleTitle: string;
+  researchType: ResearchType;
+  summary: string;
+  keySignals: string;
+  preparationTopics: string;
+  sourcesDraft: string;
+  saving: boolean;
+  info: string;
+  onTitleChange: (value: string) => void;
+  onCompanyChange: (value: string) => void;
+  onRoleTitleChange: (value: string) => void;
+  onResearchTypeChange: (value: ResearchType) => void;
+  onSummaryChange: (value: string) => void;
+  onKeySignalsChange: (value: string) => void;
+  onPreparationTopicsChange: (value: string) => void;
+  onSourcesDraftChange: (value: string) => void;
+  onSave: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="researchWorkspace">
+      <section className="panel researchEditorPanel">
+        <div className="panelHeader">
+          <div>
+            <h3>Manual Research Capture</h3>
+            <p className="hint">Use this for company interview signals, similar job patterns, role expectations, and market notes. Live web research will plug into the same memory later.</p>
+          </div>
+          <button type="button" className="secondaryButton" disabled={saving} onClick={onRefresh}>Refresh</button>
+        </div>
+        <div className="gridTwo">
+          <label>
+            Title
+            <input value={title} onChange={(event) => onTitleChange(event.target.value)} />
+          </label>
+          <label>
+            Research type
+            <select value={researchType} onChange={(event) => onResearchTypeChange(event.target.value as ResearchType)}>
+              <option value="manual">Manual note</option>
+              <option value="company">Company</option>
+              <option value="role">Role</option>
+              <option value="interview">Interview</option>
+              <option value="market">Market</option>
+            </select>
+          </label>
+        </div>
+        <div className="gridTwo">
+          <label>
+            Company
+            <input value={company} onChange={(event) => onCompanyChange(event.target.value)} placeholder="Example: DemoFin Analytics" />
+          </label>
+          <label>
+            Role title
+            <input value={roleTitle} onChange={(event) => onRoleTitleChange(event.target.value)} placeholder="Example: Python AI Full Stack Engineer" />
+          </label>
+        </div>
+        <label>
+          Research summary
+          <textarea value={summary} onChange={(event) => onSummaryChange(event.target.value)} rows={5} placeholder="Summarize what you learned and why it matters for applying or preparing." />
+        </label>
+        <div className="gridTwo">
+          <label>
+            Key signals
+            <textarea value={keySignals} onChange={(event) => onKeySignalsChange(event.target.value)} rows={5} placeholder={"One signal per line\nAI-agent guardrails are emphasized\nETL reliability is repeatedly mentioned"} />
+          </label>
+          <label>
+            Preparation topics
+            <textarea value={preparationTopics} onChange={(event) => onPreparationTopicsChange(event.target.value)} rows={5} placeholder={"One topic per line\nTool permission design\nRetry and rollback handling"} />
+          </label>
+        </div>
+        <label>
+          Sources
+          <textarea value={sourcesDraft} onChange={(event) => onSourcesDraftChange(event.target.value)} rows={4} placeholder={"One source per line: title | url | type | note\nManual interview note | | manual | Asked in mock review"} />
+        </label>
+        <div className="actionBar">
+          <button type="button" disabled={saving} onClick={onSave}>{saving ? "Saving..." : "Save Research Note"}</button>
+          {info && <p className="hint">{info}</p>}
+        </div>
+      </section>
+
+      <section className="panel researchListPanel">
+        <div className="panelHeader">
+          <div>
+            <h3>Saved Research Memory</h3>
+            <p className="hint">{notes.length} note(s) available for future research and preparation agents.</p>
+          </div>
+        </div>
+        {notes.length ? (
+          <div className="researchNoteList">
+            {notes.map((note) => (
+              <article className="researchNoteCard" key={note.id}>
+                <div className="researchNoteHeader">
+                  <div>
+                    <strong>{note.title}</strong>
+                    <small>{[note.company, note.roleTitle, formatDate(note.createdAt)].filter(Boolean).join(" - ")}</small>
+                  </div>
+                  <span>{formatCategory(note.researchType)}</span>
+                </div>
+                <p>{note.summary}</p>
+                {note.keySignals.length > 0 && (
+                  <div>
+                    <h4>Signals</h4>
+                    <div className="tags">{note.keySignals.slice(0, 8).map((item) => <span key={item}>{item}</span>)}</div>
+                  </div>
+                )}
+                {note.preparationTopics.length > 0 && (
+                  <div>
+                    <h4>Preparation Topics</h4>
+                    <div className="tags">{note.preparationTopics.slice(0, 8).map((item) => <span key={item}>{item}</span>)}</div>
+                  </div>
+                )}
+                {note.sources.length > 0 && (
+                  <div className="sourceList">
+                    <h4>Sources</h4>
+                    {note.sources.slice(0, 4).map((source, index) => (
+                      <div className="sourceItem" key={`${note.id}-${index}`}>
+                        {source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> : <strong>{source.title}</strong>}
+                        <small>{[formatCategory(source.sourceType), source.note].filter(Boolean).join(" - ")}</small>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No research notes yet" body="Save manual research now. Later, company and web-research agents will write cited notes into this same workspace memory." />
+        )}
+      </section>
+    </div>
+  );
+}
+
 function HistoryPanel({
   summary,
   analyses,
@@ -4881,6 +5174,7 @@ function HistoryPanel({
           <div className="scoreTile"><span>Reports</span><strong>{summary?.analysisCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Plans</span><strong>{summary?.preparationSessionCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Jobs</span><strong>{summary?.jobOpportunityCount ?? 0}</strong></div>
+          <div className="scoreTile"><span>Research</span><strong>{summary?.researchNoteCount ?? 0}</strong></div>
           <div className="scoreTile"><span>Comparisons</span><strong>{comparisons.length}</strong></div>
           <div className="scoreTile"><span>Average score</span><strong>{summary?.averageMatchScore ?? "--"}%</strong></div>
           <div className="scoreTile"><span>Best score</span><strong>{summary?.bestMatchScore ?? "--"}%</strong></div>
@@ -5224,6 +5518,27 @@ function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+function splitLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseResearchSources(value: string): ResearchSource[] {
+  const allowedTypes: ResearchSource["sourceType"][] = ["manual", "job_post", "interview_experience", "company_page", "market_signal", "other"];
+  return splitLines(value).slice(0, 20).map((line) => {
+    const [titlePart, urlPart, typePart, notePart] = line.split("|").map((item) => item.trim());
+    const sourceType = allowedTypes.includes(typePart as ResearchSource["sourceType"]) ? typePart as ResearchSource["sourceType"] : "manual";
+    return {
+      title: titlePart || "Manual source",
+      url: urlPart || null,
+      sourceType,
+      note: notePart || null,
+    };
+  });
 }
 
 async function readApiError(response: Response, fallback: string) {

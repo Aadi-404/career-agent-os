@@ -767,6 +767,73 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.researchWorkspace {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.researchEditorPanel,
+.researchListPanel,
+.researchNoteList {
+  display: grid;
+  gap: 14px;
+}
+
+.researchNoteCard {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 16px;
+}
+
+.researchNoteHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.researchNoteHeader div {
+  display: grid;
+  gap: 4px;
+}
+
+.researchNoteHeader small,
+.sourceItem small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.researchNoteHeader span {
+  border-radius: 999px;
+  background: #eefaf8;
+  color: #115e59;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.researchNoteCard p,
+.researchNoteCard h4 {
+  margin: 0;
+}
+
+.sourceList,
+.sourceItem {
+  display: grid;
+  gap: 8px;
+}
+
+.sourceItem {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
 .pipelineGrid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -2899,6 +2966,7 @@ pre {
   .checkItem,
   .placeholderGrid,
   .historyGrid,
+  .researchWorkspace,
   .pipelineGrid,
   .comparisonGrid,
   .opportunityMetaGrid,
