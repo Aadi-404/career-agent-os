@@ -146,7 +146,11 @@ Run deployment smoke checks with:
 .\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api http://localhost:8000 --frontend http://localhost:5173
 ```
 
-Add `--user-id`, `--session-token`, and `--billing-webhook-secret` when you want smoke checks to cover saved comparisons and billing webhook mapping too.
+For production-style smoke checks, include auth, quota, checkout, billing webhook, and extension packaging:
+
+```powershell
+.\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api https://api.your-domain.com --frontend https://app.your-domain.com --user-id your-user-id --session-token your-session-token --billing-webhook-secret your-webhook-secret --check-extension-package --strict-production
+```
 
 Export a PostgreSQL JSON backup with:
 

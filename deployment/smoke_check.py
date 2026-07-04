@@ -1,9 +1,12 @@
 import argparse
 import json
+import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 
@@ -22,6 +25,8 @@ def main() -> int:
     parser.add_argument("--user-id", default="", help="Optional user id for user-scoped diagnostics.")
     parser.add_argument("--billing-webhook-secret", default="", help="Optional billing webhook secret for subscription webhook smoke checks.")
     parser.add_argument("--billing-user-id", default="", help="Optional user id to use for billing webhook smoke checks. Defaults to --user-id when omitted.")
+    parser.add_argument("--check-extension-package", action="store_true", help="Package the browser extension as part of smoke checks.")
+    parser.add_argument("--extension-version", default="0.1.0-smoke", help="Version used for extension package smoke checks.")
     parser.add_argument("--strict-production", action="store_true", help="Fail when production readiness has warnings.")
     args = parser.parse_args()
 
@@ -35,9 +40,13 @@ def main() -> int:
         results.append(check_page("frontend", args.frontend.rstrip("/")))
     if args.user_id:
         results.append(check_comparison_history(api_base, args.user_id, args.session_token))
+        results.append(check_usage_quota(api_base, args.user_id, args.session_token))
+        results.append(check_billing_checkout(api_base, args.user_id, args.session_token))
     billing_user_id = args.billing_user_id or args.user_id
     if args.billing_webhook_secret and billing_user_id:
         results.append(check_billing_webhook(api_base, billing_user_id, args.billing_webhook_secret))
+    if args.check_extension_package:
+        results.append(check_extension_package(api_base, args.frontend.rstrip("/") if args.frontend else "http://127.0.0.1:5173", args.extension_version))
 
     for result in results:
         prefix = "PASS" if result.ok else "FAIL"
@@ -105,6 +114,29 @@ def check_comparison_history(api_base: str, user_id: str, session_token: str) ->
     return CheckResult("comparison history API", True, f"{len(payload)} saved comparison run(s)")
 
 
+def check_usage_quota(api_base: str, user_id: str, session_token: str) -> CheckResult:
+    try:
+        payload = request_json(f"{api_base}/usage/quota?userId={user_id}", session_token)
+    except Exception as exc:
+        return CheckResult("usage quota API", False, str(exc))
+    required = {"tier", "windowStartAt", "resetAt", "usedUnits", "unlimited"}
+    missing = sorted(required - set(payload.keys()))
+    if missing:
+        return CheckResult("usage quota API", False, f"missing field(s): {', '.join(missing)}")
+    return CheckResult("usage quota API", True, f"{payload.get('tier')} tier, {payload.get('usedUnits')} unit(s) used")
+
+
+def check_billing_checkout(api_base: str, user_id: str, session_token: str) -> CheckResult:
+    try:
+        payload = request_json(f"{api_base}/billing/checkout?userId={user_id}", session_token)
+    except Exception as exc:
+        return CheckResult("billing checkout API", False, str(exc))
+    if "configured" not in payload or "provider" not in payload:
+        return CheckResult("billing checkout API", False, "missing configured/provider fields")
+    mode = "configured" if payload.get("configured") else "manual placeholder"
+    return CheckResult("billing checkout API", True, f"{payload.get('provider')} checkout {mode}")
+
+
 def check_billing_webhook(api_base: str, user_id: str, billing_webhook_secret: str) -> CheckResult:
     payload = {
         "provider": "stripe",
@@ -139,6 +171,36 @@ def check_billing_webhook(api_base: str, user_id: str, billing_webhook_secret: s
     if response.get("subscriptionPlanId") != "smoke_plan_check":
         return CheckResult("billing webhook API", False, "provider plan id was not mapped")
     return CheckResult("billing webhook API", True, "stripe-shaped webhook mapped and accepted")
+
+
+def check_extension_package(api_base: str, frontend_url: str, version: str) -> CheckResult:
+    root = Path(__file__).resolve().parents[1]
+    output = root / "deployment" / "releases" / "extension" / "smoke-package.zip"
+    release_dir = root / "deployment" / "releases" / "extension" / f"{urlparse(api_base).netloc.replace(':', '-')}-v{version}"
+    command = [
+        sys.executable,
+        str(root / "deployment" / "package_extension.py"),
+        "--api",
+        api_base,
+        "--web",
+        frontend_url,
+        "--version",
+        version,
+        "--output",
+        str(output),
+    ]
+    try:
+        completed = subprocess.run(command, cwd=root, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        return CheckResult("extension packaging", False, (exc.stderr or exc.stdout or str(exc)).strip())
+    finally:
+        if output.exists():
+            output.unlink()
+        if release_dir.exists():
+            import shutil
+
+            shutil.rmtree(release_dir)
+    return CheckResult("extension packaging", True, completed.stdout.strip().splitlines()[0])
 
 
 def request_json(
