@@ -4549,14 +4549,15 @@ function CommandCenterPanel({
   const agentRecommendation = agentPlan?.recommendations.find((item) => !item.alreadySatisfied) ?? null;
   const prepAction = prepMemory?.nextAction ?? null;
   const opportunityAction = opportunityActions?.actions[0] ?? null;
+  const displayResult = result ?? workspaceSummary?.latestAnalysis?.response ?? null;
 
   return (
     <div className="commandCenter">
       <section className="panel commandHero">
         <div>
           <p className="eyebrow">Operating System</p>
-          <h3>{result ? `${result.technicalMatchScore}% - ${result.fitCategory}` : "Run the first score"}</h3>
-          <p>{result?.overallSummary ?? "Start with resume matching. After that, this view coordinates paid artifacts, prep progress, and job pipeline actions."}</p>
+          <h3>{displayResult ? `${displayResult.technicalMatchScore}% - ${displayResult.fitCategory}` : "Run the first score"}</h3>
+          <p>{displayResult?.overallSummary ?? "Start with resume matching. After that, this view coordinates paid artifacts, prep progress, and job pipeline actions."}</p>
           <div className="inlineActions">
             <button type="button" className="secondaryButton" disabled={loading} onClick={onRefresh}>
               {loading ? "Refreshing..." : "Refresh Command Center"}
@@ -4585,7 +4586,7 @@ function CommandCenterPanel({
           secondaryLabel="Open Planner"
           onPrimary={() => agentRecommendation ? onRunAgentRecommendation(agentRecommendation.tool) : onBuildAgentPlan()}
           onSecondary={() => onOpenTask("agent")}
-          disabledPrimary={!result}
+          disabledPrimary={!displayResult}
         />
         <CommandActionCard
           label="Preparation"
@@ -4607,11 +4608,11 @@ function CommandCenterPanel({
         />
         <CommandActionCard
           label="Score"
-          title={result ? "Review latest report" : "Run score-only match"}
-          body={result ? "Inspect requirement matrix and generate optional artifacts one at a time." : "Upload, parse, review, then calculate the free score."}
-          primaryLabel={result ? "Open Report" : "Open Matching"}
+          title={displayResult ? "Review latest report" : "Run score-only match"}
+          body={displayResult ? "Inspect requirement matrix and generate optional artifacts one at a time." : "Upload, parse, review, then calculate the free score."}
+          primaryLabel={displayResult ? "Open Report" : "Open Matching"}
           secondaryLabel="Review Inputs"
-          onPrimary={() => onOpenTask(result ? "report" : "matching")}
+          onPrimary={() => onOpenTask(displayResult ? "report" : "matching")}
           onSecondary={() => onOpenTask("review")}
         />
       </div>
