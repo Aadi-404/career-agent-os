@@ -773,7 +773,7 @@ function loadLaunchChecklist(): LaunchChecklistState {
 }
 
 function App() {
-  const [activeTask, setActiveTask] = useState<ActiveTask>("matching");
+  const [activeTask, setActiveTask] = useState<ActiveTask>("command");
   const [workspaceUserId, setWorkspaceUserId] = useState(() => window.localStorage.getItem(workspaceUserStorageKey) || defaultWorkspaceUserId);
   const [workspaceUserDraft, setWorkspaceUserDraft] = useState(workspaceUserId);
   const [resumeText, setResumeText] = useState(defaultResume);
@@ -919,6 +919,9 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (activeTask === "command") {
+      void loadCommandCenter();
+    }
     if (activeTask === "history") {
       loadHistory();
     }
