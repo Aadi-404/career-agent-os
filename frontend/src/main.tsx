@@ -327,6 +327,19 @@ type AcceptedResumeRewriteRecord = {
   createdAt: string;
 };
 
+type ResumeVersionRecord = {
+  id: string;
+  userId: string;
+  resumeId: string;
+  analysisId?: string | null;
+  acceptedRewriteId?: string | null;
+  title: string;
+  changeSummary: string;
+  normalizedText: string;
+  structuredResume: StructuredResume;
+  createdAt: string;
+};
+
 type UsageEventRecord = {
   id: string;
   userId?: string | null;
@@ -777,6 +790,7 @@ function App() {
   const [resumeRewrite, setResumeRewrite] = useState<ResumeRewriteResponse | null>(null);
   const [appliedRewriteKeys, setAppliedRewriteKeys] = useState<string[]>([]);
   const [acceptedResumeRewrites, setAcceptedResumeRewrites] = useState<AcceptedResumeRewriteRecord[]>([]);
+  const [resumeVersions, setResumeVersions] = useState<ResumeVersionRecord[]>([]);
   const [rewriteInfo, setRewriteInfo] = useState("");
   const [rewriteLoading, setRewriteLoading] = useState(false);
   const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
@@ -816,6 +830,7 @@ function App() {
     }
     if (activeTask === "rewrite") {
       void loadAcceptedResumeRewrites();
+      void loadResumeVersions();
     }
     if (activeTask === "extension") {
       loadExtensionValidations();
@@ -1220,7 +1235,7 @@ function App() {
     try {
       await ensureLocalUser();
       const getOptions = { headers: authHeaders(false) };
-      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, comparisonsResponse, researchResponse, rewritesResponse] = await Promise.all([
+      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, comparisonsResponse, researchResponse, rewritesResponse, versionsResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/workspace`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/analyses`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resumes`, getOptions),
@@ -1230,9 +1245,10 @@ function App() {
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/comparisons`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/research-notes`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/accepted-resume-rewrites`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resume-versions`, getOptions),
       ]);
 
-      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !comparisonsResponse.ok || !researchResponse.ok || !rewritesResponse.ok) {
+      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !comparisonsResponse.ok || !researchResponse.ok || !rewritesResponse.ok || !versionsResponse.ok) {
         throw new Error("History load failed");
       }
 
@@ -1249,6 +1265,7 @@ function App() {
       setComparisonHistory(await comparisonsResponse.json() as HistoryComparisonRecord[]);
       setResearchNotes(await researchResponse.json() as ResearchNoteRecord[]);
       setAcceptedResumeRewrites(await rewritesResponse.json() as AcceptedResumeRewriteRecord[]);
+      setResumeVersions(await versionsResponse.json() as ResumeVersionRecord[]);
       setHistoryInfo("Loaded saved PostgreSQL history.");
       void loadPrepMemory();
     } catch (err) {
@@ -1322,6 +1339,17 @@ function App() {
       setAcceptedResumeRewrites(await response.json() as AcceptedResumeRewriteRecord[]);
     } catch (err) {
       setRewriteInfo(err instanceof Error ? err.message : "Accepted rewrite history load failed");
+    }
+  }
+
+  async function loadResumeVersions() {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resume-versions`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error(await readApiError(response, "Resume version history load failed"));
+      setResumeVersions(await response.json() as ResumeVersionRecord[]);
+    } catch (err) {
+      setRewriteInfo(err instanceof Error ? err.message : "Resume version history load failed");
     }
   }
 
@@ -1508,6 +1536,37 @@ function App() {
     if (!response.ok) throw new Error(await readApiError(response, "Accepted rewrite audit save failed"));
     const saved = await response.json() as AcceptedResumeRewriteRecord;
     setAcceptedResumeRewrites((records) => [saved, ...records.filter((record) => record.id !== saved.id)].slice(0, 100));
+    return saved;
+  }
+
+  async function saveResumeVersionSnapshot(
+    item: ResumeRewriteSuggestion,
+    nextResume: StructuredResume,
+    acceptedRewrite: AcceptedResumeRewriteRecord | null,
+    targetLabel: string,
+  ) {
+    if (!lastSavedResumeId) {
+      throw new Error("No saved resume snapshot is linked to this score yet.");
+    }
+    const normalizedText = formatStructuredResume(nextResume);
+    const response = await fetch(`${API_BASE_URL}/history/resume-versions`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        userId: workspaceUserId,
+        resumeId: lastSavedResumeId,
+        analysisId: lastSavedAnalysisId,
+        acceptedRewriteId: acceptedRewrite?.id ?? null,
+        title: `Rewrite version - ${item.targetRequirement}`.slice(0, 180),
+        changeSummary: `Applied ${formatCategory(item.proofSafety)} rewrite to ${targetLabel}.`,
+        normalizedText,
+        structuredResume: nextResume,
+      }),
+    });
+    if (!response.ok) throw new Error(await readApiError(response, "Resume version save failed"));
+    const saved = await response.json() as ResumeVersionRecord;
+    setResumeVersions((records) => [saved, ...records.filter((record) => record.id !== saved.id)].slice(0, 100));
+    return saved;
   }
 
   async function applyRewriteSuggestion(item: ResumeRewriteSuggestion, index: number) {
@@ -1582,10 +1641,11 @@ function App() {
     setScoreStep("review");
     setActiveTask("matching");
     try {
-      await saveAcceptedResumeRewrite(item, bullet, targetSection, targetLabel);
-      setRewriteInfo(`Applied rewrite suggestion to ${targetLabel} and saved it to rewrite history. Review the resume draft before scoring again.`);
+      const acceptedRewrite = await saveAcceptedResumeRewrite(item, bullet, targetSection, targetLabel);
+      await saveResumeVersionSnapshot(item, nextResume, acceptedRewrite, targetLabel);
+      setRewriteInfo(`Applied rewrite suggestion to ${targetLabel}, saved the audit, and captured a resume version snapshot. Review before scoring again.`);
     } catch (err) {
-      setRewriteInfo(`Applied rewrite suggestion to ${targetLabel}, but audit save failed: ${err instanceof Error ? err.message : "unknown error"}`);
+      setRewriteInfo(`Applied rewrite suggestion to ${targetLabel}, but history save was incomplete: ${err instanceof Error ? err.message : "unknown error"}`);
     }
   }
 
@@ -3380,6 +3440,7 @@ function App() {
                 accessTier={effectiveAccessTier}
                 appliedKeys={appliedRewriteKeys}
                 acceptedRewrites={acceptedResumeRewrites}
+                resumeVersions={resumeVersions}
                 onBuild={buildResumeRewrite}
                 onApplySuggestion={applyRewriteSuggestion}
                 onTierChange={updateAccountTier}
@@ -5659,6 +5720,7 @@ function ResumeRewritePanel({
   accessTier,
   appliedKeys,
   acceptedRewrites,
+  resumeVersions,
   onBuild,
   onApplySuggestion,
   onTierChange,
@@ -5670,6 +5732,7 @@ function ResumeRewritePanel({
   accessTier: AccessTier;
   appliedKeys: string[];
   acceptedRewrites: AcceptedResumeRewriteRecord[];
+  resumeVersions: ResumeVersionRecord[];
   onBuild: () => void;
   onApplySuggestion: (item: ResumeRewriteSuggestion, index: number) => void | Promise<void>;
   onTierChange: (tier: AccessTier) => void;
@@ -5774,6 +5837,29 @@ function ResumeRewritePanel({
           </div>
         ) : (
           <EmptyState title="No accepted rewrites yet" body="Apply a safe suggestion to create a resume rewrite audit trail." />
+        )}
+      </section>
+
+      <section className="panel rewriteHistoryPanel">
+        <h3>Resume Version Snapshots</h3>
+        <p className="hint">Snapshots preserve the full structured resume after accepted rewrites so future version compare and rollback can be added cleanly.</p>
+        {resumeVersions.length ? (
+          <div className="rewriteHistoryList">
+            {resumeVersions.slice(0, 8).map((version) => (
+              <article className="rewriteHistoryItem" key={version.id}>
+                <div className="rewriteItemHeader">
+                  <div>
+                    <strong>{version.title}</strong>
+                    <small>{version.changeSummary}</small>
+                  </div>
+                  <span>{formatDate(version.createdAt)}</span>
+                </div>
+                <p>{version.structuredResume.projects.length} project(s), {version.structuredResume.experience.length} experience item(s), {version.structuredResume.skills.length} skill(s)</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No resume versions yet" body="Apply a rewrite after a saved score to capture the resulting structured resume snapshot." />
         )}
       </section>
     </div>

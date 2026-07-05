@@ -48,6 +48,8 @@ from app.models.history import (
     ResearchNoteSaveRequest,
     ResumeRecord,
     ResumeSaveRequest,
+    ResumeVersionRecord,
+    ResumeVersionSaveRequest,
     UsageEventRecord,
     UsageQuotaStatus,
     UsageSummary,
@@ -569,6 +571,58 @@ def get_resume(user_id: str, resume_id: str) -> ResumeRecord:
             (resume_id, user_id),
         ).fetchone()
     return _resume_from_row(_require_row(row, "Resume record not found for this user"))
+
+
+def save_resume_version(request: ResumeVersionSaveRequest) -> ResumeVersionRecord:
+    now = _now()
+    record_id = _id()
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        _ensure_owned_record(connection, "resumes", request.resumeId, request.userId)
+        if request.analysisId:
+            _ensure_owned_record(connection, "analyses", request.analysisId, request.userId)
+        if request.acceptedRewriteId:
+            _ensure_owned_record(connection, "accepted_resume_rewrites", request.acceptedRewriteId, request.userId)
+        connection.execute(
+            """
+            INSERT INTO resume_versions (
+                id, user_id, resume_id, analysis_id, accepted_rewrite_id, title,
+                change_summary, normalized_text, structured_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record_id,
+                request.userId,
+                request.resumeId,
+                request.analysisId,
+                request.acceptedRewriteId,
+                request.title,
+                request.changeSummary,
+                request.normalizedText,
+                _json_dump(request.structuredResume) or "{}",
+                now,
+            ),
+        )
+        row = connection.execute("SELECT * FROM resume_versions WHERE id = ?", (record_id,)).fetchone()
+    return _resume_version_from_row(_require_row(row, "Resume version not found after save"))
+
+
+def list_resume_versions(user_id: str, resume_id: str | None = None) -> list[ResumeVersionRecord]:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        if resume_id:
+            _ensure_owned_record(connection, "resumes", resume_id, user_id)
+            rows = connection.execute(
+                "SELECT * FROM resume_versions WHERE user_id = ? AND resume_id = ? ORDER BY created_at DESC LIMIT 100",
+                (user_id, resume_id),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                "SELECT * FROM resume_versions WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
+                (user_id,),
+            ).fetchall()
+    return [_resume_version_from_row(row) for row in rows]
 
 
 def save_job_description(request: JobDescriptionSaveRequest) -> JobDescriptionRecord:
@@ -1494,6 +1548,21 @@ def _resume_from_row(row: Any) -> ResumeRecord:
         structuredResume=_json_model(row["structured_json"], StructuredResume),
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
+    )
+
+
+def _resume_version_from_row(row: Any) -> ResumeVersionRecord:
+    return ResumeVersionRecord(
+        id=row["id"],
+        userId=row["user_id"],
+        resumeId=row["resume_id"],
+        analysisId=row["analysis_id"],
+        acceptedRewriteId=row["accepted_rewrite_id"],
+        title=row["title"],
+        changeSummary=row["change_summary"],
+        normalizedText=row["normalized_text"],
+        structuredResume=_json_model(row["structured_json"], StructuredResume),
+        createdAt=row["created_at"],
     )
 
 

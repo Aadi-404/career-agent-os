@@ -97,6 +97,30 @@ class ResumeRecord(BaseModel):
     updatedAt: str
 
 
+class ResumeVersionSaveRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    resumeId: str = Field(min_length=2, max_length=80)
+    analysisId: str | None = Field(default=None, min_length=2, max_length=80)
+    acceptedRewriteId: str | None = Field(default=None, min_length=2, max_length=80)
+    title: str = Field(min_length=2, max_length=180)
+    changeSummary: str = Field(min_length=2, max_length=1000)
+    normalizedText: str = Field(min_length=1)
+    structuredResume: StructuredResume
+
+
+class ResumeVersionRecord(BaseModel):
+    id: str
+    userId: str
+    resumeId: str
+    analysisId: str | None = None
+    acceptedRewriteId: str | None = None
+    title: str
+    changeSummary: str
+    normalizedText: str
+    structuredResume: StructuredResume
+    createdAt: str
+
+
 class JobDescriptionSaveRequest(BaseModel):
     userId: str = Field(min_length=2, max_length=80)
     title: str = Field(min_length=2, max_length=180)

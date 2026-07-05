@@ -84,6 +84,8 @@ from app.models.history import (
     ResearchNoteSaveRequest,
     ResumeRecord,
     ResumeSaveRequest,
+    ResumeVersionRecord,
+    ResumeVersionSaveRequest,
     UsageQuotaStatus,
     UsageSummary,
     UserBillingUpdateRequest,
@@ -132,6 +134,7 @@ from app.services.history_store import (
     list_preparation_sessions,
     list_research_notes,
     list_accepted_resume_rewrites,
+    list_resume_versions,
     list_resumes,
     save_analysis,
     save_comparison_run,
@@ -144,6 +147,7 @@ from app.services.history_store import (
     save_preparation_session,
     save_research_note,
     save_accepted_resume_rewrite,
+    save_resume_version,
     lookup_analysis,
     save_resume,
     update_preparation_session_progress,
@@ -786,6 +790,22 @@ def create_resume_record(request: ResumeSaveRequest, session_token: str | None =
 def get_resume_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[ResumeRecord]:
     _authorize_user(user_id, session_token)
     return list_resumes(user_id)
+
+
+@app.post("/history/resume-versions", response_model=ResumeVersionRecord)
+def create_resume_version_record(request: ResumeVersionSaveRequest, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ResumeVersionRecord:
+    _authorize_user(request.userId, session_token)
+    return save_resume_version(request)
+
+
+@app.get("/history/users/{user_id}/resume-versions", response_model=list[ResumeVersionRecord])
+def get_resume_version_records(
+    user_id: str,
+    resumeId: str | None = None,
+    session_token: str | None = Header(default=None, alias="X-Session-Token"),
+) -> list[ResumeVersionRecord]:
+    _authorize_user(user_id, session_token)
+    return list_resume_versions(user_id, resume_id=resumeId)
 
 
 @app.post("/history/job-descriptions", response_model=JobDescriptionRecord)

@@ -101,6 +101,7 @@ Current Phase 6 groundwork:
 - Evidence-constrained resume rewrite: the web app can generate safer rewrite suggestions labelled as existing evidence, needs verification, or gap-only.
 - Rewrite approval workflow: safe or user-verified suggestions can be applied into the structured resume draft, while gap-only suggestions stay blocked from becoming resume claims.
 - Accepted rewrite audit: applied bullets are saved in PostgreSQL with proof-safety, target section, and linked analysis/resume/JD context when available.
+- Resume version snapshots: accepted rewrites can preserve the full structured resume draft for future compare and rollback controls.
 
 ## Run AI Service
 

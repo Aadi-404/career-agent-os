@@ -150,6 +150,25 @@ def _postgres_schema() -> str:
             CREATE INDEX IF NOT EXISTS idx_resumes_user_created
             ON resumes(user_id, created_at DESC);
 
+            CREATE TABLE IF NOT EXISTS resume_versions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                resume_id TEXT NOT NULL REFERENCES resumes(id) ON DELETE CASCADE,
+                analysis_id TEXT REFERENCES analyses(id) ON DELETE SET NULL,
+                accepted_rewrite_id TEXT,
+                title TEXT NOT NULL,
+                change_summary TEXT NOT NULL,
+                normalized_text TEXT NOT NULL,
+                structured_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_resume_versions_user_created
+            ON resume_versions(user_id, created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_resume_versions_resume_created
+            ON resume_versions(resume_id, created_at DESC);
+
             CREATE TABLE IF NOT EXISTS job_descriptions (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

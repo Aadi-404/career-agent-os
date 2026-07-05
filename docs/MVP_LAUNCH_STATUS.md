@@ -226,11 +226,12 @@ Built:
 - Resume Rewrite task with evidence-constrained suggestions and proof-safety labels.
 - Resume Rewrite approval workflow that applies allowed suggestions to the structured resume draft and keeps gap-only suggestions blocked.
 - Accepted rewrite audit history that records applied bullets, safety labels, target sections, and linked analysis/resume/JD ids when available.
+- Resume version snapshots that preserve the full structured resume after accepted rewrites.
 
 Still planned:
 
 - Apply-decision agent.
-- Full resume version snapshots after accepted rewrites.
+- Resume version compare and rollback controls.
 - Interview-prep tracker agent.
 - Company research agent.
 - RAG memory over saved resumes, JDs, analyses, feedback, and preparation progress.
