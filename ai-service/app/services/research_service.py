@@ -26,9 +26,9 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
     )
 
     key_signals = _dedupe([
-        *[f"Company research: {signal}" for signal in enrichment.company_signals[:2]],
-        *[f"Interview research: {signal}" for signal in enrichment.interview_signals[:4]],
-        *[f"Market research: {signal}" for signal in enrichment.market_signals[:2]],
+        *[f"Company research: {signal}" for signal in enrichment.company_signals[:1]],
+        *[f"Interview research: {signal}" for signal in enrichment.interview_signals[:2]],
+        *[f"Market research: {signal}" for signal in enrichment.market_signals[:1]],
         *_manual_signal_labels(manual_signals),
         *enrichment.key_signals,
         *[f"{match.requirement} is weak or missing in resume evidence." for match in weak_matches[:5]],
@@ -74,6 +74,8 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
         keySignals=key_signals,
         preparationTopics=preparation_topics or [role_title],
         sources=sources,
+        researchProvider=enrichment.provider,
+        providerWarnings=enrichment.warnings,
     )
 
 

@@ -131,6 +131,8 @@ class ResearchGenerationTests(unittest.TestCase):
         self.assertTrue(any("Interview research:" in signal for signal in draft.keySignals))
         self.assertTrue(any("Market research:" in signal for signal in draft.keySignals))
         self.assertIn("Research enrichment separated", draft.summary)
+        self.assertEqual(draft.researchProvider, "local")
+        self.assertTrue(any("does not browse live web" in warning for warning in draft.providerWarnings))
         self.assertTrue(any(source.title.startswith("Planned search:") for source in draft.sources))
         self.assertTrue(any(source.citationQuality == "weak" for source in draft.sources if source.title.startswith("Planned search:")))
 
@@ -167,6 +169,11 @@ class ResearchGenerationTests(unittest.TestCase):
 
         self.assertGreaterEqual(search_mock.call_count, 1)
         self.assertTrue(any("Google research provider returned" in signal for signal in draft.keySignals))
+        self.assertTrue(any("Cited company_page source highlights" in signal for signal in draft.keySignals))
+        self.assertIn("AI guardrail design", draft.preparationTopics)
+        self.assertIn("Django API design", draft.preparationTopics)
+        self.assertEqual(draft.researchProvider, "google")
+        self.assertTrue(any("Custom Search results" in warning for warning in draft.providerWarnings))
         self.assertTrue(any(source.url == "https://example.com/demofin-interview" for source in draft.sources))
         cited_source = next(source for source in draft.sources if source.url == "https://example.com/demofin-interview")
         self.assertEqual(cited_source.citationQuality, "verified_url")

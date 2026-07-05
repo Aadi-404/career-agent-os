@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 import json
+import re
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.parse import urlencode
@@ -137,6 +138,8 @@ class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
 
         search_sources: list[ResearchContextSource] = []
         search_key_signals: list[str] = []
+        search_topics: list[str] = []
+        weak_requirements = [match.requirement for match in analysis.requirementMatches if match.score < 60][:5]
         for query in result.queries[:4]:
             try:
                 response = self._search(
@@ -157,11 +160,14 @@ class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
                 )
                 search_sources.append(source)
                 search_key_signals.append(f"Live source found for {source.sourceType}: {item.title}.")
+                search_key_signals.extend(_snippet_signals(item, source.sourceType))
+                search_topics.extend(_snippet_topics(item, weak_requirements))
 
         verified_sources = _dedupe_sources(search_sources)
         if verified_sources:
             planned_sources = [source for source in result.sources if source.citationQuality != "weak"]
             result.sources = [*verified_sources, *planned_sources][:10]
+            result.preparation_topics = _dedupe([*search_topics, *result.preparation_topics])[:12]
             result.key_signals = _dedupe([
                 f"Google research provider returned {len(verified_sources)} cited source(s).",
                 *search_key_signals,
@@ -312,3 +318,53 @@ def _dedupe_sources(items: list[ResearchContextSource]) -> list[ResearchContextS
         seen.add(key)
         output.append(item)
     return output
+
+
+def _snippet_signals(item: GoogleSearchItem, source_type: str) -> list[str]:
+    snippet = _clean_snippet(item.snippet)
+    if not snippet:
+        return []
+    return [f"Cited {source_type} source highlights: {snippet[:220]}"]
+
+
+def _snippet_topics(item: GoogleSearchItem, weak_requirements: list[str]) -> list[str]:
+    text = f"{item.title}. {item.snippet}"
+    topics: list[str] = []
+    lowered = text.lower()
+    for requirement in weak_requirements:
+        requirement_tokens = _topic_tokens(requirement)
+        if requirement_tokens and any(token in lowered for token in requirement_tokens):
+            topics.append(requirement)
+
+    topic_rules = [
+        ("AI guardrail design", ["guardrail", "permission", "policy", "rollback", "safety"]),
+        ("Agent tool permission design", ["agent", "tool permission", "tool permissions"]),
+        ("ETL reliability", ["etl", "pipeline", "data quality", "validation"]),
+        ("Django API design", ["django", "api", "apis"]),
+        ("React UI implementation", ["react", "frontend", "ui"]),
+        ("Cloud deployment basics", ["azure", "aws", "gcp", "cloud"]),
+        ("SQL performance and validation", ["sql", "database", "query"]),
+        ("System design tradeoffs", ["system design", "scalability", "architecture"]),
+    ]
+    for topic, markers in topic_rules:
+        if any(marker in lowered for marker in markers):
+            topics.append(topic)
+
+    quoted_phrases = re.findall(r"['\"]([^'\"]{4,80})['\"]", text)
+    topics.extend(phrase.strip() for phrase in quoted_phrases[:3])
+    return _dedupe(topics)[:8]
+
+
+def _topic_tokens(value: str) -> list[str]:
+    stop_words = {"and", "or", "the", "with", "for", "in", "on", "of", "to", "a", "an"}
+    tokens = []
+    for token in re.findall(r"[a-z0-9+#.]+", value.lower()):
+        if token in stop_words or len(token) < 3:
+            continue
+        tokens.append(token.rstrip("s"))
+    return tokens
+
+
+def _clean_snippet(value: str) -> str:
+    cleaned = re.sub(r"\s+", " ", value).strip()
+    return cleaned.strip(" -")

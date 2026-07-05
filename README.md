@@ -99,6 +99,8 @@ Current Phase 6 groundwork:
 - Citation quality checks: research sources are labelled as verified URL, manual note, weak, or uncited, with validation issues shown in the UI.
 - Research enrichment adapter: `RESEARCH_PROVIDER=local` creates citation-ready query plans, while `RESEARCH_PROVIDER=google` can fetch cited Google Custom Search results when `GOOGLE_API_KEY` and `GOOGLE_SEARCH_ENGINE_ID` are configured.
 - Typed research enrichment: generated research drafts now separate company, interview, and market signals before they are saved or cited.
+- Research snippet extraction: cited search result titles/snippets can add preparation topics and live-source signals without another LLM call.
+- Research provider visibility: generated drafts show whether local planning or live Google search was used, including provider warnings.
 - Extension research handoff: parsed or manually pasted job pages can open the web Research Notes task with role, company, JD text, and source URL prefilled.
 - Apply decisioning: the web app can combine score, opportunity signals, and saved research notes into apply / prepare first / selective apply / skip guidance.
 - Evidence-constrained resume rewrite: the web app can generate safer rewrite suggestions labelled as existing evidence, needs verification, or gap-only.

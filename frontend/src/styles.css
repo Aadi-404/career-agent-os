@@ -990,6 +990,40 @@ h1 {
   min-width: 210px;
 }
 
+.researchProviderStatus {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 180px)) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  border: 1px solid #d5e5e2;
+  border-radius: 8px;
+  background: #fbfefd;
+  padding: 12px;
+}
+
+.researchProviderStatus div {
+  display: grid;
+  gap: 4px;
+}
+
+.researchProviderStatus span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.researchProviderStatus strong {
+  color: var(--brand);
+}
+
+.researchProviderStatus ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #7a4a00;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .researchNoteCard {
   display: grid;
   gap: 14px;
@@ -3177,6 +3211,7 @@ pre {
   .historyGrid,
   .researchWorkspace,
   .researchGeneratorBox,
+  .researchProviderStatus,
   .decisionColumns,
   .pipelineGrid,
   .comparisonGrid,

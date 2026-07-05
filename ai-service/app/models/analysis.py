@@ -78,6 +78,8 @@ class ResearchNoteDraft(BaseModel):
     keySignals: list[str] = Field(default_factory=list, max_length=30)
     preparationTopics: list[str] = Field(default_factory=list, max_length=30)
     sources: list[ResearchContextSource] = Field(default_factory=list, max_length=20)
+    researchProvider: str = Field(default="local", max_length=80)
+    providerWarnings: list[str] = Field(default_factory=list, max_length=20)
 
 
 class ResearchBuildRequest(BaseModel):

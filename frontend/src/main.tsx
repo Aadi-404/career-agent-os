@@ -283,7 +283,10 @@ type ResearchNoteRecord = {
   updatedAt: string;
 };
 
-type ResearchNoteDraft = Omit<ResearchNoteRecord, "id" | "userId" | "createdAt" | "updatedAt">;
+type ResearchNoteDraft = Omit<ResearchNoteRecord, "id" | "userId" | "createdAt" | "updatedAt"> & {
+  researchProvider?: string;
+  providerWarnings?: string[];
+};
 
 type ApplicationDecisionResponse = {
   decision: "apply" | "prepare_first" | "selective_apply" | "skip";
@@ -814,6 +817,8 @@ function App() {
   const [researchPreparationTopics, setResearchPreparationTopics] = useState("");
   const [researchManualContext, setResearchManualContext] = useState("");
   const [researchSourcesDraft, setResearchSourcesDraft] = useState("");
+  const [researchDraftProvider, setResearchDraftProvider] = useState("");
+  const [researchDraftWarnings, setResearchDraftWarnings] = useState<string[]>([]);
   const [applicationDecision, setApplicationDecision] = useState<ApplicationDecisionResponse | null>(null);
   const [decisionInfo, setDecisionInfo] = useState("");
   const [decisionLoading, setDecisionLoading] = useState(false);
@@ -1433,6 +1438,8 @@ function App() {
       setResearchKeySignals("");
       setResearchPreparationTopics("");
       setResearchSourcesDraft("");
+      setResearchDraftProvider("");
+      setResearchDraftWarnings([]);
       void loadWorkspaceSummary();
     } catch (err) {
       setResearchInfo(err instanceof Error ? err.message : "Research note save failed");
@@ -1470,7 +1477,6 @@ function App() {
       });
       if (!response.ok) throw new Error(await readApiError(response, "Research draft generation failed"));
       applyResearchDraft(await response.json() as ResearchNoteDraft);
-      setResearchInfo("Generated a research draft from the current score report. Review it before saving.");
       void loadCurrentQuota();
     } catch (err) {
       setResearchInfo(err instanceof Error ? err.message : "Research draft generation failed");
@@ -1488,6 +1494,11 @@ function App() {
     setResearchKeySignals(draft.keySignals.join("\n"));
     setResearchPreparationTopics(draft.preparationTopics.join("\n"));
     setResearchSourcesDraft(formatResearchSources(draft.sources));
+    setResearchDraftProvider(draft.researchProvider ?? "local");
+    setResearchDraftWarnings(draft.providerWarnings ?? []);
+    const citedCount = draft.sources.filter((source) => source.citationQuality === "verified_url").length;
+    const providerLabel = formatCategory(draft.researchProvider ?? "local");
+    setResearchInfo(`Generated a ${providerLabel} research draft with ${citedCount} verified citation(s). Review it before saving.`);
   }
 
   async function buildApplicationDecision() {
@@ -3481,6 +3492,8 @@ function App() {
                 preparationTopics={researchPreparationTopics}
                 manualContext={researchManualContext}
                 sourcesDraft={researchSourcesDraft}
+                draftProvider={researchDraftProvider}
+                draftWarnings={researchDraftWarnings}
                 saving={researchSaving}
                 generating={researchGenerating}
                 info={researchInfo}
@@ -5557,6 +5570,8 @@ function ResearchNotesPanel({
   preparationTopics,
   manualContext,
   sourcesDraft,
+  draftProvider,
+  draftWarnings,
   saving,
   generating,
   info,
@@ -5583,6 +5598,8 @@ function ResearchNotesPanel({
   preparationTopics: string;
   manualContext: string;
   sourcesDraft: string;
+  draftProvider: string;
+  draftWarnings: string[];
   saving: boolean;
   generating: boolean;
   info: string;
@@ -5619,6 +5636,23 @@ function ResearchNotesPanel({
             {generating ? "Generating Draft..." : "Generate From Latest Score"}
           </button>
         </div>
+        {(draftProvider || draftWarnings.length > 0) && (
+          <div className="researchProviderStatus">
+            <div>
+              <span>Research provider</span>
+              <strong>{formatCategory(draftProvider || "local")}</strong>
+            </div>
+            <div>
+              <span>Status</span>
+              <strong>{draftWarnings.length ? `${draftWarnings.length} warning(s)` : "Ready"}</strong>
+            </div>
+            {draftWarnings.length > 0 && (
+              <ul>
+                {draftWarnings.slice(0, 4).map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
         <div className="gridTwo">
           <label>
             Title

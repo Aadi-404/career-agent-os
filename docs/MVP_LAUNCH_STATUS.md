@@ -207,12 +207,14 @@ Built:
 - Research enrichment adapter interface with local query plans and Google provider configuration hooks.
 - Typed company, interview, and market research signals inside generated research note drafts.
 - Google Custom Search execution path for cited company, interview, and market source discovery when configured.
+- Deterministic snippet extraction that turns cited search result titles/snippets into preparation topics and source-backed key signals.
+- Research Notes UI provider status showing local versus Google mode, verified citation count, and provider warnings.
 
 Still needs:
 
-- Extract role-specific preparation topics.
-- Live source extraction and citation enrichment.
-- Produce market opportunity signals.
+- Full source-page extraction beyond search result snippets.
+- Deeper role/company topic synthesis from cited pages.
+- Produce market opportunity signals from cited source patterns.
 
 Why the remaining work is later:
 
