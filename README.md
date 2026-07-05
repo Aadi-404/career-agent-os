@@ -103,6 +103,7 @@ Current Phase 6 groundwork:
 - Accepted rewrite audit: applied bullets are saved in PostgreSQL with proof-safety, target section, and linked analysis/resume/JD context when available.
 - Resume version snapshots: accepted rewrites can preserve the full structured resume draft for future compare and rollback controls.
 - Resume version controls: saved versions can be compared against the current draft and restored into the review editor.
+- Restore audit history: each resume version restore is persisted so rollback decisions remain traceable.
 
 ## Run AI Service
 

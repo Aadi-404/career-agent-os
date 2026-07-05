@@ -2,12 +2,14 @@ import unittest
 from contextlib import contextmanager
 from unittest.mock import patch
 
-from app.models.history import AcceptedResumeRewriteSaveRequest, ResumeVersionSaveRequest
+from app.models.history import AcceptedResumeRewriteSaveRequest, ResumeVersionRestoreSaveRequest, ResumeVersionSaveRequest
 from app.models.resume_normalize import StructuredResume
 from app.services.history_store import (
     list_accepted_resume_rewrites,
+    list_resume_version_restores,
     list_resume_versions,
     save_accepted_resume_rewrite,
+    save_resume_version_restore,
     save_resume_version,
 )
 
@@ -27,6 +29,7 @@ class _AcceptedRewriteConnection:
     def __init__(self):
         self.inserted = None
         self.version_inserted = None
+        self.restore_inserted = None
 
     def execute(self, query, params=()):
         if "SELECT * FROM users" in query:
@@ -47,6 +50,8 @@ class _AcceptedRewriteConnection:
             return _Rows([{"id": "jd-1"}])
         if "SELECT id FROM accepted_resume_rewrites" in query:
             return _Rows([{"id": "rewrite-1"}])
+        if "SELECT id FROM resume_versions" in query:
+            return _Rows([{"id": "version-1"}])
         if "INSERT INTO accepted_resume_rewrites" in query:
             self.inserted = {
                 "id": params[0],
@@ -88,6 +93,21 @@ class _AcceptedRewriteConnection:
             return _Rows([self.version_inserted])
         if "SELECT * FROM resume_versions WHERE user_id" in query:
             return _Rows([self.version_inserted])
+        if "INSERT INTO resume_version_restores" in query:
+            self.restore_inserted = {
+                "id": params[0],
+                "user_id": params[1],
+                "resume_version_id": params[2],
+                "resume_id": params[3],
+                "analysis_id": params[4],
+                "reason": params[5],
+                "created_at": params[6],
+            }
+            return _Rows([])
+        if "SELECT * FROM resume_version_restores WHERE id" in query:
+            return _Rows([self.restore_inserted])
+        if "SELECT * FROM resume_version_restores WHERE user_id" in query:
+            return _Rows([self.restore_inserted])
         return _Rows([])
 
 
@@ -155,6 +175,24 @@ class AcceptedResumeRewriteTests(unittest.TestCase):
         self.assertEqual(saved.acceptedRewriteId, "rewrite-1")
         self.assertEqual(saved.structuredResume.projects[0].name, "Data Tool")
         self.assertEqual(versions[0].title, "Resume version after Django rewrite")
+
+    def test_save_and_list_resume_version_restore(self):
+        connection = _AcceptedRewriteConnection()
+        request = ResumeVersionRestoreSaveRequest(
+            userId="user-1",
+            resumeVersionId="version-1",
+            resumeId="resume-1",
+            analysisId="analysis-1",
+            reason="Restored after reviewing version comparison.",
+        )
+
+        with patch("app.services.history_store.get_connection", lambda: _fake_connection(connection)):
+            saved = save_resume_version_restore(request)
+            restores = list_resume_version_restores("user-1")
+
+        self.assertEqual(saved.resumeVersionId, "version-1")
+        self.assertEqual(saved.resumeId, "resume-1")
+        self.assertEqual(restores[0].reason, "Restored after reviewing version comparison.")
 
 
 if __name__ == "__main__":

@@ -165,11 +165,11 @@ Built:
 - Accepted rewrite audit history in PostgreSQL with linked analysis/resume/JD context when available.
 - Resume version snapshots after accepted rewrites, preserving the full structured resume draft.
 - Resume version compare and restore controls in the rewrite workspace.
+- Persisted restore audit history for resume version rollback decisions.
 
 Remaining:
 
 - Apply-decision agent with tool orchestration.
-- Persisted rollback audit for restored resume versions.
 - Company research agent.
 - Interview-prep tracker agent.
 - RAG memory over saved workspace history.

@@ -228,11 +228,11 @@ Built:
 - Accepted rewrite audit history that records applied bullets, safety labels, target sections, and linked analysis/resume/JD ids when available.
 - Resume version snapshots that preserve the full structured resume after accepted rewrites.
 - Resume version compare and restore controls inside the rewrite workspace.
+- Persisted restore audit history for rollback decisions.
 
 Still planned:
 
 - Apply-decision agent.
-- Persisted rollback audit for restored resume versions.
 - Interview-prep tracker agent.
 - Company research agent.
 - RAG memory over saved resumes, JDs, analyses, feedback, and preparation progress.

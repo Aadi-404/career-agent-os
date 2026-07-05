@@ -49,6 +49,8 @@ from app.models.history import (
     ResumeRecord,
     ResumeSaveRequest,
     ResumeVersionRecord,
+    ResumeVersionRestoreRecord,
+    ResumeVersionRestoreSaveRequest,
     ResumeVersionSaveRequest,
     UsageEventRecord,
     UsageQuotaStatus,
@@ -623,6 +625,46 @@ def list_resume_versions(user_id: str, resume_id: str | None = None) -> list[Res
                 (user_id,),
             ).fetchall()
     return [_resume_version_from_row(row) for row in rows]
+
+
+def save_resume_version_restore(request: ResumeVersionRestoreSaveRequest) -> ResumeVersionRestoreRecord:
+    now = _now()
+    record_id = _id()
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        _ensure_owned_record(connection, "resumes", request.resumeId, request.userId)
+        _ensure_owned_record(connection, "resume_versions", request.resumeVersionId, request.userId)
+        if request.analysisId:
+            _ensure_owned_record(connection, "analyses", request.analysisId, request.userId)
+        connection.execute(
+            """
+            INSERT INTO resume_version_restores (
+                id, user_id, resume_version_id, resume_id, analysis_id, reason, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record_id,
+                request.userId,
+                request.resumeVersionId,
+                request.resumeId,
+                request.analysisId,
+                request.reason,
+                now,
+            ),
+        )
+        row = connection.execute("SELECT * FROM resume_version_restores WHERE id = ?", (record_id,)).fetchone()
+    return _resume_version_restore_from_row(_require_row(row, "Resume version restore not found after save"))
+
+
+def list_resume_version_restores(user_id: str) -> list[ResumeVersionRestoreRecord]:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        rows = connection.execute(
+            "SELECT * FROM resume_version_restores WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
+            (user_id,),
+        ).fetchall()
+    return [_resume_version_restore_from_row(row) for row in rows]
 
 
 def save_job_description(request: JobDescriptionSaveRequest) -> JobDescriptionRecord:
@@ -1562,6 +1604,18 @@ def _resume_version_from_row(row: Any) -> ResumeVersionRecord:
         changeSummary=row["change_summary"],
         normalizedText=row["normalized_text"],
         structuredResume=_json_model(row["structured_json"], StructuredResume),
+        createdAt=row["created_at"],
+    )
+
+
+def _resume_version_restore_from_row(row: Any) -> ResumeVersionRestoreRecord:
+    return ResumeVersionRestoreRecord(
+        id=row["id"],
+        userId=row["user_id"],
+        resumeVersionId=row["resume_version_id"],
+        resumeId=row["resume_id"],
+        analysisId=row["analysis_id"],
+        reason=row["reason"],
         createdAt=row["created_at"],
     )
 

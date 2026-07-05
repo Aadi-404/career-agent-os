@@ -121,6 +121,24 @@ class ResumeVersionRecord(BaseModel):
     createdAt: str
 
 
+class ResumeVersionRestoreSaveRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    resumeVersionId: str = Field(min_length=2, max_length=80)
+    resumeId: str = Field(min_length=2, max_length=80)
+    analysisId: str | None = Field(default=None, min_length=2, max_length=80)
+    reason: str = Field(min_length=2, max_length=1000)
+
+
+class ResumeVersionRestoreRecord(BaseModel):
+    id: str
+    userId: str
+    resumeVersionId: str
+    resumeId: str
+    analysisId: str | None = None
+    reason: str
+    createdAt: str
+
+
 class JobDescriptionSaveRequest(BaseModel):
     userId: str = Field(min_length=2, max_length=80)
     title: str = Field(min_length=2, max_length=180)

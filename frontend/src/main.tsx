@@ -340,6 +340,16 @@ type ResumeVersionRecord = {
   createdAt: string;
 };
 
+type ResumeVersionRestoreRecord = {
+  id: string;
+  userId: string;
+  resumeVersionId: string;
+  resumeId: string;
+  analysisId?: string | null;
+  reason: string;
+  createdAt: string;
+};
+
 type ResumeVersionComparison = {
   versionId: string;
   title: string;
@@ -809,6 +819,7 @@ function App() {
   const [appliedRewriteKeys, setAppliedRewriteKeys] = useState<string[]>([]);
   const [acceptedResumeRewrites, setAcceptedResumeRewrites] = useState<AcceptedResumeRewriteRecord[]>([]);
   const [resumeVersions, setResumeVersions] = useState<ResumeVersionRecord[]>([]);
+  const [resumeVersionRestores, setResumeVersionRestores] = useState<ResumeVersionRestoreRecord[]>([]);
   const [selectedResumeVersionComparison, setSelectedResumeVersionComparison] = useState<ResumeVersionComparison | null>(null);
   const [rewriteInfo, setRewriteInfo] = useState("");
   const [rewriteLoading, setRewriteLoading] = useState(false);
@@ -850,6 +861,7 @@ function App() {
     if (activeTask === "rewrite") {
       void loadAcceptedResumeRewrites();
       void loadResumeVersions();
+      void loadResumeVersionRestores();
     }
     if (activeTask === "extension") {
       loadExtensionValidations();
@@ -1254,7 +1266,7 @@ function App() {
     try {
       await ensureLocalUser();
       const getOptions = { headers: authHeaders(false) };
-      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, comparisonsResponse, researchResponse, rewritesResponse, versionsResponse] = await Promise.all([
+      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, comparisonsResponse, researchResponse, rewritesResponse, versionsResponse, restoresResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/workspace`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/analyses`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resumes`, getOptions),
@@ -1265,9 +1277,10 @@ function App() {
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/research-notes`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/accepted-resume-rewrites`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resume-versions`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resume-version-restores`, getOptions),
       ]);
 
-      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !comparisonsResponse.ok || !researchResponse.ok || !rewritesResponse.ok || !versionsResponse.ok) {
+      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !comparisonsResponse.ok || !researchResponse.ok || !rewritesResponse.ok || !versionsResponse.ok || !restoresResponse.ok) {
         throw new Error("History load failed");
       }
 
@@ -1285,6 +1298,7 @@ function App() {
       setResearchNotes(await researchResponse.json() as ResearchNoteRecord[]);
       setAcceptedResumeRewrites(await rewritesResponse.json() as AcceptedResumeRewriteRecord[]);
       setResumeVersions(await versionsResponse.json() as ResumeVersionRecord[]);
+      setResumeVersionRestores(await restoresResponse.json() as ResumeVersionRestoreRecord[]);
       setHistoryInfo("Loaded saved PostgreSQL history.");
       void loadPrepMemory();
     } catch (err) {
@@ -1369,6 +1383,17 @@ function App() {
       setResumeVersions(await response.json() as ResumeVersionRecord[]);
     } catch (err) {
       setRewriteInfo(err instanceof Error ? err.message : "Resume version history load failed");
+    }
+  }
+
+  async function loadResumeVersionRestores() {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resume-version-restores`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error(await readApiError(response, "Resume restore history load failed"));
+      setResumeVersionRestores(await response.json() as ResumeVersionRestoreRecord[]);
+    } catch (err) {
+      setRewriteInfo(err instanceof Error ? err.message : "Resume restore history load failed");
     }
   }
 
@@ -1688,7 +1713,31 @@ function App() {
     setScoreStep("review");
     setActiveTask("matching");
     setSelectedResumeVersionComparison(buildResumeVersionComparison(restoredResume, version));
+    void saveResumeVersionRestoreAudit(version);
     setRewriteInfo(`Restored ${version.title} into the resume review editor. Re-score after reviewing the draft.`);
+  }
+
+  async function saveResumeVersionRestoreAudit(version: ResumeVersionRecord) {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/history/resume-version-restores`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          userId: workspaceUserId,
+          resumeVersionId: version.id,
+          resumeId: version.resumeId,
+          analysisId: lastSavedAnalysisId || version.analysisId || null,
+          reason: `Restored ${version.title} into the structured resume editor.`,
+        }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response, "Resume restore audit save failed"));
+      const saved = await response.json() as ResumeVersionRestoreRecord;
+      setResumeVersionRestores((records) => [saved, ...records.filter((record) => record.id !== saved.id)].slice(0, 100));
+      setRewriteInfo(`Restored ${version.title} and saved a restore audit event.`);
+    } catch (err) {
+      setRewriteInfo(`Restored ${version.title}, but restore audit save failed: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
   }
 
   function useSavedResume(resume: HistoryResumeRecord) {
@@ -3483,6 +3532,7 @@ function App() {
                 appliedKeys={appliedRewriteKeys}
                 acceptedRewrites={acceptedResumeRewrites}
                 resumeVersions={resumeVersions}
+                resumeVersionRestores={resumeVersionRestores}
                 versionComparison={selectedResumeVersionComparison}
                 onBuild={buildResumeRewrite}
                 onApplySuggestion={applyRewriteSuggestion}
@@ -5766,6 +5816,7 @@ function ResumeRewritePanel({
   appliedKeys,
   acceptedRewrites,
   resumeVersions,
+  resumeVersionRestores,
   versionComparison,
   onBuild,
   onApplySuggestion,
@@ -5781,6 +5832,7 @@ function ResumeRewritePanel({
   appliedKeys: string[];
   acceptedRewrites: AcceptedResumeRewriteRecord[];
   resumeVersions: ResumeVersionRecord[];
+  resumeVersionRestores: ResumeVersionRestoreRecord[];
   versionComparison: ResumeVersionComparison | null;
   onBuild: () => void;
   onApplySuggestion: (item: ResumeRewriteSuggestion, index: number) => void | Promise<void>;
@@ -5951,6 +6003,29 @@ function ResumeRewritePanel({
           </div>
         </section>
       )}
+
+      <section className="panel rewriteHistoryPanel">
+        <h3>Restore Audit History</h3>
+        <p className="hint">Every restore action is saved so resume rollback decisions remain traceable.</p>
+        {resumeVersionRestores.length ? (
+          <div className="rewriteHistoryList">
+            {resumeVersionRestores.slice(0, 8).map((restore) => (
+              <article className="rewriteHistoryItem" key={restore.id}>
+                <div className="rewriteItemHeader">
+                  <div>
+                    <strong>{restore.reason}</strong>
+                    <small>Version {restore.resumeVersionId}</small>
+                  </div>
+                  <span>{formatDate(restore.createdAt)}</span>
+                </div>
+                <p>Resume {restore.resumeId}{restore.analysisId ? ` - Analysis ${restore.analysisId}` : ""}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No restore audit yet" body="Restore a saved version to record the rollback decision." />
+        )}
+      </section>
     </div>
   );
 }

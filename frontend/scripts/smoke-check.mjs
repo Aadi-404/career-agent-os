@@ -38,7 +38,7 @@ const checks = [
   {
     name: "resume rewrite workflow",
     file: "src/main.tsx",
-    patterns: ["Resume Rewrite", "Build Rewrite Suggestions", "Evidence-Constrained Rewrite", "Apply to Resume Draft", "Accepted Rewrite History", "Resume Version Snapshots", "Version Compare", "Restore to Editor", "accepted-resume-rewrites", "resume-versions", "gap_do_not_claim"],
+    patterns: ["Resume Rewrite", "Build Rewrite Suggestions", "Evidence-Constrained Rewrite", "Apply to Resume Draft", "Accepted Rewrite History", "Resume Version Snapshots", "Version Compare", "Restore to Editor", "Restore Audit History", "accepted-resume-rewrites", "resume-versions", "resume-version-restores", "gap_do_not_claim"],
   },
   {
     name: "extension workflow",
