@@ -63,7 +63,7 @@ const checks = [
   {
     name: "launch tracker styles",
     file: "src/styles.css",
-    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions", ".prepNextAction", ".opportunityNextAction", ".commandCenter"],
+    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions", ".prepNextAction", ".opportunityNextAction", ".commandCenter", ".commandTopActions"],
   },
   {
     name: "package smoke script wiring",

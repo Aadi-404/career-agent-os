@@ -842,6 +842,7 @@ function App() {
   const [systemDiagnostics, setSystemDiagnostics] = useState<SystemDiagnostics | null>(null);
   const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness | null>(null);
   const [commandCenterInfo, setCommandCenterInfo] = useState("");
+  const [commandCenterTopActions, setCommandCenterTopActions] = useState<string[]>([]);
   const [commandCenterLoading, setCommandCenterLoading] = useState(false);
   const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
   const [adminAnalyses, setAdminAnalyses] = useState<HistoryAnalysisRecord[]>([]);
@@ -1411,6 +1412,7 @@ function App() {
       setWorkspaceSummary(payload.workspace);
       setPrepMemory(payload.preparationMemory);
       setOpportunityActions(payload.opportunityActions);
+      setCommandCenterTopActions(payload.topActions);
       setCommandCenterInfo(payload.summary);
     } catch (err) {
       setCommandCenterInfo(err instanceof Error ? err.message : "Command Center refresh failed");
@@ -3234,6 +3236,7 @@ function App() {
                 opportunityActions={opportunityActions}
                 workspaceSummary={workspaceSummary}
                 info={commandCenterInfo}
+                topActions={commandCenterTopActions}
                 loading={commandCenterLoading}
                 onOpenTask={setActiveTask}
                 onRefresh={loadCommandCenter}
@@ -4519,6 +4522,7 @@ function CommandCenterPanel({
   opportunityActions,
   workspaceSummary,
   info,
+  topActions,
   loading,
   onOpenTask,
   onRefresh,
@@ -4533,6 +4537,7 @@ function CommandCenterPanel({
   opportunityActions: OpportunityNextActionsResponse | null;
   workspaceSummary: WorkspaceSummary | null;
   info: string;
+  topActions: string[];
   loading: boolean;
   onOpenTask: (task: ActiveTask) => void;
   onRefresh: () => void;
@@ -4558,6 +4563,11 @@ function CommandCenterPanel({
             </button>
             {info && <small>{info}</small>}
           </div>
+          {topActions.length > 0 && (
+            <div className="commandTopActions">
+              {topActions.slice(0, 4).map((action) => <span key={action}>{action}</span>)}
+            </div>
+          )}
         </div>
         <div className="commandMetrics">
           <div><span>Reports</span><strong>{workspaceSummary?.analysisCount ?? 0}</strong></div>

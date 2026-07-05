@@ -842,6 +842,23 @@ h1 {
   margin-top: 4px;
 }
 
+.commandTopActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.commandTopActions span {
+  border: 1px solid #d5e5e2;
+  border-radius: 999px;
+  background: #f7fbfa;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 900;
+  padding: 7px 10px;
+}
+
 .researchWorkspace {
   display: grid;
   grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
