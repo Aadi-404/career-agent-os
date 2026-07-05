@@ -203,13 +203,14 @@ Built:
 - Browser extension handoff that opens Research Notes with role, company, JD text, and source URL prefilled.
 - Preparation intelligence can include saved research notes without rerunning the score.
 - Demo seed record showing how future cited research will be stored.
+- Citation quality checks for saved and generated research sources.
 
 Still needs:
 
 - Search similar job postings.
 - Search recent company interview experiences.
 - Extract role-specific preparation topics.
-- Cite sources.
+- Live source extraction and citation enrichment.
 - Produce market opportunity signals.
 
 Why the remaining work is later:

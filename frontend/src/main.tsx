@@ -262,6 +262,8 @@ type ResearchSource = {
   url?: string | null;
   sourceType: "manual" | "job_post" | "interview_experience" | "company_page" | "market_signal" | "other";
   note?: string | null;
+  citationQuality?: "verified_url" | "manual_note" | "weak" | "uncited";
+  validationIssues?: string[];
 };
 
 type ResearchType = "company" | "role" | "market" | "interview" | "manual";
@@ -5659,7 +5661,7 @@ function ResearchNotesPanel({
         </div>
         <label>
           Sources
-          <textarea value={sourcesDraft} onChange={(event) => onSourcesDraftChange(event.target.value)} rows={4} placeholder={"One source per line: title | url | type | note\nManual interview note | | manual | Asked in mock review"} />
+          <textarea value={sourcesDraft} onChange={(event) => onSourcesDraftChange(event.target.value)} rows={4} placeholder={"Citation quality is checked for each source.\nOne source per line: title | url | type | note\nManual interview note | | manual | Asked in mock review"} />
         </label>
         <div className="actionBar">
           <button type="button" disabled={saving} onClick={onSave}>{saving ? "Saving..." : "Save Research Note"}</button>
@@ -5700,11 +5702,12 @@ function ResearchNotesPanel({
                 )}
                 {note.sources.length > 0 && (
                   <div className="sourceList">
-                    <h4>Sources</h4>
+                    <h4>Sources and Citation Quality</h4>
                     {note.sources.slice(0, 4).map((source, index) => (
                       <div className="sourceItem" key={`${note.id}-${index}`}>
                         {source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> : <strong>{source.title}</strong>}
-                        <small>{[formatCategory(source.sourceType), source.note].filter(Boolean).join(" - ")}</small>
+                        <small>{[formatCategory(source.sourceType), formatCategory(source.citationQuality || "uncited"), source.note].filter(Boolean).join(" - ")}</small>
+                        {(source.validationIssues ?? []).length > 0 && <small>{source.validationIssues?.join(" ")}</small>}
                       </div>
                     ))}
                   </div>
@@ -6426,12 +6429,12 @@ function parseResearchSources(value: string): ResearchSource[] {
   return splitLines(value).slice(0, 20).map((line) => {
     const [titlePart, urlPart, typePart, notePart] = line.split("|").map((item) => item.trim());
     const sourceType = allowedTypes.includes(typePart as ResearchSource["sourceType"]) ? typePart as ResearchSource["sourceType"] : "manual";
-    return {
+    return assessResearchSource({
       title: titlePart || "Manual source",
       url: urlPart || null,
       sourceType,
       note: notePart || null,
-    };
+    });
   });
 }
 
@@ -6439,6 +6442,36 @@ function formatResearchSources(sources: ResearchSource[]) {
   return sources
     .map((source) => [source.title, source.url ?? "", source.sourceType, source.note ?? ""].join(" | "))
     .join("\n");
+}
+
+function assessResearchSource(source: ResearchSource): ResearchSource {
+  const issues: string[] = [];
+  let citationQuality: ResearchSource["citationQuality"] = "uncited";
+  if (source.url) {
+    try {
+      const parsed = new URL(source.url);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        citationQuality = "verified_url";
+      } else {
+        citationQuality = "weak";
+        issues.push("URL must use http(s).");
+      }
+    } catch {
+      citationQuality = "weak";
+      issues.push("URL is not valid.");
+    }
+  } else if (source.sourceType === "manual") {
+    citationQuality = "manual_note";
+    if (!source.note) issues.push("Manual source should include a provenance note.");
+  } else {
+    citationQuality = "weak";
+    issues.push("Non-manual source is missing a URL citation.");
+  }
+  return {
+    ...source,
+    citationQuality: source.citationQuality ?? citationQuality,
+    validationIssues: source.validationIssues?.length ? source.validationIssues : issues,
+  };
 }
 
 function toResearchContextNote(note: ResearchNoteRecord) {

@@ -28,7 +28,7 @@ const checks = [
   {
     name: "research notes workflow",
     file: "src/main.tsx",
-    patterns: ["Research Notes", "Generate From Latest Score", "decodeResearchHandoff", "Saved Research Memory"],
+    patterns: ["Research Notes", "Generate From Latest Score", "decodeResearchHandoff", "Saved Research Memory", "Citation quality", "Sources and Citation Quality"],
   },
   {
     name: "application decision workflow",

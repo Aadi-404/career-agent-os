@@ -95,6 +95,22 @@ class ResearchGenerationTests(unittest.TestCase):
         self.assertIn("AI agent guardrails", draft.preparationTopics)
         self.assertTrue(any("tool permissions" in signal for signal in draft.keySignals))
         self.assertEqual(draft.sources[1].url, "https://example.com/interview")
+        self.assertEqual(draft.sources[1].citationQuality, "verified_url")
+        self.assertEqual(draft.sources[1].sourceType, "interview_experience")
+
+    def test_research_source_quality_flags_weak_citations(self):
+        draft = build_research_note_draft(
+            ResearchBuildRequest(
+                sourceRequest=_request(),
+                analysis=_analysis(),
+                manualContext="Company blog says AI safety is important.",
+                sourceUrls=["not-a-url"],
+            )
+        )
+
+        weak_source = draft.sources[1]
+        self.assertEqual(weak_source.citationQuality, "weak")
+        self.assertTrue(any("valid http" in issue for issue in weak_source.validationIssues))
 
     def test_preparation_uses_saved_research_notes(self):
         prep = build_preparation_intelligence(

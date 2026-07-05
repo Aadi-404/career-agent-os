@@ -1,4 +1,9 @@
+from urllib.parse import urlparse
+
 from app.models.analysis import AnalysisResponse, AnalyzeRequest, ResearchBuildRequest, ResearchContextSource, ResearchNoteDraft, RequirementMatch
+
+
+ALLOWED_SOURCE_TYPES = {"manual", "job_post", "interview_experience", "company_page", "market_signal", "other"}
 
 
 def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraft:
@@ -27,7 +32,7 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
 
     source_labels = _source_labels(request.sourceUrls)
     sources = [
-        ResearchContextSource(
+        _assess_source(
             title="Current JD and match analysis",
             sourceType="job_post",
             note=f"Generated from the saved score report for {role_title}.",
@@ -112,14 +117,62 @@ def _source_labels(urls: list[str]) -> list[ResearchContextSource]:
         if not cleaned:
             continue
         sources.append(
-            ResearchContextSource(
+            _assess_source(
                 title=f"Research source {index}",
                 url=cleaned,
-                sourceType="other",
-                note="User-provided source URL. Live citation extraction is planned for the web research phase.",
+                sourceType=_infer_source_type(cleaned, f"Research source {index}"),
+                note="User-provided source URL. Citation quality is validated locally; live extraction is planned for the web research phase.",
             )
         )
     return sources
+
+
+def _assess_source(
+    title: str,
+    url: str | None = None,
+    sourceType: str = "manual",
+    note: str | None = None,
+) -> ResearchContextSource:
+    cleaned_url = url.strip() if url else None
+    cleaned_type = sourceType if sourceType in ALLOWED_SOURCE_TYPES else "other"
+    issues: list[str] = []
+    quality = "uncited"
+    if cleaned_url:
+        parsed = urlparse(cleaned_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            issues.append("URL is not a valid http(s) citation.")
+            quality = "weak"
+        else:
+            quality = "verified_url"
+            if cleaned_type == "manual":
+                issues.append("Source has a URL but is still marked manual.")
+    elif cleaned_type == "manual":
+        quality = "manual_note"
+        if not note:
+            issues.append("Manual source should include a note explaining provenance.")
+    else:
+        quality = "weak"
+        issues.append("Non-manual source is missing a URL citation.")
+
+    return ResearchContextSource(
+        title=title,
+        url=cleaned_url,
+        sourceType=cleaned_type,
+        note=note,
+        citationQuality=quality,
+        validationIssues=issues,
+    )
+
+
+def _infer_source_type(url: str, title: str) -> str:
+    text = f"{url} {title}".lower()
+    if any(marker in text for marker in ["linkedin", "naukri", "indeed", "jobs", "careers", "greenhouse", "lever.co"]):
+        return "job_post"
+    if any(marker in text for marker in ["interview", "glassdoor", "ambitionbox", "leetcode discuss"]):
+        return "interview_experience"
+    if any(marker in text for marker in ["news", "trend", "report", "survey", "market"]):
+        return "market_signal"
+    return "other"
 
 
 def _clean_optional(value: str | None) -> str | None:

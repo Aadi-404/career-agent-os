@@ -96,6 +96,7 @@ Current Phase 6 groundwork:
 - Saved comparison workflow: the web app can compare saved resumes against saved JDs with score-only runs capped to avoid accidental spend.
 - Research notes workspace: the web app can save manual or generated company, role, market, and interview research notes with key signals, preparation topics, and source references for the future research-agent phase.
 - Research-aware preparation: saved research notes can be passed into preparation intelligence so company/role signals influence the study plan without rerunning matching.
+- Citation quality checks: research sources are labelled as verified URL, manual note, weak, or uncited, with validation issues shown in the UI.
 - Extension research handoff: parsed or manually pasted job pages can open the web Research Notes task with role, company, JD text, and source URL prefilled.
 - Apply decisioning: the web app can combine score, opportunity signals, and saved research notes into apply / prepare first / selective apply / skip guidance.
 - Evidence-constrained resume rewrite: the web app can generate safer rewrite suggestions labelled as existing evidence, needs verification, or gap-only.

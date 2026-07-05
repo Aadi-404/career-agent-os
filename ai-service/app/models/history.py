@@ -316,6 +316,8 @@ class ResearchSource(BaseModel):
     url: str | None = Field(default=None, max_length=1000)
     sourceType: Literal["manual", "job_post", "interview_experience", "company_page", "market_signal", "other"] = "manual"
     note: str | None = Field(default=None, max_length=1200)
+    citationQuality: Literal["verified_url", "manual_note", "weak", "uncited"] = "uncited"
+    validationIssues: list[str] = Field(default_factory=list, max_length=10)
 
 
 class ResearchNoteSaveRequest(BaseModel):

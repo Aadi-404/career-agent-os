@@ -54,6 +54,8 @@ class ResearchContextSource(BaseModel):
     url: str | None = Field(default=None, max_length=1000)
     sourceType: str = Field(default="manual", max_length=80)
     note: str | None = Field(default=None, max_length=1200)
+    citationQuality: str = Field(default="uncited", max_length=40)
+    validationIssues: list[str] = Field(default_factory=list, max_length=10)
 
 
 class ResearchContextNote(BaseModel):

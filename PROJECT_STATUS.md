@@ -145,13 +145,14 @@ Built:
 - Saved key signals, preparation topics, and source references.
 - Preparation intelligence can use saved research notes as context.
 - Demo seed includes a research note.
+- Citation quality checks for research sources, including verified URL, manual note, weak, and uncited states.
 
 Remaining:
 
 - Search similar job postings.
 - Search recent company interview experiences.
 - Extract role/company preparation topics from live sources.
-- Produce cited research-backed preparation signals.
+- Produce live cited research-backed preparation signals.
 
 ### Phase 8: Agentic Career OS
 
