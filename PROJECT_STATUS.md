@@ -147,6 +147,7 @@ Built:
 - Demo seed includes a research note.
 - Citation quality checks for research sources, including verified URL, manual note, weak, and uncited states.
 - Research enrichment provider interface with a local query-plan provider and Google provider configuration hooks.
+- Research enrichment now separates company, interview, and market signals before they are saved into draft notes.
 
 Remaining:
 

@@ -9,6 +9,9 @@ from app.models.analysis import AnalyzeRequest, AnalysisResponse, ResearchContex
 class ResearchEnrichmentResult:
     provider: str
     queries: list[str] = field(default_factory=list)
+    company_signals: list[str] = field(default_factory=list)
+    interview_signals: list[str] = field(default_factory=list)
+    market_signals: list[str] = field(default_factory=list)
     key_signals: list[str] = field(default_factory=list)
     preparation_topics: list[str] = field(default_factory=list)
     sources: list[ResearchContextSource] = field(default_factory=list)
@@ -45,14 +48,41 @@ class LocalResearchEnrichmentProvider(ResearchEnrichmentProvider):
         weak_requirements = [match.requirement for match in analysis.requirementMatches if match.score < 60][:5]
         market = source_request.candidateContext.targetMarket or "target job market"
         company_prefix = f"{company} " if company else ""
-        queries = _dedupe([
+        company_label = company or "target company"
+        company_queries = _dedupe([
+            f"{company_prefix}{role_title} company engineering blog",
+            f"{company_prefix}{role_title} company careers requirements",
+        ])
+        interview_queries = _dedupe([
             f"{company_prefix}{role_title} interview experience",
-            f"{company_prefix}{role_title} job description requirements",
+            *[f"{company_prefix}{role_title} {requirement} interview questions" for requirement in weak_requirements[:3]],
+        ])
+        market_queries = _dedupe([
             f"{role_title} {market} hiring trend",
-            *[f"{role_title} {requirement} interview questions" for requirement in weak_requirements[:3]],
+            f"{role_title} {market} similar job postings requirements",
+        ])
+        queries = _dedupe([
+            *company_queries,
+            *interview_queries,
+            *market_queries,
         ])[:8]
+        company_signals = _dedupe([
+            f"Research {company_label} careers pages and engineering content for repeated {role_title} expectations.",
+            f"Compare {company_label} role wording against the strongest and weakest resume evidence.",
+        ])
+        interview_signals = _dedupe([
+            f"Search recent {company_prefix}{role_title} interview experiences for rounds, depth, and cross-questions.",
+            *[f"Prepare proof and follow-up answers for weak requirement: {requirement}." for requirement in weak_requirements[:3]],
+        ])
+        market_signals = _dedupe([
+            f"Check demand and repeated requirements for {role_title} in {market}.",
+            f"Track similar job postings for emphasis on: {', '.join(weak_requirements[:3]) or 'core stack depth'}.",
+        ])
         key_signals = _dedupe([
             f"Research provider local prepared {len(queries)} source-search query plan(s).",
+            *[f"Company signal: {signal}" for signal in company_signals[:2]],
+            *[f"Interview signal: {signal}" for signal in interview_signals[:4]],
+            *[f"Market signal: {signal}" for signal in market_signals[:2]],
             *[f"Needs cited research for weak requirement: {requirement}." for requirement in weak_requirements[:4]],
         ])
         preparation_topics = _dedupe([
@@ -71,6 +101,9 @@ class LocalResearchEnrichmentProvider(ResearchEnrichmentProvider):
         return ResearchEnrichmentResult(
             provider=self.name,
             queries=queries,
+            company_signals=company_signals,
+            interview_signals=interview_signals,
+            market_signals=market_signals,
             key_signals=key_signals,
             preparation_topics=preparation_topics,
             sources=sources,
@@ -125,7 +158,7 @@ def _source_type_for_query(query: str, research_type: str) -> str:
         return "market_signal"
     if "job" in text or "requirements" in text:
         return "job_post"
-    if "company" in text:
+    if "company" in text or "engineering blog" in text or "careers" in text:
         return "company_page"
     return "other"
 

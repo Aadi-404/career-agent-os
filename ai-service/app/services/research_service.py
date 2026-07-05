@@ -26,8 +26,11 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
     )
 
     key_signals = _dedupe([
-        *enrichment.key_signals,
+        *[f"Company research: {signal}" for signal in enrichment.company_signals[:2]],
+        *[f"Interview research: {signal}" for signal in enrichment.interview_signals[:4]],
+        *[f"Market research: {signal}" for signal in enrichment.market_signals[:2]],
         *_manual_signal_labels(manual_signals),
+        *enrichment.key_signals,
         *[f"{match.requirement} is weak or missing in resume evidence." for match in weak_matches[:5]],
         *[f"{match.requirement} is a strong existing proof area." for match in strong_matches[:3]],
         f"Current technical match score is {analysis.technicalMatchScore}% ({analysis.fitCategory}).",
@@ -59,6 +62,7 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
         weak_matches=weak_matches,
         strong_matches=strong_matches,
         manual_context=request.manualContext,
+        enrichment_signal_text=_enrichment_signal_text(enrichment),
     )
     title = f"{company + ' ' if company else ''}{role_title} research signals".strip()
     return ResearchNoteDraft(
@@ -80,6 +84,7 @@ def _summary(
     weak_matches: list[RequirementMatch],
     strong_matches: list[RequirementMatch],
     manual_context: str | None,
+    enrichment_signal_text: str,
 ) -> str:
     company_text = f" at {company}" if company else ""
     weak_text = ", ".join(match.requirement for match in weak_matches[:4]) or "no major weak requirement"
@@ -88,7 +93,18 @@ def _summary(
     return (
         f"Research draft for {role_title}{company_text}. The current score is {analysis.technicalMatchScore}% "
         f"with fit category {analysis.fitCategory}. Strong proof areas: {strong_text}. "
-        f"Preparation should focus on: {weak_text}.{manual_text}"
+        f"Preparation should focus on: {weak_text}.{enrichment_signal_text}{manual_text}"
+    )
+
+
+def _enrichment_signal_text(enrichment) -> str:
+    total = len(enrichment.company_signals) + len(enrichment.interview_signals) + len(enrichment.market_signals)
+    if not total:
+        return ""
+    return (
+        f" Research enrichment separated {len(enrichment.company_signals)} company, "
+        f"{len(enrichment.interview_signals)} interview, and {len(enrichment.market_signals)} market signal(s) "
+        "for cited follow-up."
     )
 
 

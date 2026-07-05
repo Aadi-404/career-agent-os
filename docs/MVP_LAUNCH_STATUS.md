@@ -205,6 +205,7 @@ Built:
 - Demo seed record showing how future cited research will be stored.
 - Citation quality checks for saved and generated research sources.
 - Research enrichment adapter interface with local query plans and Google provider configuration hooks.
+- Typed company, interview, and market research signals inside generated research note drafts.
 
 Still needs:
 

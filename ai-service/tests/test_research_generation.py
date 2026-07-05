@@ -124,6 +124,10 @@ class ResearchGenerationTests(unittest.TestCase):
         )
 
         self.assertTrue(any("Research provider local prepared" in signal for signal in draft.keySignals))
+        self.assertTrue(any("Company research:" in signal for signal in draft.keySignals))
+        self.assertTrue(any("Interview research:" in signal for signal in draft.keySignals))
+        self.assertTrue(any("Market research:" in signal for signal in draft.keySignals))
+        self.assertIn("Research enrichment separated", draft.summary)
         self.assertTrue(any(source.title.startswith("Planned search:") for source in draft.sources))
         self.assertTrue(any(source.citationQuality == "weak" for source in draft.sources if source.title.startswith("Planned search:")))
 

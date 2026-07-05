@@ -98,6 +98,7 @@ Current Phase 6 groundwork:
 - Research-aware preparation: saved research notes can be passed into preparation intelligence so company/role signals influence the study plan without rerunning matching.
 - Citation quality checks: research sources are labelled as verified URL, manual note, weak, or uncited, with validation issues shown in the UI.
 - Research enrichment adapter: `RESEARCH_PROVIDER=local` creates citation-ready query plans today; Google provider config hooks are available for future live source extraction.
+- Typed research enrichment: generated research drafts now separate company, interview, and market signals before live citation extraction is added.
 - Extension research handoff: parsed or manually pasted job pages can open the web Research Notes task with role, company, JD text, and source URL prefilled.
 - Apply decisioning: the web app can combine score, opportunity signals, and saved research notes into apply / prepare first / selective apply / skip guidance.
 - Evidence-constrained resume rewrite: the web app can generate safer rewrite suggestions labelled as existing evidence, needs verification, or gap-only.
