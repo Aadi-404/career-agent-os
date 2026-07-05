@@ -80,6 +80,7 @@ Check backend:
 GET https://api.your-domain.com/health
 GET https://api.your-domain.com/ready
 GET https://api.your-domain.com/diagnostics/production-readiness
+GET https://api.your-domain.com/ai/command-center/{user_id}
 ```
 
 Run the smoke checker:
@@ -88,7 +89,7 @@ Run the smoke checker:
 .\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api https://api.your-domain.com --frontend https://app.your-domain.com
 ```
 
-Run user-scoped comparison and billing smoke checks after creating a test user:
+Run user-scoped Command Center, comparison, billing, and extension-package smoke checks after creating a test user:
 
 ```powershell
 .\ai-service\.venv\Scripts\python.exe deployment\smoke_check.py --api https://api.your-domain.com --frontend https://app.your-domain.com --user-id your-user-id --session-token your-session-token --billing-webhook-secret your-webhook-secret --check-extension-package --strict-production

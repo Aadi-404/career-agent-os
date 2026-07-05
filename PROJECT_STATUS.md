@@ -177,12 +177,13 @@ Built:
 - Resume version compare and restore controls in the rewrite workspace.
 - Persisted restore audit history for resume version rollback decisions.
 - Career Agent Plan task and `/ai/agent/plan` endpoint that rank the next optional module from score, research memory, preparation state, and generated artifacts.
+- Command Center default workspace with `/ai/command-center/{user_id}` aggregate payload, top actions, preparation memory, and opportunity pipeline next actions.
 
 Remaining:
 
 - Deeper apply-decision agent execution after the planner chooses tools.
-- Company research agent.
-- Interview-prep tracker agent.
+- Company research agent with richer source review.
+- Interview-prep tracker automation beyond current next-action tracking.
 - RAG memory over saved workspace history.
 
 ## Important Docs

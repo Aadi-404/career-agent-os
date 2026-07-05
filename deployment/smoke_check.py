@@ -40,6 +40,7 @@ def main() -> int:
         results.append(check_page("frontend", args.frontend.rstrip("/")))
     if args.user_id:
         results.append(check_comparison_history(api_base, args.user_id, args.session_token))
+        results.append(check_command_center(api_base, args.user_id, args.session_token))
         results.append(check_usage_quota(api_base, args.user_id, args.session_token))
         results.append(check_billing_checkout(api_base, args.user_id, args.session_token))
     billing_user_id = args.billing_user_id or args.user_id
@@ -112,6 +113,20 @@ def check_comparison_history(api_base: str, user_id: str, session_token: str) ->
     if not isinstance(payload, list):
         return CheckResult("comparison history API", False, "expected a JSON list")
     return CheckResult("comparison history API", True, f"{len(payload)} saved comparison run(s)")
+
+
+def check_command_center(api_base: str, user_id: str, session_token: str) -> CheckResult:
+    try:
+        payload = request_json(f"{api_base}/ai/command-center/{user_id}", session_token)
+    except Exception as exc:
+        return CheckResult("command center API", False, str(exc))
+    required = {"summary", "workspace", "preparationMemory", "opportunityActions", "topActions"}
+    missing = sorted(required - set(payload.keys()))
+    if missing:
+        return CheckResult("command center API", False, f"missing field(s): {', '.join(missing)}")
+    if not isinstance(payload.get("topActions"), list):
+        return CheckResult("command center API", False, "topActions must be a list")
+    return CheckResult("command center API", True, f"{len(payload.get('topActions') or [])} top action(s)")
 
 
 def check_usage_quota(api_base: str, user_id: str, session_token: str) -> CheckResult:
