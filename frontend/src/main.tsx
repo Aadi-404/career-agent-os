@@ -456,6 +456,13 @@ type DemoCleanupResponse = {
   message: string;
 };
 
+type ProductionSmokeCheck = {
+  key: string;
+  label: string;
+  status: "pass" | "fail";
+  detail: string;
+};
+
 type UsageSummary = {
   totalEvents: number;
   totalEstimatedUnits: number;
@@ -865,6 +872,8 @@ function App() {
   const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
   const [demoSeedResult, setDemoSeedResult] = useState<DemoSeedResponse | null>(null);
   const [demoCleanupResult, setDemoCleanupResult] = useState<DemoCleanupResponse | null>(null);
+  const [productionSmokeChecks, setProductionSmokeChecks] = useState<ProductionSmokeCheck[]>([]);
+  const [productionSmokeLoading, setProductionSmokeLoading] = useState(false);
   const [launchChecklist, setLaunchChecklist] = useState<LaunchChecklistState>(() => loadLaunchChecklist());
   const [settingsInfo, setSettingsInfo] = useState("");
   const [sessionInfo, setSessionInfo] = useState("");
@@ -2611,6 +2620,71 @@ function App() {
     }
   }
 
+  async function runProductionSmokeCheck() {
+    setProductionSmokeLoading(true);
+    setProductionSmokeChecks([]);
+    setSettingsInfo("");
+    const checks: ProductionSmokeCheck[] = [];
+
+    async function runStep(key: string, label: string, task: () => Promise<string>) {
+      try {
+        const detail = await task();
+        checks.push({ key, label, status: "pass", detail });
+      } catch (err) {
+        checks.push({ key, label, status: "fail", detail: err instanceof Error ? err.message : `${label} failed` });
+      }
+      setProductionSmokeChecks([...checks]);
+    }
+
+    try {
+      await ensureLocalUser();
+      await runStep("health", "Backend health", async () => {
+        const response = await fetch(`${API_BASE_URL}/health`);
+        if (!response.ok) throw new Error(await readApiError(response, "Backend health failed"));
+        return "Backend health endpoint responded.";
+      });
+      await runStep("readiness", "Production readiness", async () => {
+        const response = await fetch(`${API_BASE_URL}/diagnostics/production-readiness?userId=${encodeURIComponent(workspaceUserId)}`, { headers: authHeaders(false) });
+        if (!response.ok) throw new Error(await readApiError(response, "Production readiness failed"));
+        const readiness = await response.json() as ProductionReadiness;
+        setProductionReadiness(readiness);
+        const failures = readiness.checks.filter((check) => check.status === "fail").length;
+        const warnings = readiness.checks.filter((check) => check.status === "warn").length;
+        if (failures) throw new Error(`${failures} readiness blocker(s), ${warnings} warning(s).`);
+        return `${readiness.environment} readiness passed with ${warnings} warning(s).`;
+      });
+      await runStep("command", "Command Center aggregate", async () => {
+        const response = await fetch(`${API_BASE_URL}/ai/command-center/${workspaceUserId}`, { headers: authHeaders(false) });
+        if (!response.ok) throw new Error(await readApiError(response, "Command Center smoke failed"));
+        const payload = await response.json() as CommandCenterResponse;
+        setWorkspaceSummary(payload.workspace);
+        setPrepMemory(payload.preparationMemory);
+        setOpportunityActions(payload.opportunityActions);
+        setProductionReadiness(payload.productionReadiness ?? null);
+        setCommandCenterTopActions(payload.topActions);
+        setCommandCenterInfo(payload.summary);
+        return `${payload.topActions.length} top action(s), ${payload.workspace.analysisCount} saved report(s).`;
+      });
+      await runStep("quota", "Usage quota", async () => {
+        const params = new URLSearchParams({ userId: workspaceUserId });
+        const response = await fetch(`${API_BASE_URL}/usage/quota?${params.toString()}`, { headers: authHeaders(false) });
+        if (!response.ok) throw new Error(await readApiError(response, "Quota smoke failed"));
+        const quota = await response.json() as UsageQuotaStatus;
+        setUsageQuota(quota);
+        return quota.unlimited ? `${quota.tier} quota is unlimited.` : `${quota.remainingUnits ?? 0} of ${quota.limitUnits ?? 0} unit(s) remaining.`;
+      });
+      const failed = checks.filter((check) => check.status === "fail").length;
+      setSettingsInfo(failed ? `Production smoke finished with ${failed} failed check(s).` : "Production smoke passed.");
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Production smoke could not start.";
+      checks.push({ key: "session", label: "Session bootstrap", status: "fail", detail });
+      setProductionSmokeChecks([...checks]);
+      setSettingsInfo(detail);
+    } finally {
+      setProductionSmokeLoading(false);
+    }
+  }
+
   function startBillingEdit(user: AdminUserRecord) {
     setBillingDraft({
       userId: user.id,
@@ -3964,6 +4038,8 @@ function App() {
                 billingDraft={billingDraft}
                 demoSeedResult={demoSeedResult}
                 demoCleanupResult={demoCleanupResult}
+                productionSmokeChecks={productionSmokeChecks}
+                productionSmokeLoading={productionSmokeLoading}
                 launchChecklist={launchChecklist}
                 canManageSettings={currentUser?.role === "admin"}
                 info={settingsInfo}
@@ -3983,6 +4059,7 @@ function App() {
                 onBillingCancel={() => setBillingDraft(null)}
                 onSeedDemo={seedDemoWorkspace}
                 onCleanupDemo={cleanupDemoWorkspace}
+                onRunProductionSmoke={runProductionSmokeCheck}
                 onToggleLaunchChecklist={updateLaunchChecklist}
                 onResetLaunchChecklist={resetLaunchChecklist}
               />
@@ -5082,6 +5159,8 @@ function ScoringSettingsPanel({
   billingDraft,
   demoSeedResult,
   demoCleanupResult,
+  productionSmokeChecks,
+  productionSmokeLoading,
   launchChecklist,
   canManageSettings,
   info,
@@ -5101,6 +5180,7 @@ function ScoringSettingsPanel({
   onBillingCancel,
   onSeedDemo,
   onCleanupDemo,
+  onRunProductionSmoke,
   onToggleLaunchChecklist,
   onResetLaunchChecklist,
 }: {
@@ -5115,6 +5195,8 @@ function ScoringSettingsPanel({
   billingDraft: BillingDraft | null;
   demoSeedResult: DemoSeedResponse | null;
   demoCleanupResult: DemoCleanupResponse | null;
+  productionSmokeChecks: ProductionSmokeCheck[];
+  productionSmokeLoading: boolean;
   launchChecklist: LaunchChecklistState;
   canManageSettings: boolean;
   info: string;
@@ -5134,6 +5216,7 @@ function ScoringSettingsPanel({
   onBillingCancel: () => void;
   onSeedDemo: () => void;
   onCleanupDemo: () => void;
+  onRunProductionSmoke: () => void;
   onToggleLaunchChecklist: (itemId: string, checked: boolean) => void;
   onResetLaunchChecklist: () => void;
 }) {
@@ -5350,8 +5433,22 @@ function ScoringSettingsPanel({
             <p className="eyebrow">Staging</p>
             <h3>Deployment Runbook</h3>
           </div>
-          <span className="statusPill warn">manual</span>
+          <button type="button" className="secondaryButton" disabled={productionSmokeLoading} onClick={onRunProductionSmoke}>
+            {productionSmokeLoading ? "Running Smoke..." : "Run Production Smoke"}
+          </button>
         </div>
+        <p className="hint">Runs browser-to-backend checks for health, production readiness, Command Center aggregation, and quota using the active session.</p>
+        {productionSmokeChecks.length > 0 && (
+          <div className="productionSmokeList">
+            {productionSmokeChecks.map((check) => (
+              <div key={check.key}>
+                <span className={`statusPill ${check.status === "pass" ? "pass" : "fail"}`}>{check.status}</span>
+                <strong>{check.label}</strong>
+                <small>{check.detail}</small>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="runbookGrid">
           <div>
             <strong>Environment</strong>

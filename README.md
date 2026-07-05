@@ -49,6 +49,12 @@ Staging deployment steps are documented in:
 docs/STAGING_DEPLOYMENT_RUNBOOK.md
 ```
 
+End-to-end deployment guide:
+
+```text
+docs/DEPLOYMENT_GUIDE.md
+```
+
 Deployment environment templates are available in:
 
 ```text
