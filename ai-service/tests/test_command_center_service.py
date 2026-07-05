@@ -9,6 +9,7 @@ from app.services.command_center_service import build_command_center
 from tests.test_prep_memory_service import _analysis
 from tests.test_opportunity_intelligence_service import _opportunity
 from app.models.analysis import RequirementMatch
+from app.models.system import ProductionReadinessResponse, ReadinessCheck
 
 
 def _workspace(latest_analysis=None) -> WorkspaceSummary:
@@ -50,6 +51,23 @@ class CommandCenterServiceTests(unittest.TestCase):
         self.assertTrue(any("Prepare Azure" in action for action in response.topActions))
         self.assertTrue(any("Shortlist" in action for action in response.topActions))
         self.assertEqual(response.opportunityActions.actions[0].recommendedStatus, "shortlisted")
+
+    def test_command_center_surfaces_production_blockers(self):
+        readiness = ProductionReadinessResponse(
+            environment="production",
+            readyForProduction=False,
+            checks=[
+                ReadinessCheck(key="auth", label="Auth", status="fail", detail="Auth is not enforced."),
+                ReadinessCheck(key="cors", label="CORS", status="warn", detail="CORS uses a placeholder."),
+            ],
+            warnings=["Auth is not enforced.", "CORS uses a placeholder."],
+        )
+
+        response = build_command_center(_workspace(), [], [], [], readiness)
+
+        self.assertIn("production blocker", response.summary)
+        self.assertEqual(response.productionReadiness.readyForProduction, False)
+        self.assertTrue(response.topActions[0].startswith("Resolve 1 production blocker"))
 
     def test_command_center_route_returns_aggregate_payload(self):
         weak_match = RequirementMatch(

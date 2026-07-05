@@ -120,12 +120,15 @@ def check_command_center(api_base: str, user_id: str, session_token: str) -> Che
         payload = request_json(f"{api_base}/ai/command-center/{user_id}", session_token)
     except Exception as exc:
         return CheckResult("command center API", False, str(exc))
-    required = {"summary", "workspace", "preparationMemory", "opportunityActions", "topActions"}
+    required = {"summary", "workspace", "preparationMemory", "opportunityActions", "productionReadiness", "topActions"}
     missing = sorted(required - set(payload.keys()))
     if missing:
         return CheckResult("command center API", False, f"missing field(s): {', '.join(missing)}")
     if not isinstance(payload.get("topActions"), list):
         return CheckResult("command center API", False, "topActions must be a list")
+    readiness = payload.get("productionReadiness")
+    if not isinstance(readiness, dict) or "readyForProduction" not in readiness:
+        return CheckResult("command center API", False, "productionReadiness is missing readyForProduction")
     return CheckResult("command center API", True, f"{len(payload.get('topActions') or [])} top action(s)")
 
 

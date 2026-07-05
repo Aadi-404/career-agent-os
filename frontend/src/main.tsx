@@ -517,6 +517,7 @@ type CommandCenterResponse = {
   workspace: WorkspaceSummary;
   preparationMemory: PrepMemoryResponse;
   opportunityActions: OpportunityNextActionsResponse;
+  productionReadiness?: ProductionReadiness | null;
   topActions: string[];
 };
 
@@ -1412,6 +1413,7 @@ function App() {
       setWorkspaceSummary(payload.workspace);
       setPrepMemory(payload.preparationMemory);
       setOpportunityActions(payload.opportunityActions);
+      setProductionReadiness(payload.productionReadiness ?? null);
       setCommandCenterTopActions(payload.topActions);
       setCommandCenterInfo(payload.summary);
     } catch (err) {
@@ -3235,6 +3237,7 @@ function App() {
                 prepMemory={prepMemory}
                 opportunityActions={opportunityActions}
                 workspaceSummary={workspaceSummary}
+                productionReadiness={productionReadiness}
                 info={commandCenterInfo}
                 topActions={commandCenterTopActions}
                 loading={commandCenterLoading}
@@ -4521,6 +4524,7 @@ function CommandCenterPanel({
   prepMemory,
   opportunityActions,
   workspaceSummary,
+  productionReadiness,
   info,
   topActions,
   loading,
@@ -4536,6 +4540,7 @@ function CommandCenterPanel({
   prepMemory: PrepMemoryResponse | null;
   opportunityActions: OpportunityNextActionsResponse | null;
   workspaceSummary: WorkspaceSummary | null;
+  productionReadiness: ProductionReadiness | null;
   info: string;
   topActions: string[];
   loading: boolean;
@@ -4550,6 +4555,7 @@ function CommandCenterPanel({
   const prepAction = prepMemory?.nextAction ?? null;
   const opportunityAction = opportunityActions?.actions[0] ?? null;
   const displayResult = result ?? workspaceSummary?.latestAnalysis?.response ?? null;
+  const readinessBlockers = productionReadiness?.checks.filter((check) => check.status === "fail").length ?? 0;
 
   return (
     <div className="commandCenter">
@@ -4574,6 +4580,7 @@ function CommandCenterPanel({
           <div><span>Reports</span><strong>{workspaceSummary?.analysisCount ?? 0}</strong></div>
           <div><span>Jobs</span><strong>{workspaceSummary?.jobOpportunityCount ?? 0}</strong></div>
           <div><span>Plans</span><strong>{workspaceSummary?.preparationSessionCount ?? 0}</strong></div>
+          <div><span>Launch</span><strong>{productionReadiness ? readinessBlockers ? `${readinessBlockers} block` : "Ready" : "--"}</strong></div>
         </div>
       </section>
 

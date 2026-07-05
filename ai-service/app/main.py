@@ -802,11 +802,26 @@ def workspace_summary(user_id: str, session_token: str | None = Header(default=N
 @app.get("/ai/command-center/{user_id}", response_model=CommandCenterResponse)
 def get_command_center(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> CommandCenterResponse:
     _authorize_user(user_id, session_token)
+    database_ok = True
+    database_error = ""
+    try:
+        initialize_database()
+    except Exception as exc:
+        database_ok = False
+        database_error = str(exc)
+    readiness_checks = _build_production_readiness_checks(database_ok, database_error)
+    readiness = ProductionReadinessResponse(
+        environment=settings.environment,
+        readyForProduction=all(check.status != "fail" for check in readiness_checks),
+        checks=readiness_checks,
+        warnings=[check.detail for check in readiness_checks if check.status in {"warn", "fail"}],
+    )
     return build_command_center(
         get_workspace_summary(user_id),
         list_analyses(user_id),
         list_preparation_sessions(user_id),
         list_job_opportunities_for_user(user_id),
+        readiness,
     )
 
 
