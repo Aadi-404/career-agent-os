@@ -146,6 +146,7 @@ Built:
 - Preparation intelligence can use saved research notes as context.
 - Demo seed includes a research note.
 - Citation quality checks for research sources, including verified URL, manual note, weak, and uncited states.
+- Research enrichment provider interface with a local query-plan provider and Google provider configuration hooks.
 
 Remaining:
 

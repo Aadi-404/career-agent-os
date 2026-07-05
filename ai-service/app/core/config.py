@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     gemini_api_key: str = ""
     google_api_key: str = ""
+    research_provider: Literal["local", "google"] = "local"
+    google_search_engine_id: str = ""
     llm_timeout_seconds: int = Field(default=45, ge=5, le=120)
     embedding_provider: Literal["auto", "gemini", "openai", "local"] = "auto"
     embedding_model: str = ""

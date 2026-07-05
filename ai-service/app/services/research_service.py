@@ -1,6 +1,7 @@
 from urllib.parse import urlparse
 
 from app.models.analysis import AnalysisResponse, AnalyzeRequest, ResearchBuildRequest, ResearchContextSource, ResearchNoteDraft, RequirementMatch
+from app.services.research_enrichment_service import build_research_enrichment
 
 
 ALLOWED_SOURCE_TYPES = {"manual", "job_post", "interview_experience", "company_page", "market_signal", "other"}
@@ -15,8 +16,17 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
     weak_matches = [match for match in priority_matches if match.score < 60]
     strong_matches = [match for match in priority_matches if match.score >= 70]
     manual_signals = _manual_signals(request.manualContext)
+    enrichment = build_research_enrichment(
+        source_request=source_request,
+        analysis=analysis,
+        company=company,
+        role_title=role_title,
+        research_type=request.researchType or "role",
+        manual_context=request.manualContext,
+    )
 
     key_signals = _dedupe([
+        *enrichment.key_signals,
         *_manual_signal_labels(manual_signals),
         *[f"{match.requirement} is weak or missing in resume evidence." for match in weak_matches[:5]],
         *[f"{match.requirement} is a strong existing proof area." for match in strong_matches[:3]],
@@ -24,6 +34,7 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
     ])[:10]
 
     preparation_topics = _dedupe([
+        *enrichment.preparation_topics,
         *manual_signals,
         *[match.requirement for match in weak_matches[:6]],
         *[item.skill for item in analysis.missingSkills[:4]],
@@ -38,6 +49,7 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
             note=f"Generated from the saved score report for {role_title}.",
         ),
         *source_labels,
+        *enrichment.sources,
     ][:10]
 
     summary = _summary(
@@ -127,7 +139,7 @@ def _source_labels(urls: list[str]) -> list[ResearchContextSource]:
     return sources
 
 
-def _assess_source(
+def assess_research_source(
     title: str,
     url: str | None = None,
     sourceType: str = "manual",
@@ -162,6 +174,9 @@ def _assess_source(
         citationQuality=quality,
         validationIssues=issues,
     )
+
+
+_assess_source = assess_research_source
 
 
 def _infer_source_type(url: str, title: str) -> str:

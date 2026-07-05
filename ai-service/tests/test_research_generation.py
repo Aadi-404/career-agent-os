@@ -112,6 +112,21 @@ class ResearchGenerationTests(unittest.TestCase):
         self.assertEqual(weak_source.citationQuality, "weak")
         self.assertTrue(any("valid http" in issue for issue in weak_source.validationIssues))
 
+    def test_research_enrichment_adds_query_plan_sources(self):
+        draft = build_research_note_draft(
+            ResearchBuildRequest(
+                sourceRequest=_request(),
+                analysis=_analysis(),
+                company="DemoFin",
+                roleTitle="Python AI Full Stack Engineer",
+                researchType="company",
+            )
+        )
+
+        self.assertTrue(any("Research provider local prepared" in signal for signal in draft.keySignals))
+        self.assertTrue(any(source.title.startswith("Planned search:") for source in draft.sources))
+        self.assertTrue(any(source.citationQuality == "weak" for source in draft.sources if source.title.startswith("Planned search:")))
+
     def test_preparation_uses_saved_research_notes(self):
         prep = build_preparation_intelligence(
             _request(),
