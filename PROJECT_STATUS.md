@@ -162,11 +162,12 @@ Built:
 - Apply-decision module using score, shortlisting, readiness, opportunity, and saved research signals.
 - Evidence-constrained resume rewrite suggestions.
 - Rewrite approval workflow that applies safe or user-verified suggestions into the structured resume draft while blocking gap-only claims.
+- Accepted rewrite audit history in PostgreSQL with linked analysis/resume/JD context when available.
 
 Remaining:
 
 - Apply-decision agent with tool orchestration.
-- Resume rewrite version history and accepted-suggestion audit trail.
+- Full resume version snapshots after accepted rewrites.
 - Company research agent.
 - Interview-prep tracker agent.
 - RAG memory over saved workspace history.

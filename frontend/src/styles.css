@@ -851,6 +851,11 @@ h1 {
   gap: 14px;
 }
 
+.rewriteHistoryList {
+  display: grid;
+  gap: 10px;
+}
+
 .rewriteItem {
   display: grid;
   gap: 12px;
@@ -897,6 +902,19 @@ h1 {
 
 .rewriteItem p {
   margin: 4px 0 0;
+}
+
+.rewriteHistoryItem {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 13px;
+}
+
+.rewriteHistoryItem p {
+  margin: 0;
 }
 
 .rewriteEvidence {

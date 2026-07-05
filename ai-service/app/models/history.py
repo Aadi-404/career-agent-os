@@ -303,6 +303,40 @@ class ResearchNoteRecord(BaseModel):
     updatedAt: str
 
 
+class AcceptedResumeRewriteSaveRequest(BaseModel):
+    userId: str = Field(min_length=2, max_length=80)
+    analysisId: str | None = Field(default=None, min_length=2, max_length=80)
+    resumeId: str | None = Field(default=None, min_length=2, max_length=80)
+    jobDescriptionId: str | None = Field(default=None, min_length=2, max_length=80)
+    targetRequirement: str = Field(min_length=2, max_length=500)
+    evidenceSource: str = Field(min_length=2, max_length=120)
+    proofSafety: Literal["safe_from_existing_evidence", "needs_user_verification"]
+    originalEvidence: str | None = Field(default=None, max_length=4000)
+    currentIssue: str = Field(min_length=2, max_length=2000)
+    acceptedBullet: str = Field(min_length=2, max_length=2000)
+    reason: str = Field(min_length=2, max_length=2000)
+    targetSection: Literal["experience", "project", "skills", "certifications", "achievements"]
+    targetLabel: str | None = Field(default=None, max_length=240)
+
+
+class AcceptedResumeRewriteRecord(BaseModel):
+    id: str
+    userId: str
+    analysisId: str | None = None
+    resumeId: str | None = None
+    jobDescriptionId: str | None = None
+    targetRequirement: str
+    evidenceSource: str
+    proofSafety: str
+    originalEvidence: str | None = None
+    currentIssue: str
+    acceptedBullet: str
+    reason: str
+    targetSection: str
+    targetLabel: str | None = None
+    createdAt: str
+
+
 class WorkspaceSummary(BaseModel):
     user: UserRecord
     resumeCount: int

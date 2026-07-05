@@ -24,6 +24,8 @@ from app.models.evaluation import (
 )
 from app.models.extension import ExtensionValidationRecord, ExtensionValidationSaveRequest
 from app.models.history import (
+    AcceptedResumeRewriteRecord,
+    AcceptedResumeRewriteSaveRequest,
     AnonymousSessionCreateRequest,
     AnonymousSessionRecord,
     AnalysisLookupRequest,
@@ -729,6 +731,58 @@ def list_research_notes(user_id: str) -> list[ResearchNoteRecord]:
             (user_id,),
         ).fetchall()
     return [_research_note_from_row(row) for row in rows]
+
+
+def save_accepted_resume_rewrite(request: AcceptedResumeRewriteSaveRequest) -> AcceptedResumeRewriteRecord:
+    now = _now()
+    record_id = _id()
+    with get_connection() as connection:
+        _get_user(connection, request.userId)
+        if request.analysisId:
+            _ensure_owned_record(connection, "analyses", request.analysisId, request.userId)
+        if request.resumeId:
+            _ensure_owned_record(connection, "resumes", request.resumeId, request.userId)
+        if request.jobDescriptionId:
+            _ensure_owned_record(connection, "job_descriptions", request.jobDescriptionId, request.userId)
+        connection.execute(
+            """
+            INSERT INTO accepted_resume_rewrites (
+                id, user_id, analysis_id, resume_id, job_description_id, target_requirement,
+                evidence_source, proof_safety, original_evidence, current_issue, accepted_bullet,
+                reason, target_section, target_label, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record_id,
+                request.userId,
+                request.analysisId,
+                request.resumeId,
+                request.jobDescriptionId,
+                request.targetRequirement,
+                request.evidenceSource,
+                request.proofSafety,
+                request.originalEvidence,
+                request.currentIssue,
+                request.acceptedBullet,
+                request.reason,
+                request.targetSection,
+                request.targetLabel,
+                now,
+            ),
+        )
+        row = connection.execute("SELECT * FROM accepted_resume_rewrites WHERE id = ?", (record_id,)).fetchone()
+    return _accepted_resume_rewrite_from_row(_require_row(row, "Accepted resume rewrite not found after save"))
+
+
+def list_accepted_resume_rewrites(user_id: str) -> list[AcceptedResumeRewriteRecord]:
+    with get_connection() as connection:
+        _get_user(connection, user_id)
+        rows = connection.execute(
+            "SELECT * FROM accepted_resume_rewrites WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
+            (user_id,),
+        ).fetchall()
+    return [_accepted_resume_rewrite_from_row(row) for row in rows]
 
 
 def search_analyses(query: str | None = None, user_id: str | None = None, limit: int = 50) -> list[AnalysisRecord]:
@@ -1550,6 +1604,26 @@ def _research_note_from_row(row: Any) -> ResearchNoteRecord:
         sources=_json_load(row["sources_json"]) if _row_value(row, "sources_json") else [],
         createdAt=row["created_at"],
         updatedAt=row["updated_at"],
+    )
+
+
+def _accepted_resume_rewrite_from_row(row: Any) -> AcceptedResumeRewriteRecord:
+    return AcceptedResumeRewriteRecord(
+        id=row["id"],
+        userId=row["user_id"],
+        analysisId=row["analysis_id"],
+        resumeId=row["resume_id"],
+        jobDescriptionId=row["job_description_id"],
+        targetRequirement=row["target_requirement"],
+        evidenceSource=row["evidence_source"],
+        proofSafety=row["proof_safety"],
+        originalEvidence=row["original_evidence"],
+        currentIssue=row["current_issue"],
+        acceptedBullet=row["accepted_bullet"],
+        reason=row["reason"],
+        targetSection=row["target_section"],
+        targetLabel=row["target_label"],
+        createdAt=row["created_at"],
     )
 
 

@@ -100,6 +100,7 @@ Current Phase 6 groundwork:
 - Apply decisioning: the web app can combine score, opportunity signals, and saved research notes into apply / prepare first / selective apply / skip guidance.
 - Evidence-constrained resume rewrite: the web app can generate safer rewrite suggestions labelled as existing evidence, needs verification, or gap-only.
 - Rewrite approval workflow: safe or user-verified suggestions can be applied into the structured resume draft, while gap-only suggestions stay blocked from becoming resume claims.
+- Accepted rewrite audit: applied bullets are saved in PostgreSQL with proof-safety, target section, and linked analysis/resume/JD context when available.
 
 ## Run AI Service
 

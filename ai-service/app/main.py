@@ -58,6 +58,8 @@ from app.models.extension import (
     ExtensionValidationSaveRequest,
 )
 from app.models.history import (
+    AcceptedResumeRewriteRecord,
+    AcceptedResumeRewriteSaveRequest,
     AnonymousSessionCreateRequest,
     AnonymousSessionRecord,
     AnalysisLookupRequest,
@@ -129,6 +131,7 @@ from app.services.history_store import (
     list_job_opportunities_for_user,
     list_preparation_sessions,
     list_research_notes,
+    list_accepted_resume_rewrites,
     list_resumes,
     save_analysis,
     save_comparison_run,
@@ -140,6 +143,7 @@ from app.services.history_store import (
     save_job_opportunity,
     save_preparation_session,
     save_research_note,
+    save_accepted_resume_rewrite,
     lookup_analysis,
     save_resume,
     update_preparation_session_progress,
@@ -866,6 +870,24 @@ def create_research_note_record(request: ResearchNoteSaveRequest, session_token:
 def get_research_note_records(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[ResearchNoteRecord]:
     _authorize_user(user_id, session_token)
     return list_research_notes(user_id)
+
+
+@app.post("/history/accepted-resume-rewrites", response_model=AcceptedResumeRewriteRecord)
+def create_accepted_resume_rewrite_record(
+    request: AcceptedResumeRewriteSaveRequest,
+    session_token: str | None = Header(default=None, alias="X-Session-Token"),
+) -> AcceptedResumeRewriteRecord:
+    _authorize_user(request.userId, session_token)
+    return save_accepted_resume_rewrite(request)
+
+
+@app.get("/history/users/{user_id}/accepted-resume-rewrites", response_model=list[AcceptedResumeRewriteRecord])
+def get_accepted_resume_rewrite_records(
+    user_id: str,
+    session_token: str | None = Header(default=None, alias="X-Session-Token"),
+) -> list[AcceptedResumeRewriteRecord]:
+    _authorize_user(user_id, session_token)
+    return list_accepted_resume_rewrites(user_id)
 
 
 @app.get("/ai/preparation/memory/{user_id}", response_model=PrepMemoryResponse)

@@ -270,6 +270,31 @@ def _postgres_schema() -> str:
             CREATE INDEX IF NOT EXISTS idx_research_notes_user_created
             ON research_notes(user_id, created_at DESC);
 
+            CREATE TABLE IF NOT EXISTS accepted_resume_rewrites (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                analysis_id TEXT REFERENCES analyses(id) ON DELETE SET NULL,
+                resume_id TEXT REFERENCES resumes(id) ON DELETE SET NULL,
+                job_description_id TEXT REFERENCES job_descriptions(id) ON DELETE SET NULL,
+                target_requirement TEXT NOT NULL,
+                evidence_source TEXT NOT NULL,
+                proof_safety TEXT NOT NULL,
+                original_evidence TEXT,
+                current_issue TEXT NOT NULL,
+                accepted_bullet TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                target_section TEXT NOT NULL,
+                target_label TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_accepted_resume_rewrites_user_created
+            ON accepted_resume_rewrites(user_id, created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_accepted_resume_rewrites_analysis
+            ON accepted_resume_rewrites(analysis_id, created_at DESC)
+            WHERE analysis_id IS NOT NULL;
+
             CREATE TABLE IF NOT EXISTS extension_validation_runs (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

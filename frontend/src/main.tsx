@@ -193,6 +193,8 @@ type BillingDraft = {
 type HistoryAnalysisRecord = {
   id: string;
   userId: string;
+  resumeId?: string | null;
+  jobDescriptionId?: string | null;
   title: string;
   fingerprint?: string | null;
   technicalMatchScore: number;
@@ -306,6 +308,24 @@ type ResumeRewriteResponse = {
   warnings: string[];
 };
 type ResumeRewriteSuggestion = ResumeRewriteResponse["suggestions"][number];
+
+type AcceptedResumeRewriteRecord = {
+  id: string;
+  userId: string;
+  analysisId?: string | null;
+  resumeId?: string | null;
+  jobDescriptionId?: string | null;
+  targetRequirement: string;
+  evidenceSource: string;
+  proofSafety: "safe_from_existing_evidence" | "needs_user_verification";
+  originalEvidence?: string | null;
+  currentIssue: string;
+  acceptedBullet: string;
+  reason: string;
+  targetSection: "experience" | "project" | "skills" | "certifications" | "achievements";
+  targetLabel?: string | null;
+  createdAt: string;
+};
 
 type UsageEventRecord = {
   id: string;
@@ -688,6 +708,8 @@ function App() {
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [lastAnalysisRequest, setLastAnalysisRequest] = useState<AnalyzeRequestPayload | null>(null);
   const [lastSavedAnalysisId, setLastSavedAnalysisId] = useState<string | null>(null);
+  const [lastSavedResumeId, setLastSavedResumeId] = useState<string | null>(null);
+  const [lastSavedJobDescriptionId, setLastSavedJobDescriptionId] = useState<string | null>(null);
   const [lastAnalysisFingerprint, setLastAnalysisFingerprint] = useState<string | null>(null);
   const [activePreparationSession, setActivePreparationSession] = useState<HistoryPreparationRecord | null>(null);
   const [progressSaving, setProgressSaving] = useState(false);
@@ -754,6 +776,7 @@ function App() {
   const [decisionLoading, setDecisionLoading] = useState(false);
   const [resumeRewrite, setResumeRewrite] = useState<ResumeRewriteResponse | null>(null);
   const [appliedRewriteKeys, setAppliedRewriteKeys] = useState<string[]>([]);
+  const [acceptedResumeRewrites, setAcceptedResumeRewrites] = useState<AcceptedResumeRewriteRecord[]>([]);
   const [rewriteInfo, setRewriteInfo] = useState("");
   const [rewriteLoading, setRewriteLoading] = useState(false);
   const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
@@ -790,6 +813,9 @@ function App() {
     }
     if (activeTask === "research") {
       void loadResearchNotes();
+    }
+    if (activeTask === "rewrite") {
+      void loadAcceptedResumeRewrites();
     }
     if (activeTask === "extension") {
       loadExtensionValidations();
@@ -1194,7 +1220,7 @@ function App() {
     try {
       await ensureLocalUser();
       const getOptions = { headers: authHeaders(false) };
-      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, comparisonsResponse, researchResponse] = await Promise.all([
+      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, comparisonsResponse, researchResponse, rewritesResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/workspace`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/analyses`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resumes`, getOptions),
@@ -1203,9 +1229,10 @@ function App() {
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/job-opportunities`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/comparisons`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/research-notes`, getOptions),
+        fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/accepted-resume-rewrites`, getOptions),
       ]);
 
-      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !comparisonsResponse.ok || !researchResponse.ok) {
+      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !comparisonsResponse.ok || !researchResponse.ok || !rewritesResponse.ok) {
         throw new Error("History load failed");
       }
 
@@ -1221,6 +1248,7 @@ function App() {
       setJobOpportunityHistory(await opportunitiesResponse.json() as HistoryJobOpportunityRecord[]);
       setComparisonHistory(await comparisonsResponse.json() as HistoryComparisonRecord[]);
       setResearchNotes(await researchResponse.json() as ResearchNoteRecord[]);
+      setAcceptedResumeRewrites(await rewritesResponse.json() as AcceptedResumeRewriteRecord[]);
       setHistoryInfo("Loaded saved PostgreSQL history.");
       void loadPrepMemory();
     } catch (err) {
@@ -1283,6 +1311,17 @@ function App() {
       setResearchInfo("Loaded saved research notes.");
     } catch (err) {
       setResearchInfo(err instanceof Error ? err.message : "Research notes load failed");
+    }
+  }
+
+  async function loadAcceptedResumeRewrites() {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/accepted-resume-rewrites`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error(await readApiError(response, "Accepted rewrite history load failed"));
+      setAcceptedResumeRewrites(await response.json() as AcceptedResumeRewriteRecord[]);
+    } catch (err) {
+      setRewriteInfo(err instanceof Error ? err.message : "Accepted rewrite history load failed");
     }
   }
 
@@ -1445,7 +1484,33 @@ function App() {
     }
   }
 
-  function applyRewriteSuggestion(item: ResumeRewriteSuggestion, index: number) {
+  async function saveAcceptedResumeRewrite(item: ResumeRewriteSuggestion, bullet: string, targetSection: AcceptedResumeRewriteRecord["targetSection"], targetLabel: string | null) {
+    await ensureLocalUser();
+    const response = await fetch(`${API_BASE_URL}/history/accepted-resume-rewrites`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        userId: workspaceUserId,
+        analysisId: lastSavedAnalysisId,
+        resumeId: lastSavedResumeId,
+        jobDescriptionId: lastSavedJobDescriptionId,
+        targetRequirement: item.targetRequirement,
+        evidenceSource: item.evidenceSource,
+        proofSafety: item.proofSafety,
+        originalEvidence: item.originalEvidence || null,
+        currentIssue: item.currentIssue,
+        acceptedBullet: bullet,
+        reason: item.reason,
+        targetSection,
+        targetLabel,
+      }),
+    });
+    if (!response.ok) throw new Error(await readApiError(response, "Accepted rewrite audit save failed"));
+    const saved = await response.json() as AcceptedResumeRewriteRecord;
+    setAcceptedResumeRewrites((records) => [saved, ...records.filter((record) => record.id !== saved.id)].slice(0, 100));
+  }
+
+  async function applyRewriteSuggestion(item: ResumeRewriteSuggestion, index: number) {
     const rewriteKey = rewriteSuggestionKey(item, index);
     if (item.proofSafety === "gap_do_not_claim") {
       setRewriteInfo("Gap-only suggestions are not applied to the resume because there is no existing proof to support the claim.");
@@ -1480,25 +1545,32 @@ function App() {
     };
     const source = item.evidenceSource.toLowerCase();
     let targetLabel = "achievements";
+    let targetSection: AcceptedResumeRewriteRecord["targetSection"] = "achievements";
 
     if (source.includes("project") && nextResume.projects.length > 0) {
       addUniqueLine(nextResume.projects[0].highlights, bullet);
       targetLabel = `project: ${nextResume.projects[0].name}`;
+      targetSection = "project";
     } else if (source.includes("experience") && nextResume.experience.length > 0) {
       addUniqueLine(nextResume.experience[0].highlights, bullet);
       targetLabel = `experience: ${nextResume.experience[0].title || nextResume.experience[0].company || "latest role"}`;
+      targetSection = "experience";
     } else if (source.includes("certification")) {
       addUniqueLine(nextResume.certifications, bullet);
       targetLabel = "certifications";
+      targetSection = "certifications";
     } else if (source.includes("skill")) {
       addUniqueLine(nextResume.skills, bullet);
       targetLabel = "skills";
+      targetSection = "skills";
     } else if (nextResume.projects.length > 0) {
       addUniqueLine(nextResume.projects[0].highlights, bullet);
       targetLabel = `project: ${nextResume.projects[0].name}`;
+      targetSection = "project";
     } else if (nextResume.experience.length > 0) {
       addUniqueLine(nextResume.experience[0].highlights, bullet);
       targetLabel = `experience: ${nextResume.experience[0].title || nextResume.experience[0].company || "latest role"}`;
+      targetSection = "experience";
     } else {
       addUniqueLine(nextResume.achievements, bullet);
     }
@@ -1509,7 +1581,12 @@ function App() {
     setReviewPane("resume");
     setScoreStep("review");
     setActiveTask("matching");
-    setRewriteInfo(`Applied rewrite suggestion to ${targetLabel}. Review the resume draft before scoring again.`);
+    try {
+      await saveAcceptedResumeRewrite(item, bullet, targetSection, targetLabel);
+      setRewriteInfo(`Applied rewrite suggestion to ${targetLabel} and saved it to rewrite history. Review the resume draft before scoring again.`);
+    } catch (err) {
+      setRewriteInfo(`Applied rewrite suggestion to ${targetLabel}, but audit save failed: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
   }
 
   function useSavedResume(resume: HistoryResumeRecord) {
@@ -1524,6 +1601,9 @@ function App() {
         : `Loaded saved resume "${resume.title}". Parse it before review if structured sections are needed.`
     );
     setResult(null);
+    setLastSavedAnalysisId(null);
+    setLastSavedResumeId(null);
+    setLastSavedJobDescriptionId(null);
     setScoreStep("upload");
   }
 
@@ -1537,6 +1617,9 @@ function App() {
         : `Loaded saved JD "${jobDescription.title}". Parse it before review if structured requirements are needed.`
     );
     setResult(null);
+    setLastSavedAnalysisId(null);
+    setLastSavedResumeId(null);
+    setLastSavedJobDescriptionId(null);
     setScoreStep("upload");
   }
 
@@ -2190,6 +2273,9 @@ function App() {
     setCostModeInfo("Running score-only mode. Optional artifacts stay off until requested.");
     setResult(null);
     setActivePreparationSession(null);
+    setLastSavedAnalysisId(null);
+    setLastSavedResumeId(null);
+    setLastSavedJobDescriptionId(null);
 
     try {
       if (!structuredResume || !parsedJd) {
@@ -2201,6 +2287,8 @@ function App() {
       if (savedAnalysis) {
         setLastAnalysisRequest(savedAnalysis.request);
         setLastSavedAnalysisId(savedAnalysis.id);
+        setLastSavedResumeId(savedAnalysis.resumeId ?? null);
+        setLastSavedJobDescriptionId(savedAnalysis.jobDescriptionId ?? null);
         setLastAnalysisFingerprint(savedAnalysis.fingerprint ?? fingerprint);
         setResult(savedAnalysis.response);
         setHistoryInfo(`Reused saved score from ${formatDate(savedAnalysis.createdAt)}. Edit inputs to calculate a new score.`);
@@ -2225,6 +2313,8 @@ function App() {
       try {
         const saved = await saveHistorySnapshot(payload, analysis, fingerprint);
         setLastSavedAnalysisId(saved.id);
+        setLastSavedResumeId(saved.resumeId ?? null);
+        setLastSavedJobDescriptionId(saved.jobDescriptionId ?? null);
         setHistoryInfo("Saved latest resume, JD, and match report to history.");
         if (activeTask === "history") void loadHistory();
       } catch (historyError) {
@@ -3289,6 +3379,7 @@ function App() {
                 info={rewriteInfo}
                 accessTier={effectiveAccessTier}
                 appliedKeys={appliedRewriteKeys}
+                acceptedRewrites={acceptedResumeRewrites}
                 onBuild={buildResumeRewrite}
                 onApplySuggestion={applyRewriteSuggestion}
                 onTierChange={updateAccountTier}
@@ -5567,6 +5658,7 @@ function ResumeRewritePanel({
   info,
   accessTier,
   appliedKeys,
+  acceptedRewrites,
   onBuild,
   onApplySuggestion,
   onTierChange,
@@ -5577,8 +5669,9 @@ function ResumeRewritePanel({
   info: string;
   accessTier: AccessTier;
   appliedKeys: string[];
+  acceptedRewrites: AcceptedResumeRewriteRecord[];
   onBuild: () => void;
-  onApplySuggestion: (item: ResumeRewriteSuggestion, index: number) => void;
+  onApplySuggestion: (item: ResumeRewriteSuggestion, index: number) => void | Promise<void>;
   onTierChange: (tier: AccessTier) => void;
 }) {
   return (
@@ -5659,6 +5752,30 @@ function ResumeRewritePanel({
           <p className="hint">Build suggestions after scoring. Gap-only items are preparation warnings, not paste-ready resume claims.</p>
         </section>
       )}
+
+      <section className="panel rewriteHistoryPanel">
+        <h3>Accepted Rewrite History</h3>
+        <p className="hint">Every applied bullet is kept as an audit record with its safety label and target resume section.</p>
+        {acceptedRewrites.length ? (
+          <div className="rewriteHistoryList">
+            {acceptedRewrites.slice(0, 8).map((record) => (
+              <article className="rewriteHistoryItem" key={record.id}>
+                <div className="rewriteItemHeader">
+                  <div>
+                    <strong>{record.targetRequirement}</strong>
+                    <small>{formatCategory(record.targetSection)}{record.targetLabel ? ` - ${record.targetLabel}` : ""}</small>
+                  </div>
+                  <span>{formatCategory(record.proofSafety)}</span>
+                </div>
+                <p>{record.acceptedBullet}</p>
+                <small>{formatDate(record.createdAt)} - {record.reason}</small>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No accepted rewrites yet" body="Apply a safe suggestion to create a resume rewrite audit trail." />
+        )}
+      </section>
     </div>
   );
 }
