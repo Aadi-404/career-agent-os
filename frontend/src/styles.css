@@ -1573,6 +1573,34 @@ h1 {
   gap: 16px;
 }
 
+.prepNextAction {
+  align-items: center;
+  border: 1px solid #b7ded8;
+  border-radius: 8px;
+  background: #f5fbfa;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.prepNextAction span {
+  color: #115e59;
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.prepNextAction strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.prepNextAction p {
+  margin: 6px 0 0;
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 8px;

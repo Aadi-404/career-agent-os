@@ -18,8 +18,20 @@ class PrepProgressMemory(BaseModel):
     lowConfidenceDays: int = Field(ge=0)
 
 
+class PrepNextAction(BaseModel):
+    kind: str
+    label: str
+    sessionId: str | None = None
+    sessionTitle: str | None = None
+    day: int | None = Field(default=None, ge=1, le=30)
+    taskId: str | None = None
+    task: str | None = None
+    reason: str
+
+
 class PrepMemoryResponse(BaseModel):
     summary: str
     repeatedWeakTopics: list[PrepMemoryTopic] = Field(default_factory=list)
     unfinishedPreparation: list[PrepProgressMemory] = Field(default_factory=list)
     nextRecommendedActions: list[str] = Field(default_factory=list)
+    nextAction: PrepNextAction | None = None

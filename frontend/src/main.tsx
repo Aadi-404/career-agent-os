@@ -479,6 +479,16 @@ type PrepMemoryResponse = {
     lowConfidenceDays: number;
   }>;
   nextRecommendedActions: string[];
+  nextAction?: {
+    kind: string;
+    label: string;
+    sessionId?: string | null;
+    sessionTitle?: string | null;
+    day?: number | null;
+    taskId?: string | null;
+    task?: string | null;
+    reason: string;
+  } | null;
 };
 
 type JobOpportunityStatus = "viewed" | "shortlisted" | "applied" | "interview" | "rejected" | "offer" | "archived";
@@ -2078,6 +2088,38 @@ function App() {
     }
   }
 
+  async function openPrepMemoryAction(action: NonNullable<PrepMemoryResponse["nextAction"]>) {
+    if (action.sessionId) {
+      let session = preparationHistory.find((item) => item.id === action.sessionId) ?? null;
+      if (!session) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/preparation-sessions/${action.sessionId}`, { headers: authHeaders(false) });
+          if (response.ok) {
+            session = await response.json() as HistoryPreparationRecord;
+            setPreparationHistory((items) => items.some((item) => item.id === session?.id) ? items : session ? [session, ...items] : items);
+          }
+        } catch {
+          session = null;
+        }
+      }
+      if (session) {
+        setActivePreparationSession(session);
+        setProgressInfo(action.task ? `Next: Day ${action.day ?? ""} - ${action.task}` : action.reason);
+      } else {
+        setProgressInfo("Could not load the recommended preparation session.");
+      }
+      setActiveTask("progress");
+      return;
+    }
+    if (action.kind === "prepare_repeated_gap") {
+      setPreparationInfo(action.reason);
+      setActiveTask("preparation");
+      return;
+    }
+    setProgressInfo(action.reason);
+    setActiveTask("progress");
+  }
+
   async function updateJobOpportunityStatus(jobOpportunityId: string, status: JobOpportunityStatus) {
     setHistoryInfo("");
     try {
@@ -3542,7 +3584,7 @@ function App() {
                 onSelectSession={setActivePreparationSession}
                 onUpdate={updatePreparationProgress}
               />
-              <PrepMemoryPanel memory={prepMemory} onRefresh={loadPrepMemory} />
+              <PrepMemoryPanel memory={prepMemory} onRefresh={loadPrepMemory} onOpenAction={openPrepMemoryAction} />
             </TaskPanel>
           )}
 
@@ -5679,7 +5721,15 @@ function PreparationProgressTracker({
   );
 }
 
-function PrepMemoryPanel({ memory, onRefresh }: { memory: PrepMemoryResponse | null; onRefresh: () => void }) {
+function PrepMemoryPanel({
+  memory,
+  onRefresh,
+  onOpenAction,
+}: {
+  memory: PrepMemoryResponse | null;
+  onRefresh: () => void;
+  onOpenAction: (action: NonNullable<PrepMemoryResponse["nextAction"]>) => void;
+}) {
   return (
     <div className="panel prepMemoryPanel">
       <div className="panelHeader">
@@ -5694,6 +5744,18 @@ function PrepMemoryPanel({ memory, onRefresh }: { memory: PrepMemoryResponse | n
       ) : (
         <>
           <p className="recommendation">{memory.summary}</p>
+          {memory.nextAction && (
+            <div className="prepNextAction">
+              <div>
+                <span>Next best action</span>
+                <strong>{memory.nextAction.label}</strong>
+                <p>{memory.nextAction.task ? `Day ${memory.nextAction.day ?? ""}: ${memory.nextAction.task}` : memory.nextAction.reason}</p>
+              </div>
+              <button type="button" onClick={() => onOpenAction(memory.nextAction!)}>
+                Open Action
+              </button>
+            </div>
+          )}
           {memory.nextRecommendedActions.length > 0 && (
             <div className="prepSection">
               <h4>Next Actions</h4>

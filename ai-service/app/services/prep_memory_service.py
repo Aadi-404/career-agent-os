@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from app.models.history import AnalysisRecord, PreparationSessionRecord
-from app.models.prep_memory import PrepMemoryResponse, PrepMemoryTopic, PrepProgressMemory
+from app.models.prep_memory import PrepMemoryResponse, PrepMemoryTopic, PrepProgressMemory, PrepNextAction
 
 
 def build_prep_memory(
@@ -11,12 +11,14 @@ def build_prep_memory(
     weak_topics = _weak_topic_memory(analyses)
     unfinished = _unfinished_progress_memory(preparation_sessions)
     actions = _recommended_actions(weak_topics, unfinished)
+    next_action = _next_action(weak_topics, preparation_sessions, unfinished)
     summary = _summary(weak_topics, unfinished)
     return PrepMemoryResponse(
         summary=summary,
         repeatedWeakTopics=weak_topics,
         unfinishedPreparation=unfinished,
         nextRecommendedActions=actions,
+        nextAction=next_action,
     )
 
 
@@ -109,6 +111,87 @@ def _recommended_actions(weak_topics: list[PrepMemoryTopic], unfinished: list[Pr
     if not actions:
         actions.append("No repeated weak topic is visible yet. Analyze more JDs or complete a preparation session to build memory.")
     return actions[:4]
+
+
+def _next_action(
+    weak_topics: list[PrepMemoryTopic],
+    sessions: list[PreparationSessionRecord],
+    unfinished: list[PrepProgressMemory],
+) -> PrepNextAction | None:
+    if unfinished:
+        session_lookup = {session.id: session for session in sessions}
+        selected_memory = unfinished[0]
+        selected_session = session_lookup.get(selected_memory.sessionId)
+        if selected_session:
+            task = _first_unfinished_task(selected_session)
+            if task:
+                return PrepNextAction(
+                    kind="continue_preparation",
+                    label=f"Continue {selected_session.title}",
+                    sessionId=selected_session.id,
+                    sessionTitle=selected_session.title,
+                    day=task["day"],
+                    taskId=task["taskId"],
+                    task=task["task"],
+                    reason=f"Lowest-completion active preparation session has {selected_memory.unfinishedTaskCount} unfinished task(s).",
+                )
+            return PrepNextAction(
+                kind="review_confidence",
+                label=f"Review confidence for {selected_session.title}",
+                sessionId=selected_session.id,
+                sessionTitle=selected_session.title,
+                reason="The session has low-confidence days even though no unfinished task was found.",
+            )
+
+    if weak_topics:
+        top = weak_topics[0]
+        return PrepNextAction(
+            kind="prepare_repeated_gap",
+            label=f"Prepare {top.topic}",
+            task=top.topic,
+            reason=f"This topic is weak across {top.occurrences} saved analysis result(s).",
+        )
+
+    return None
+
+
+def _first_unfinished_task(session: PreparationSessionRecord) -> dict[str, int | str] | None:
+    progress = session.progress or {}
+    task_statuses = progress.get("tasks", {}) if isinstance(progress, dict) else {}
+    if not isinstance(task_statuses, dict):
+        task_statuses = {}
+
+    for day in _daily_plan_items(session):
+        day_number = _day_value(day)
+        tasks = _tasks_value(day)
+        for index, task in enumerate(tasks):
+            task_id = f"day-{day_number}-task-{index}"
+            status = task_statuses.get(task_id, "todo")
+            if status not in {"done", "skipped"}:
+                return {"day": day_number, "taskId": task_id, "task": str(task)}
+    return None
+
+
+def _daily_plan_items(session: PreparationSessionRecord) -> list:
+    plan = session.plan
+    daily_plan = plan.get("dailyPlan", []) if isinstance(plan, dict) else plan.dailyPlan
+    return daily_plan if isinstance(daily_plan, list) else []
+
+
+def _day_value(day: object) -> int:
+    if isinstance(day, dict):
+        value = day.get("day", 1)
+    else:
+        value = getattr(day, "day", 1)
+    try:
+        return max(1, min(30, int(value)))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _tasks_value(day: object) -> list:
+    tasks = day.get("tasks", []) if isinstance(day, dict) else getattr(day, "tasks", [])
+    return tasks if isinstance(tasks, list) else []
 
 
 def _summary(weak_topics: list[PrepMemoryTopic], unfinished: list[PrepProgressMemory]) -> str:

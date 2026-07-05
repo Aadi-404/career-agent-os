@@ -74,7 +74,17 @@ class PrepMemoryServiceTests(unittest.TestCase):
             userId="user-1",
             title="Azure prep",
             status="in_progress",
-            plan={"dailyPlan": []},
+            plan={
+                "dailyPlan": [
+                    {
+                        "day": 1,
+                        "focus": "Azure",
+                        "goal": "Strengthen cloud basics.",
+                        "tasks": ["Review Azure services", "Practice AZ-900 scenario questions"],
+                        "output": "Notes",
+                    }
+                ]
+            },
             progress={
                 "tasks": {"day-1-task-0": "done", "day-1-task-1": "todo"},
                 "confidence": {"day-1": "low"},
@@ -88,6 +98,10 @@ class PrepMemoryServiceTests(unittest.TestCase):
         self.assertIsInstance(memory, PrepMemoryResponse)
         self.assertEqual(memory.repeatedWeakTopics[0].topic, "Azure cloud basics")
         self.assertEqual(memory.unfinishedPreparation[0].unfinishedTaskCount, 1)
+        self.assertIsNotNone(memory.nextAction)
+        self.assertEqual(memory.nextAction.kind, "continue_preparation")
+        self.assertEqual(memory.nextAction.sessionId, "prep-1")
+        self.assertEqual(memory.nextAction.taskId, "day-1-task-1")
         self.assertTrue(memory.nextRecommendedActions)
 
     def test_build_prep_memory_counts_plan_tasks_when_progress_is_empty(self):
@@ -129,7 +143,26 @@ class PrepMemoryServiceTests(unittest.TestCase):
         memory = build_prep_memory([_analysis(weak_match)], [session])
 
         self.assertEqual(memory.unfinishedPreparation[0].unfinishedTaskCount, 2)
+        self.assertEqual(memory.nextAction.task, "Review memoization")
         self.assertIn("2 unfinished task", memory.nextRecommendedActions[-1])
+
+    def test_build_prep_memory_recommends_repeated_gap_without_active_session(self):
+        weak_match = RequirementMatch(
+            requirement="System design caching",
+            category="system_design",
+            importance="high",
+            bestEvidence=None,
+            evidenceSource="missing",
+            score=30,
+            matchType="missing",
+            reason="No caching design proof.",
+        )
+
+        memory = build_prep_memory([_analysis(weak_match)], [])
+
+        self.assertIsNotNone(memory.nextAction)
+        self.assertEqual(memory.nextAction.kind, "prepare_repeated_gap")
+        self.assertEqual(memory.nextAction.task, "System design caching")
 
 
 if __name__ == "__main__":
