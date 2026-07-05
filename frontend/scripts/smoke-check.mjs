@@ -8,7 +8,7 @@ const checks = [
   {
     name: "score workflow task",
     file: "src/main.tsx",
-    patterns: ["Resume Match", "Command Center", "Requirement Match Matrix", "Explainable Score Breakdown"],
+    patterns: ["Resume Match", "Command Center", "Refresh Command Center", "/ai/command-center", "Requirement Match Matrix", "Explainable Score Breakdown"],
   },
   {
     name: "review and parser workflow",

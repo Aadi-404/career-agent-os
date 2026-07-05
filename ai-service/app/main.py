@@ -35,6 +35,7 @@ from app.models.analysis import (
     ResumeRewriteResponse,
 )
 from app.models.auth import UserLoginRequest, UserPasswordRegisterRequest, UserSessionResponse
+from app.models.command_center import CommandCenterResponse
 from app.models.demo import DemoSeedRequest, DemoSeedResponse
 from app.models.evaluation import (
     MatchFeedbackDataset,
@@ -115,6 +116,7 @@ from app.models.system import ProductionReadinessResponse, ReadinessCheck, Syste
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.agent_orchestration_service import build_career_agent_plan
 from app.services.application_decision_service import build_application_decision
+from app.services.command_center_service import build_command_center
 from app.services.demo_seed_service import seed_demo_workspace
 from app.services.history_store import (
     create_or_touch_anonymous_session,
@@ -795,6 +797,17 @@ def get_current_usage_quota(userId: str, session_token: str | None = Header(defa
 def workspace_summary(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> WorkspaceSummary:
     _authorize_user(user_id, session_token)
     return get_workspace_summary(user_id)
+
+
+@app.get("/ai/command-center/{user_id}", response_model=CommandCenterResponse)
+def get_command_center(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> CommandCenterResponse:
+    _authorize_user(user_id, session_token)
+    return build_command_center(
+        get_workspace_summary(user_id),
+        list_analyses(user_id),
+        list_preparation_sessions(user_id),
+        list_job_opportunities_for_user(user_id),
+    )
 
 
 @app.post("/history/resumes", response_model=ResumeRecord)

@@ -512,6 +512,14 @@ type OpportunityNextActionsResponse = {
   actions: OpportunityNextAction[];
 };
 
+type CommandCenterResponse = {
+  summary: string;
+  workspace: WorkspaceSummary;
+  preparationMemory: PrepMemoryResponse;
+  opportunityActions: OpportunityNextActionsResponse;
+  topActions: string[];
+};
+
 type HistoryJobOpportunityRecord = {
   id: string;
   resumeId?: string | null;
@@ -833,6 +841,8 @@ function App() {
   const [scoringAudit, setScoringAudit] = useState<ScoringCalibrationAuditRecord[]>([]);
   const [systemDiagnostics, setSystemDiagnostics] = useState<SystemDiagnostics | null>(null);
   const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness | null>(null);
+  const [commandCenterInfo, setCommandCenterInfo] = useState("");
+  const [commandCenterLoading, setCommandCenterLoading] = useState(false);
   const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
   const [adminAnalyses, setAdminAnalyses] = useState<HistoryAnalysisRecord[]>([]);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
@@ -1384,6 +1394,25 @@ function App() {
       }
     } catch {
       // Full history loading surfaces detailed errors. Profile counts can quietly stay empty.
+    }
+  }
+
+  async function loadCommandCenter() {
+    setCommandCenterLoading(true);
+    setCommandCenterInfo("");
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/ai/command-center/${workspaceUserId}`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error(await readApiError(response, "Command Center refresh failed"));
+      const payload = await response.json() as CommandCenterResponse;
+      setWorkspaceSummary(payload.workspace);
+      setPrepMemory(payload.preparationMemory);
+      setOpportunityActions(payload.opportunityActions);
+      setCommandCenterInfo(payload.summary);
+    } catch (err) {
+      setCommandCenterInfo(err instanceof Error ? err.message : "Command Center refresh failed");
+    } finally {
+      setCommandCenterLoading(false);
     }
   }
 
@@ -3201,7 +3230,10 @@ function App() {
                 prepMemory={prepMemory}
                 opportunityActions={opportunityActions}
                 workspaceSummary={workspaceSummary}
+                info={commandCenterInfo}
+                loading={commandCenterLoading}
                 onOpenTask={setActiveTask}
+                onRefresh={loadCommandCenter}
                 onBuildAgentPlan={buildAgentPlan}
                 onRunAgentRecommendation={runAgentRecommendation}
                 onOpenPrepAction={openPrepMemoryAction}
@@ -4483,7 +4515,10 @@ function CommandCenterPanel({
   prepMemory,
   opportunityActions,
   workspaceSummary,
+  info,
+  loading,
   onOpenTask,
+  onRefresh,
   onBuildAgentPlan,
   onRunAgentRecommendation,
   onOpenPrepAction,
@@ -4494,7 +4529,10 @@ function CommandCenterPanel({
   prepMemory: PrepMemoryResponse | null;
   opportunityActions: OpportunityNextActionsResponse | null;
   workspaceSummary: WorkspaceSummary | null;
+  info: string;
+  loading: boolean;
   onOpenTask: (task: ActiveTask) => void;
+  onRefresh: () => void;
   onBuildAgentPlan: () => void;
   onRunAgentRecommendation: (tool: AgentPlanResponse["recommendations"][number]["tool"]) => void;
   onOpenPrepAction: (action: NonNullable<PrepMemoryResponse["nextAction"]>) => void;
@@ -4511,6 +4549,12 @@ function CommandCenterPanel({
           <p className="eyebrow">Operating System</p>
           <h3>{result ? `${result.technicalMatchScore}% - ${result.fitCategory}` : "Run the first score"}</h3>
           <p>{result?.overallSummary ?? "Start with resume matching. After that, this view coordinates paid artifacts, prep progress, and job pipeline actions."}</p>
+          <div className="inlineActions">
+            <button type="button" className="secondaryButton" disabled={loading} onClick={onRefresh}>
+              {loading ? "Refreshing..." : "Refresh Command Center"}
+            </button>
+            {info && <small>{info}</small>}
+          </div>
         </div>
         <div className="commandMetrics">
           <div><span>Reports</span><strong>{workspaceSummary?.analysisCount ?? 0}</strong></div>
