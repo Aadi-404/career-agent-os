@@ -904,6 +904,20 @@ h1 {
   padding-left: 10px;
 }
 
+.rewriteActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.rewriteActions small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .rewriteWarningBox {
   display: grid;
   gap: 8px;

@@ -305,6 +305,7 @@ type ResumeRewriteResponse = {
   }>;
   warnings: string[];
 };
+type ResumeRewriteSuggestion = ResumeRewriteResponse["suggestions"][number];
 
 type UsageEventRecord = {
   id: string;
@@ -752,6 +753,7 @@ function App() {
   const [decisionInfo, setDecisionInfo] = useState("");
   const [decisionLoading, setDecisionLoading] = useState(false);
   const [resumeRewrite, setResumeRewrite] = useState<ResumeRewriteResponse | null>(null);
+  const [appliedRewriteKeys, setAppliedRewriteKeys] = useState<string[]>([]);
   const [rewriteInfo, setRewriteInfo] = useState("");
   const [rewriteLoading, setRewriteLoading] = useState(false);
   const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
@@ -1433,6 +1435,7 @@ function App() {
       });
       if (!response.ok) throw new Error(await readApiError(response, "Resume rewrite failed"));
       setResumeRewrite(await response.json() as ResumeRewriteResponse);
+      setAppliedRewriteKeys([]);
       setRewriteInfo("Rewrite suggestions generated with evidence safety labels.");
       void loadCurrentQuota();
     } catch (err) {
@@ -1440,6 +1443,73 @@ function App() {
     } finally {
       setRewriteLoading(false);
     }
+  }
+
+  function applyRewriteSuggestion(item: ResumeRewriteSuggestion, index: number) {
+    const rewriteKey = rewriteSuggestionKey(item, index);
+    if (item.proofSafety === "gap_do_not_claim") {
+      setRewriteInfo("Gap-only suggestions are not applied to the resume because there is no existing proof to support the claim.");
+      return;
+    }
+    if (appliedRewriteKeys.includes(rewriteKey)) {
+      setRewriteInfo("This rewrite suggestion is already applied to the resume draft.");
+      return;
+    }
+    if (!structuredResume) {
+      setRewriteInfo("Parse and review the resume first, then apply rewrite suggestions to the structured draft.");
+      setScoreStep("review");
+      setReviewPane("resume");
+      return;
+    }
+
+    const bullet = cleanResumeBullet(item.rewrittenBullet);
+    if (!bullet) {
+      setRewriteInfo("This rewrite suggestion has no bullet text to apply.");
+      return;
+    }
+
+    const nextResume: StructuredResume = {
+      ...structuredResume,
+      profile: { ...structuredResume.profile },
+      experience: structuredResume.experience.map((entry) => ({ ...entry, highlights: [...entry.highlights] })),
+      projects: structuredResume.projects.map((project) => ({ ...project, techStack: [...project.techStack], highlights: [...project.highlights] })),
+      skills: [...structuredResume.skills],
+      education: [...structuredResume.education],
+      achievements: [...structuredResume.achievements],
+      certifications: [...structuredResume.certifications],
+    };
+    const source = item.evidenceSource.toLowerCase();
+    let targetLabel = "achievements";
+
+    if (source.includes("project") && nextResume.projects.length > 0) {
+      addUniqueLine(nextResume.projects[0].highlights, bullet);
+      targetLabel = `project: ${nextResume.projects[0].name}`;
+    } else if (source.includes("experience") && nextResume.experience.length > 0) {
+      addUniqueLine(nextResume.experience[0].highlights, bullet);
+      targetLabel = `experience: ${nextResume.experience[0].title || nextResume.experience[0].company || "latest role"}`;
+    } else if (source.includes("certification")) {
+      addUniqueLine(nextResume.certifications, bullet);
+      targetLabel = "certifications";
+    } else if (source.includes("skill")) {
+      addUniqueLine(nextResume.skills, bullet);
+      targetLabel = "skills";
+    } else if (nextResume.projects.length > 0) {
+      addUniqueLine(nextResume.projects[0].highlights, bullet);
+      targetLabel = `project: ${nextResume.projects[0].name}`;
+    } else if (nextResume.experience.length > 0) {
+      addUniqueLine(nextResume.experience[0].highlights, bullet);
+      targetLabel = `experience: ${nextResume.experience[0].title || nextResume.experience[0].company || "latest role"}`;
+    } else {
+      addUniqueLine(nextResume.achievements, bullet);
+    }
+
+    setStructuredResume(nextResume);
+    setResumeText(formatStructuredResume(nextResume));
+    setAppliedRewriteKeys((keys) => [...keys, rewriteKey]);
+    setReviewPane("resume");
+    setScoreStep("review");
+    setActiveTask("matching");
+    setRewriteInfo(`Applied rewrite suggestion to ${targetLabel}. Review the resume draft before scoring again.`);
   }
 
   function useSavedResume(resume: HistoryResumeRecord) {
@@ -3218,7 +3288,9 @@ function App() {
                 loading={rewriteLoading}
                 info={rewriteInfo}
                 accessTier={effectiveAccessTier}
+                appliedKeys={appliedRewriteKeys}
                 onBuild={buildResumeRewrite}
+                onApplySuggestion={applyRewriteSuggestion}
                 onTierChange={updateAccountTier}
               />
             </TaskPanel>
@@ -5494,7 +5566,9 @@ function ResumeRewritePanel({
   loading,
   info,
   accessTier,
+  appliedKeys,
   onBuild,
+  onApplySuggestion,
   onTierChange,
 }: {
   rewrite: ResumeRewriteResponse | null;
@@ -5502,7 +5576,9 @@ function ResumeRewritePanel({
   loading: boolean;
   info: string;
   accessTier: AccessTier;
+  appliedKeys: string[];
   onBuild: () => void;
+  onApplySuggestion: (item: ResumeRewriteSuggestion, index: number) => void;
   onTierChange: (tier: AccessTier) => void;
 }) {
   return (
@@ -5533,32 +5609,48 @@ function ResumeRewritePanel({
             </div>
           )}
           <div className="rewriteList">
-            {rewrite.suggestions.map((item, index) => (
-              <article className={`rewriteItem rewrite-${item.proofSafety}`} key={`${item.targetRequirement}-${index}`}>
-                <div className="rewriteItemHeader">
+            {rewrite.suggestions.map((item, index) => {
+              const suggestionKey = rewriteSuggestionKey(item, index);
+              const applied = appliedKeys.includes(suggestionKey);
+              const gapOnly = item.proofSafety === "gap_do_not_claim";
+              return (
+                <article className={`rewriteItem rewrite-${item.proofSafety}`} key={suggestionKey}>
+                  <div className="rewriteItemHeader">
+                    <div>
+                      <strong>{item.targetRequirement}</strong>
+                      <small>{formatCategory(item.evidenceSource)} - {formatCategory(item.proofSafety)}</small>
+                    </div>
+                    <span>{formatCategory(item.proofSafety)}</span>
+                  </div>
+                  {item.originalEvidence && (
+                    <div className="rewriteEvidence">
+                      <b>Original evidence</b>
+                      <p>{item.originalEvidence}</p>
+                    </div>
+                  )}
                   <div>
-                    <strong>{item.targetRequirement}</strong>
-                    <small>{formatCategory(item.evidenceSource)} - {formatCategory(item.proofSafety)}</small>
+                    <b>Issue</b>
+                    <p>{item.currentIssue}</p>
                   </div>
-                  <span>{formatCategory(item.proofSafety)}</span>
-                </div>
-                {item.originalEvidence && (
-                  <div className="rewriteEvidence">
-                    <b>Original evidence</b>
-                    <p>{item.originalEvidence}</p>
+                  <div>
+                    <b>Suggested bullet</b>
+                    <p>{item.rewrittenBullet}</p>
                   </div>
-                )}
-                <div>
-                  <b>Issue</b>
-                  <p>{item.currentIssue}</p>
-                </div>
-                <div>
-                  <b>Suggested bullet</b>
-                  <p>{item.rewrittenBullet}</p>
-                </div>
-                <small>{item.reason}</small>
-              </article>
-            ))}
+                  <small>{item.reason}</small>
+                  <div className="rewriteActions">
+                    <button
+                      type="button"
+                      className="secondaryButton"
+                      disabled={gapOnly || applied}
+                      onClick={() => onApplySuggestion(item, index)}
+                    >
+                      {gapOnly ? "Gap Only" : applied ? "Applied" : "Apply to Resume Draft"}
+                    </button>
+                    <small>{gapOnly ? "Preparation gap, not a resume claim." : applied ? "Added to the structured resume review step." : "Requires your approval before it changes the resume."}</small>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : (
@@ -6562,6 +6654,26 @@ function formatStructuredResume(resume: StructuredResume) {
   if (resume.achievements.length) output.push("", "Achievements", ...resume.achievements.map((item) => `- ${item}`));
   if (resume.certifications.length) output.push("", "Certifications", ...resume.certifications.map((item) => `- ${item}`));
   return output.join("\n").trim();
+}
+
+function rewriteSuggestionKey(item: ResumeRewriteSuggestion, index: number) {
+  return `${index}:${item.targetRequirement}:${item.evidenceSource}:${item.rewrittenBullet}`;
+}
+
+function cleanResumeBullet(value: string) {
+  return value.trim().replace(/^[-*•]\s*/, "").trim();
+}
+
+function addUniqueLine(items: string[], value: string) {
+  const normalizedValue = normalizeLine(value);
+  if (!normalizedValue) return;
+  if (!items.some((item) => normalizeLine(item) === normalizedValue)) {
+    items.push(value);
+  }
+}
+
+function normalizeLine(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function formatParsedJd(jd: ParsedJobDescription) {
