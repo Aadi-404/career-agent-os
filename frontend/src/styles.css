@@ -871,6 +871,13 @@ h1 {
   margin: 0;
 }
 
+.recommendationActions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
 .priority-critical {
   border-left: 4px solid #dc2626;
 }
@@ -1509,6 +1516,40 @@ h1 {
   display: block;
   height: 100%;
   transition: width 160ms ease;
+}
+
+.nextTaskBox {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.nextTaskBox span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.nextTaskBox strong {
+  display: block;
+  margin-top: 3px;
+}
+
+.nextTaskBox > div:last-child {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.nextTaskBox.complete {
+  background: #f5fbfa;
 }
 
 .taskRow {

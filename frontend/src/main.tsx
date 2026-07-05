@@ -1577,6 +1577,59 @@ function App() {
     }
   }
 
+  function runAgentRecommendation(tool: AgentPlanResponse["recommendations"][number]["tool"]) {
+    if (tool === "score") {
+      setActiveTask("matching");
+      return;
+    }
+    if (tool === "research_note") {
+      setActiveTask("research");
+      return;
+    }
+    if (tool === "preparation_plan") {
+      setActiveTask("preparation");
+      void buildPreparation();
+      return;
+    }
+    if (tool === "resume_rewrite") {
+      setActiveTask("rewrite");
+      void buildResumeRewrite();
+      return;
+    }
+    if (tool === "application_decision") {
+      setActiveTask("decision");
+      void buildApplicationDecision();
+      return;
+    }
+    if (tool === "interview_questions") {
+      setActiveTask("report");
+      void buildOptionalArtifact(
+        "Interview questions",
+        "interview_questions",
+        "/ai/interview/questions",
+        (current, payload) => ({ ...current, interviewQuestions: payload as AnalysisResponse["interviewQuestions"] }),
+      );
+      return;
+    }
+    if (tool === "cross_questions") {
+      setActiveTask("report");
+      void buildOptionalArtifact(
+        "Cross questions",
+        "cross_questions",
+        "/ai/cross-questions",
+        (current, payload) => ({ ...current, crossQuestions: payload as AnalysisResponse["crossQuestions"] }),
+      );
+      return;
+    }
+    if (tool === "gap_report") {
+      setActiveTask("report");
+      return;
+    }
+    if (tool === "save_progress") {
+      setActiveTask("progress");
+    }
+  }
+
   async function buildApplicationDecision() {
     if (!result || !lastAnalysisRequest) {
       setDecisionInfo("Run resume matching before building an application decision.");
@@ -3627,6 +3680,7 @@ function App() {
                 researchNotes={researchNotes}
                 artifacts={currentGeneratedArtifacts(result)}
                 onBuild={buildAgentPlan}
+                onRunRecommendation={runAgentRecommendation}
                 onTierChange={updateAccountTier}
               />
             </TaskPanel>
@@ -5488,6 +5542,7 @@ function PreparationProgressTracker({
   const doneCount = progress ? tasks.filter((task) => progress.tasks[task.id] === "done").length : 0;
   const skippedCount = progress ? tasks.filter((task) => progress.tasks[task.id] === "skipped").length : 0;
   const completion = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0;
+  const nextTask = progress ? tasks.find((task) => !["done", "skipped"].includes(progress.tasks[task.id] ?? "todo")) ?? null : null;
 
   function updateTask(taskId: string, status: TaskStatus) {
     if (!progress) return;
@@ -5531,6 +5586,25 @@ function PreparationProgressTracker({
           <p>{doneCount} done, {skippedCount} skipped, {tasks.length - doneCount - skippedCount} active.</p>
         </div>
         <div className="progressBar"><span style={{ width: `${completion}%` }} /></div>
+        {nextTask ? (
+          <div className="nextTaskBox">
+            <div>
+              <span>Next task</span>
+              <strong>Day {nextTask.day}: {nextTask.task}</strong>
+            </div>
+            <div>
+              <button type="button" className="secondaryButton" onClick={() => updateTask(nextTask.id, "in_progress")}>Start</button>
+              <button type="button" onClick={() => updateTask(nextTask.id, "done")}>Mark Done</button>
+            </div>
+          </div>
+        ) : (
+          <div className="nextTaskBox complete">
+            <div>
+              <span>Next task</span>
+              <strong>All planned tasks are complete or skipped.</strong>
+            </div>
+          </div>
+        )}
         <div className="gridTwo">
           <label>
             Preparation session
@@ -5969,6 +6043,7 @@ function AgentPlanPanel({
   researchNotes,
   artifacts,
   onBuild,
+  onRunRecommendation,
   onTierChange,
 }: {
   plan: AgentPlanResponse | null;
@@ -5979,6 +6054,7 @@ function AgentPlanPanel({
   researchNotes: ResearchNoteRecord[];
   artifacts: string[];
   onBuild: () => void;
+  onRunRecommendation: (tool: AgentPlanResponse["recommendations"][number]["tool"]) => void;
   onTierChange: (tier: AccessTier) => void;
 }) {
   return (
@@ -6042,10 +6118,15 @@ function AgentPlanPanel({
                     <small>{item.endpoint ?? "No API call"} - {item.estimatedUnits} unit(s)</small>
                   </div>
                   <p>{item.reason}</p>
-                  <div className="tags">
-                    <span>{formatCategory(item.priority)}</span>
-                    {item.requiresPremium && <span>Premium</span>}
-                    {item.alreadySatisfied && <span>Already satisfied</span>}
+                  <div className="recommendationActions">
+                    <div className="tags">
+                      <span>{formatCategory(item.priority)}</span>
+                      {item.requiresPremium && <span>Premium</span>}
+                      {item.alreadySatisfied && <span>Already satisfied</span>}
+                    </div>
+                    <button type="button" className="secondaryButton" onClick={() => onRunRecommendation(item.tool)}>
+                      {item.alreadySatisfied ? "Open Module" : "Run / Open"}
+                    </button>
                   </div>
                 </article>
               ))}

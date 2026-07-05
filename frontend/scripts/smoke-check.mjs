@@ -38,7 +38,7 @@ const checks = [
   {
     name: "career agent planner workflow",
     file: "src/main.tsx",
-    patterns: ["Career Agent Plan", "Build Next-Step Plan", "Recommended Tool Order", "/ai/agent/plan"],
+    patterns: ["Career Agent Plan", "Build Next-Step Plan", "Recommended Tool Order", "Run / Open", "/ai/agent/plan"],
   },
   {
     name: "resume rewrite workflow",
@@ -63,7 +63,7 @@ const checks = [
   {
     name: "launch tracker styles",
     file: "src/styles.css",
-    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass"],
+    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions"],
   },
   {
     name: "package smoke script wiring",
