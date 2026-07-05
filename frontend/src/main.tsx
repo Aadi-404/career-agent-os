@@ -286,6 +286,8 @@ type ResearchNoteRecord = {
 type ResearchNoteDraft = Omit<ResearchNoteRecord, "id" | "userId" | "createdAt" | "updatedAt"> & {
   researchProvider?: string;
   providerWarnings?: string[];
+  marketOpportunitySignals?: string[];
+  roleCompanySynthesis?: string[];
 };
 
 type ApplicationDecisionResponse = {
@@ -819,6 +821,8 @@ function App() {
   const [researchSourcesDraft, setResearchSourcesDraft] = useState("");
   const [researchDraftProvider, setResearchDraftProvider] = useState("");
   const [researchDraftWarnings, setResearchDraftWarnings] = useState<string[]>([]);
+  const [researchDraftMarketSignals, setResearchDraftMarketSignals] = useState<string[]>([]);
+  const [researchDraftSynthesis, setResearchDraftSynthesis] = useState<string[]>([]);
   const [applicationDecision, setApplicationDecision] = useState<ApplicationDecisionResponse | null>(null);
   const [decisionInfo, setDecisionInfo] = useState("");
   const [decisionLoading, setDecisionLoading] = useState(false);
@@ -1440,6 +1444,8 @@ function App() {
       setResearchSourcesDraft("");
       setResearchDraftProvider("");
       setResearchDraftWarnings([]);
+      setResearchDraftMarketSignals([]);
+      setResearchDraftSynthesis([]);
       void loadWorkspaceSummary();
     } catch (err) {
       setResearchInfo(err instanceof Error ? err.message : "Research note save failed");
@@ -1496,6 +1502,8 @@ function App() {
     setResearchSourcesDraft(formatResearchSources(draft.sources));
     setResearchDraftProvider(draft.researchProvider ?? "local");
     setResearchDraftWarnings(draft.providerWarnings ?? []);
+    setResearchDraftMarketSignals(draft.marketOpportunitySignals ?? []);
+    setResearchDraftSynthesis(draft.roleCompanySynthesis ?? []);
     const citedCount = draft.sources.filter((source) => source.citationQuality === "verified_url").length;
     const providerLabel = formatCategory(draft.researchProvider ?? "local");
     setResearchInfo(`Generated a ${providerLabel} research draft with ${citedCount} verified citation(s). Review it before saving.`);
@@ -3494,6 +3502,8 @@ function App() {
                 sourcesDraft={researchSourcesDraft}
                 draftProvider={researchDraftProvider}
                 draftWarnings={researchDraftWarnings}
+                draftMarketSignals={researchDraftMarketSignals}
+                draftSynthesis={researchDraftSynthesis}
                 saving={researchSaving}
                 generating={researchGenerating}
                 info={researchInfo}
@@ -5572,6 +5582,8 @@ function ResearchNotesPanel({
   sourcesDraft,
   draftProvider,
   draftWarnings,
+  draftMarketSignals,
+  draftSynthesis,
   saving,
   generating,
   info,
@@ -5600,6 +5612,8 @@ function ResearchNotesPanel({
   sourcesDraft: string;
   draftProvider: string;
   draftWarnings: string[];
+  draftMarketSignals: string[];
+  draftSynthesis: string[];
   saving: boolean;
   generating: boolean;
   info: string;
@@ -5636,7 +5650,7 @@ function ResearchNotesPanel({
             {generating ? "Generating Draft..." : "Generate From Latest Score"}
           </button>
         </div>
-        {(draftProvider || draftWarnings.length > 0) && (
+        {(draftProvider || draftWarnings.length > 0 || draftMarketSignals.length > 0 || draftSynthesis.length > 0) && (
           <div className="researchProviderStatus">
             <div>
               <span>Research provider</span>
@@ -5649,6 +5663,12 @@ function ResearchNotesPanel({
             {draftWarnings.length > 0 && (
               <ul>
                 {draftWarnings.slice(0, 4).map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            )}
+            {(draftMarketSignals.length > 0 || draftSynthesis.length > 0) && (
+              <ul>
+                {draftMarketSignals.slice(0, 3).map((signal) => <li key={`market-${signal}`}>Market: {signal}</li>)}
+                {draftSynthesis.slice(0, 3).map((signal) => <li key={`synthesis-${signal}`}>Synthesis: {signal}</li>)}
               </ul>
             )}
           </div>

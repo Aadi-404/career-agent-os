@@ -29,12 +29,14 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
         *[f"Company research: {signal}" for signal in enrichment.company_signals[:1]],
         *[f"Interview research: {signal}" for signal in enrichment.interview_signals[:2]],
         *[f"Market research: {signal}" for signal in enrichment.market_signals[:1]],
+        *[f"Market opportunity: {signal}" for signal in enrichment.market_opportunity_signals[:1]],
+        *[f"Role/company synthesis: {signal}" for signal in enrichment.role_company_synthesis[:1]],
         *_manual_signal_labels(manual_signals),
         *enrichment.key_signals,
         *[f"{match.requirement} is weak or missing in resume evidence." for match in weak_matches[:5]],
         *[f"{match.requirement} is a strong existing proof area." for match in strong_matches[:3]],
         f"Current technical match score is {analysis.technicalMatchScore}% ({analysis.fitCategory}).",
-    ])[:10]
+    ])[:18]
 
     preparation_topics = _dedupe([
         *enrichment.preparation_topics,
@@ -76,6 +78,8 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
         sources=sources,
         researchProvider=enrichment.provider,
         providerWarnings=enrichment.warnings,
+        marketOpportunitySignals=enrichment.market_opportunity_signals,
+        roleCompanySynthesis=enrichment.role_company_synthesis,
     )
 
 

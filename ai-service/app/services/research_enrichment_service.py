@@ -20,6 +20,8 @@ class ResearchEnrichmentResult:
     market_signals: list[str] = field(default_factory=list)
     key_signals: list[str] = field(default_factory=list)
     preparation_topics: list[str] = field(default_factory=list)
+    market_opportunity_signals: list[str] = field(default_factory=list)
+    role_company_synthesis: list[str] = field(default_factory=list)
     sources: list[ResearchContextSource] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -84,6 +86,14 @@ class LocalResearchEnrichmentProvider(ResearchEnrichmentProvider):
             f"Check demand and repeated requirements for {role_title} in {market}.",
             f"Track similar job postings for emphasis on: {', '.join(weak_requirements[:3]) or 'core stack depth'}.",
         ])
+        market_opportunity_signals = _dedupe([
+            f"Market opportunity needs cited validation for {role_title} in {market}.",
+            f"Compare repeated job-post requirements against candidate gaps: {', '.join(weak_requirements[:3]) or 'no major weak requirement'}.",
+        ])
+        role_company_synthesis = _dedupe([
+            f"Synthesize {company_label} expectations with the JD match matrix before preparing.",
+            f"Prioritize proof stories for weak requirements that appear in company, interview, or market sources.",
+        ])
         key_signals = _dedupe([
             f"Research provider local prepared {len(queries)} source-search query plan(s).",
             *[f"Company signal: {signal}" for signal in company_signals[:2]],
@@ -112,6 +122,8 @@ class LocalResearchEnrichmentProvider(ResearchEnrichmentProvider):
             market_signals=market_signals,
             key_signals=key_signals,
             preparation_topics=preparation_topics,
+            market_opportunity_signals=market_opportunity_signals,
+            role_company_synthesis=role_company_synthesis,
             sources=sources,
             warnings=["Local provider creates citation-ready search plans but does not browse live web sources."],
         )
@@ -141,6 +153,7 @@ class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
         search_key_signals: list[str] = []
         search_topics: list[str] = []
         page_extracts: list[PageExtract] = []
+        evidence_documents: list[EvidenceDocument] = []
         weak_requirements = [match.requirement for match in analysis.requirementMatches if match.score < 60][:5]
         for query in result.queries[:4]:
             try:
@@ -164,12 +177,26 @@ class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
                 search_key_signals.append(f"Live source found for {source.sourceType}: {item.title}.")
                 search_key_signals.extend(_snippet_signals(item, source.sourceType))
                 search_topics.extend(_snippet_topics(item, weak_requirements))
+                evidence_documents.append(
+                    EvidenceDocument(
+                        source_type=source.sourceType,
+                        title=item.title,
+                        text=f"{item.title}. {item.snippet}",
+                    )
+                )
                 try:
                     page_extract = self._extract_page(item.url)
                     page_extracts.append(page_extract)
                     source.note = _source_note_with_page_extract(source.note, page_extract)
                     search_key_signals.extend(_page_signals(page_extract, source.sourceType))
                     search_topics.extend(_page_topics(page_extract, weak_requirements))
+                    evidence_documents.append(
+                        EvidenceDocument(
+                            source_type=source.sourceType,
+                            title=item.title,
+                            text=page_extract.text,
+                        )
+                    )
                 except ResearchSearchError as exc:
                     result.warnings.append(f"Page extraction skipped for '{item.title}': {exc}")
 
@@ -178,9 +205,19 @@ class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
             planned_sources = [source for source in result.sources if source.citationQuality != "weak"]
             result.sources = [*verified_sources, *planned_sources][:10]
             result.preparation_topics = _dedupe([*search_topics, *result.preparation_topics])[:12]
+            result.market_opportunity_signals = _dedupe([
+                *_market_opportunity_signals(role_title, source_request.candidateContext.targetMarket, evidence_documents),
+                *result.market_opportunity_signals,
+            ])[:8]
+            result.role_company_synthesis = _dedupe([
+                *_role_company_synthesis(company, role_title, weak_requirements, evidence_documents),
+                *result.role_company_synthesis,
+            ])[:8]
             result.key_signals = _dedupe([
                 f"Google research provider returned {len(verified_sources)} cited source(s).",
                 *([f"Extracted readable text from {len(page_extracts)} cited page(s)."] if page_extracts else []),
+                *[f"Market opportunity: {signal}" for signal in result.market_opportunity_signals[:3]],
+                *[f"Role/company synthesis: {signal}" for signal in result.role_company_synthesis[:3]],
                 *search_key_signals,
                 *result.key_signals,
             ])[:12]
@@ -260,6 +297,13 @@ class GoogleSearchItem:
 @dataclass
 class PageExtract:
     url: str
+    text: str
+
+
+@dataclass
+class EvidenceDocument:
+    source_type: str
+    title: str
     text: str
 
 
@@ -408,6 +452,86 @@ def _snippet_topics(item: GoogleSearchItem, weak_requirements: list[str]) -> lis
 
 def _page_topics(extract: PageExtract, weak_requirements: list[str]) -> list[str]:
     return _snippet_topics(GoogleSearchItem(title="Extracted page", url=extract.url, snippet=extract.text), weak_requirements)
+
+
+def _market_opportunity_signals(role_title: str, market: str, documents: list[EvidenceDocument]) -> list[str]:
+    if not documents:
+        return []
+    source_counts = _source_type_counts(documents)
+    repeated_terms = _repeated_market_terms(documents)
+    signals = [
+        f"{len(documents)} cited evidence fragment(s) were reviewed for {role_title} in {market}.",
+    ]
+    job_post_count = source_counts.get("job_post", 0)
+    market_count = source_counts.get("market_signal", 0)
+    interview_count = source_counts.get("interview_experience", 0)
+    company_count = source_counts.get("company_page", 0)
+    if job_post_count:
+        signals.append(f"{job_post_count} job-post source(s) indicate demand or repeated hiring requirements.")
+    if market_count:
+        signals.append(f"{market_count} market source(s) indicate role-demand or trend evidence.")
+    if interview_count:
+        signals.append(f"{interview_count} interview source(s) show candidate-screening pressure for this role.")
+    if company_count:
+        signals.append(f"{company_count} company source(s) show employer-specific expectations.")
+    if repeated_terms:
+        signals.append(f"Repeated cited market emphasis: {', '.join(repeated_terms[:5])}.")
+    return _dedupe(signals)
+
+
+def _role_company_synthesis(
+    company: str | None,
+    role_title: str,
+    weak_requirements: list[str],
+    documents: list[EvidenceDocument],
+) -> list[str]:
+    if not documents:
+        return []
+    target = f"{role_title} at {company}" if company else role_title
+    text = " ".join(document.text.lower() for document in documents)
+    repeated_terms = _repeated_market_terms(documents)
+    matched_gaps = []
+    for requirement in weak_requirements:
+        tokens = _topic_tokens(requirement)
+        if tokens and any(token in text for token in tokens):
+            matched_gaps.append(requirement)
+    signals = [f"Cited evidence was synthesized for {target} across {len(documents)} source fragment(s)."]
+    if matched_gaps:
+        signals.append(f"Candidate weak areas also appear in cited evidence: {', '.join(matched_gaps[:4])}.")
+    if repeated_terms:
+        signals.append(f"Role/company preparation should emphasize: {', '.join(repeated_terms[:5])}.")
+    if not matched_gaps and not repeated_terms:
+        signals.append("Cited evidence did not strongly repeat the current weak requirements; keep preparation anchored to the JD matrix.")
+    return _dedupe(signals)
+
+
+def _source_type_counts(documents: list[EvidenceDocument]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for document in documents:
+        counts[document.source_type] = counts.get(document.source_type, 0) + 1
+    return counts
+
+
+def _repeated_market_terms(documents: list[EvidenceDocument]) -> list[str]:
+    labels = {
+        "AI guardrails": ["guardrail", "safety", "policy", "permission"],
+        "agent workflows": ["agent", "workflow", "automation"],
+        "ETL reliability": ["etl", "pipeline", "data quality", "validation"],
+        "Django APIs": ["django", "api", "apis"],
+        "React frontend": ["react", "frontend", "ui"],
+        "SQL/data validation": ["sql", "database", "query"],
+        "cloud basics": ["azure", "aws", "gcp", "cloud"],
+        "system design": ["system design", "scalability", "architecture"],
+        "Power BI/reporting": ["power bi", "dashboard", "reporting"],
+    }
+    text = " ".join(document.text.lower() for document in documents)
+    repeated = []
+    for label, markers in labels.items():
+        hits = sum(text.count(marker) for marker in markers)
+        if hits >= 2:
+            repeated.append((label, hits))
+    repeated.sort(key=lambda item: item[1], reverse=True)
+    return [label for label, _hits in repeated]
 
 
 def _topic_tokens(value: str) -> list[str]:

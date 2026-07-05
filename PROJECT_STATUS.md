@@ -151,12 +151,14 @@ Built:
 - Google research provider can execute Custom Search, convert results into verified URL citations, and fall back to local query plans when keys or HTTP calls fail.
 - Cited result snippets can add deterministic preparation topics and live-source key signals without an extra LLM call.
 - Cited pages can be fetched with safe timeouts, reduced to readable text, and used for additional preparation topics and evidence signals.
+- Deterministic market opportunity signals are produced from cited source counts and repeated source patterns.
+- Role/company synthesis connects cited evidence back to candidate weak requirements and repeated preparation emphasis.
 - Research Notes UI shows draft provider status, verified citation counts, and provider warnings.
 
 Remaining:
 
-- Deepen role/company topic synthesis from extracted pages.
-- Produce scored market opportunity signals from cited source patterns.
+- Replace deterministic first-pass synthesis with richer agentic research review when cost and source coverage are acceptable.
+- Validate market signals against real role/company searches during staging.
 
 ### Phase 8: Agentic Career OS
 

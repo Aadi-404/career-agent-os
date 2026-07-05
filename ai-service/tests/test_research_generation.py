@@ -162,7 +162,8 @@ class ResearchGenerationTests(unittest.TestCase):
                     url="https://example.com/demofin-interview",
                     text=(
                         "DemoFin interview preparation page says candidates should explain AI guardrail design, "
-                        "Django API design, ETL reliability, SQL validation, and agent tool permission design."
+                        "Django API design, ETL reliability, SQL validation, agent tool permission design, "
+                        "and role demand for product-company AI engineering teams."
                     ),
                 ),
             ) as extract_mock,
@@ -181,11 +182,15 @@ class ResearchGenerationTests(unittest.TestCase):
         self.assertGreaterEqual(extract_mock.call_count, 1)
         self.assertTrue(any("Google research provider returned" in signal for signal in draft.keySignals))
         self.assertTrue(any("Extracted readable text" in signal for signal in draft.keySignals))
+        self.assertTrue(any("Market opportunity:" in signal for signal in draft.keySignals))
+        self.assertTrue(any("Role/company synthesis:" in signal for signal in draft.keySignals))
         self.assertTrue(any("Cited company_page source highlights" in signal for signal in draft.keySignals))
         self.assertTrue(any("Extracted company_page page evidence" in signal for signal in draft.keySignals))
         self.assertIn("AI guardrail design", draft.preparationTopics)
         self.assertIn("Django API design", draft.preparationTopics)
         self.assertIn("Agent tool permission design", draft.preparationTopics)
+        self.assertTrue(any("cited evidence fragment" in signal for signal in draft.marketOpportunitySignals))
+        self.assertTrue(any("Candidate weak areas" in signal for signal in draft.roleCompanySynthesis))
         self.assertEqual(draft.researchProvider, "google")
         self.assertTrue(any("Custom Search results" in warning for warning in draft.providerWarnings))
         self.assertTrue(any(source.url == "https://example.com/demofin-interview" for source in draft.sources))

@@ -80,6 +80,8 @@ class ResearchNoteDraft(BaseModel):
     sources: list[ResearchContextSource] = Field(default_factory=list, max_length=20)
     researchProvider: str = Field(default="local", max_length=80)
     providerWarnings: list[str] = Field(default_factory=list, max_length=20)
+    marketOpportunitySignals: list[str] = Field(default_factory=list, max_length=20)
+    roleCompanySynthesis: list[str] = Field(default_factory=list, max_length=20)
 
 
 class ResearchBuildRequest(BaseModel):

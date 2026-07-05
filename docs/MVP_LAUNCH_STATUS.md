@@ -209,12 +209,14 @@ Built:
 - Google Custom Search execution path for cited company, interview, and market source discovery when configured.
 - Deterministic snippet extraction that turns cited search result titles/snippets into preparation topics and source-backed key signals.
 - Safe full-page extraction for cited URLs, using readable page text to enrich preparation topics and source evidence when pages allow it.
+- First-pass market opportunity signals from cited source mix and repeated market terms.
+- First-pass role/company synthesis from cited evidence mapped against candidate weak requirements.
 - Research Notes UI provider status showing local versus Google mode, verified citation count, and provider warnings.
 
 Still needs:
 
-- Deeper role/company topic synthesis from cited pages.
-- Produce market opportunity signals from cited source patterns.
+- Staging validation with real role/company searches.
+- Future agentic research review for deeper synthesis and source ranking.
 
 Why the remaining work is later:
 
