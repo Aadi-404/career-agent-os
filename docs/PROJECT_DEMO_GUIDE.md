@@ -193,7 +193,7 @@ React + Vite frontend
 | Deterministic scoring | Produce stable, explainable numeric scores. |
 | LLM optional artifacts | Generate preparation plans, questions, and improvements only when requested. |
 | Calibration dataset | Store feedback labels to tune scoring later. |
-| Cited search snippets | Convert Google Custom Search titles/snippets into research signals without another LLM call. |
+| Cited search extraction | Convert Google Custom Search snippets and readable page text into research signals without another LLM call. |
 | Future RAG memory | Use saved resumes, JDs, analyses, prep progress, and feedback as personal context. |
 | Future agents | Coordinate research, rewrite, prep, and apply-decision workflows. |
 
@@ -221,7 +221,7 @@ React + Vite frontend
 
 - Real-world extension selectors still need manual validation on job sites.
 - Scoring calibration needs more labelled resumes/JDs.
-- Full company-specific page extraction is still planned; current research uses manual notes, local query plans, and optional Google Custom Search snippets.
+- Deep company-specific research synthesis is still planned; current research uses manual notes, local query plans, optional Google Custom Search snippets, and safe readable-page extraction.
 - Public deployment still requires real staging/production domains, secrets, and billing setup.
 
 ## Best Demo Dataset

@@ -16,7 +16,7 @@ from app.models.analysis import (
     WeaklyEvidencedSkill,
 )
 from app.services.preparation_service import build_preparation_intelligence
-from app.services.research_enrichment_service import GoogleSearchItem
+from app.services.research_enrichment_service import GoogleSearchItem, PageExtract
 from app.services.research_service import build_research_note_draft
 
 
@@ -156,6 +156,16 @@ class ResearchGenerationTests(unittest.TestCase):
                     )
                 ],
             ) as search_mock,
+            patch(
+                "app.services.research_enrichment_service.GoogleResearchEnrichmentProvider._extract_page",
+                return_value=PageExtract(
+                    url="https://example.com/demofin-interview",
+                    text=(
+                        "DemoFin interview preparation page says candidates should explain AI guardrail design, "
+                        "Django API design, ETL reliability, SQL validation, and agent tool permission design."
+                    ),
+                ),
+            ) as extract_mock,
         ):
             draft = build_research_note_draft(
                 ResearchBuildRequest(
@@ -168,16 +178,21 @@ class ResearchGenerationTests(unittest.TestCase):
             )
 
         self.assertGreaterEqual(search_mock.call_count, 1)
+        self.assertGreaterEqual(extract_mock.call_count, 1)
         self.assertTrue(any("Google research provider returned" in signal for signal in draft.keySignals))
+        self.assertTrue(any("Extracted readable text" in signal for signal in draft.keySignals))
         self.assertTrue(any("Cited company_page source highlights" in signal for signal in draft.keySignals))
+        self.assertTrue(any("Extracted company_page page evidence" in signal for signal in draft.keySignals))
         self.assertIn("AI guardrail design", draft.preparationTopics)
         self.assertIn("Django API design", draft.preparationTopics)
+        self.assertIn("Agent tool permission design", draft.preparationTopics)
         self.assertEqual(draft.researchProvider, "google")
         self.assertTrue(any("Custom Search results" in warning for warning in draft.providerWarnings))
         self.assertTrue(any(source.url == "https://example.com/demofin-interview" for source in draft.sources))
         cited_source = next(source for source in draft.sources if source.url == "https://example.com/demofin-interview")
         self.assertEqual(cited_source.citationQuality, "verified_url")
         self.assertEqual(cited_source.sourceType, "company_page")
+        self.assertIn("Extracted page text", cited_source.note or "")
 
     def test_preparation_uses_saved_research_notes(self):
         prep = build_preparation_intelligence(

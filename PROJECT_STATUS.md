@@ -150,11 +150,12 @@ Built:
 - Research enrichment now separates company, interview, and market signals before they are saved into draft notes.
 - Google research provider can execute Custom Search, convert results into verified URL citations, and fall back to local query plans when keys or HTTP calls fail.
 - Cited result snippets can add deterministic preparation topics and live-source key signals without an extra LLM call.
+- Cited pages can be fetched with safe timeouts, reduced to readable text, and used for additional preparation topics and evidence signals.
 - Research Notes UI shows draft provider status, verified citation counts, and provider warnings.
 
 Remaining:
 
-- Extract richer role/company preparation topics from full source pages.
+- Deepen role/company topic synthesis from extracted pages.
 - Produce scored market opportunity signals from cited source patterns.
 
 ### Phase 8: Agentic Career OS

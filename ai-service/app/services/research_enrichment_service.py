@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 import json
 import re
 from urllib.error import HTTPError, URLError
@@ -139,6 +140,7 @@ class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
         search_sources: list[ResearchContextSource] = []
         search_key_signals: list[str] = []
         search_topics: list[str] = []
+        page_extracts: list[PageExtract] = []
         weak_requirements = [match.requirement for match in analysis.requirementMatches if match.score < 60][:5]
         for query in result.queries[:4]:
             try:
@@ -162,6 +164,14 @@ class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
                 search_key_signals.append(f"Live source found for {source.sourceType}: {item.title}.")
                 search_key_signals.extend(_snippet_signals(item, source.sourceType))
                 search_topics.extend(_snippet_topics(item, weak_requirements))
+                try:
+                    page_extract = self._extract_page(item.url)
+                    page_extracts.append(page_extract)
+                    source.note = _source_note_with_page_extract(source.note, page_extract)
+                    search_key_signals.extend(_page_signals(page_extract, source.sourceType))
+                    search_topics.extend(_page_topics(page_extract, weak_requirements))
+                except ResearchSearchError as exc:
+                    result.warnings.append(f"Page extraction skipped for '{item.title}': {exc}")
 
         verified_sources = _dedupe_sources(search_sources)
         if verified_sources:
@@ -170,6 +180,7 @@ class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
             result.preparation_topics = _dedupe([*search_topics, *result.preparation_topics])[:12]
             result.key_signals = _dedupe([
                 f"Google research provider returned {len(verified_sources)} cited source(s).",
+                *([f"Extracted readable text from {len(page_extracts)} cited page(s)."] if page_extracts else []),
                 *search_key_signals,
                 *result.key_signals,
             ])[:12]
@@ -177,6 +188,33 @@ class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
         else:
             result.warnings.append("Google provider returned no usable cited sources; local query-plan sources were kept.")
         return result
+
+    def _extract_page(self, url: str) -> "PageExtract":
+        parsed_url = urlparse(url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise ResearchSearchError("invalid page URL")
+        request = Request(
+            url,
+            headers={"User-Agent": "career-agent-os-research/0.1"},
+        )
+        try:
+            with urlopen(request, timeout=8) as response:
+                content_type = response.headers.get("content-type", "")
+                if "text/html" not in content_type and "text/plain" not in content_type:
+                    raise ResearchSearchError(f"unsupported content type {content_type or 'unknown'}")
+                raw = response.read(180_000)
+        except HTTPError as exc:
+            raise ResearchSearchError(f"HTTP {exc.code}") from exc
+        except (OSError, URLError) as exc:
+            raise ResearchSearchError(str(exc)) from exc
+
+        text = raw.decode("utf-8", errors="ignore")
+        if "html" in content_type:
+            text = _html_to_text(text)
+        cleaned = _clean_snippet(text)
+        if len(cleaned) < 80:
+            raise ResearchSearchError("page returned too little readable text")
+        return PageExtract(url=url, text=cleaned[:2500])
 
     def _search(self, query: str, api_key: str, engine_id: str) -> list["GoogleSearchItem"]:
         params = urlencode({
@@ -217,6 +255,12 @@ class GoogleSearchItem:
     title: str
     url: str
     snippet: str = ""
+
+
+@dataclass
+class PageExtract:
+    url: str
+    text: str
 
 
 class ResearchSearchError(Exception):
@@ -327,6 +371,13 @@ def _snippet_signals(item: GoogleSearchItem, source_type: str) -> list[str]:
     return [f"Cited {source_type} source highlights: {snippet[:220]}"]
 
 
+def _page_signals(extract: PageExtract, source_type: str) -> list[str]:
+    summary = _first_relevant_sentence(extract.text)
+    if not summary:
+        return []
+    return [f"Extracted {source_type} page evidence: {summary[:220]}"]
+
+
 def _snippet_topics(item: GoogleSearchItem, weak_requirements: list[str]) -> list[str]:
     text = f"{item.title}. {item.snippet}"
     topics: list[str] = []
@@ -355,6 +406,10 @@ def _snippet_topics(item: GoogleSearchItem, weak_requirements: list[str]) -> lis
     return _dedupe(topics)[:8]
 
 
+def _page_topics(extract: PageExtract, weak_requirements: list[str]) -> list[str]:
+    return _snippet_topics(GoogleSearchItem(title="Extracted page", url=extract.url, snippet=extract.text), weak_requirements)
+
+
 def _topic_tokens(value: str) -> list[str]:
     stop_words = {"and", "or", "the", "with", "for", "in", "on", "of", "to", "a", "an"}
     tokens = []
@@ -368,3 +423,54 @@ def _topic_tokens(value: str) -> list[str]:
 def _clean_snippet(value: str) -> str:
     cleaned = re.sub(r"\s+", " ", value).strip()
     return cleaned.strip(" -")
+
+
+def _source_note_with_page_extract(note: str | None, extract: PageExtract) -> str:
+    page_signal = _first_relevant_sentence(extract.text) or extract.text[:220]
+    return f"{note or ''} Extracted page text: {page_signal[:320]}".strip()
+
+
+def _first_relevant_sentence(text: str) -> str:
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        cleaned = sentence.strip()
+        if 45 <= len(cleaned) <= 260:
+            return cleaned
+    return text[:220].strip()
+
+
+def _html_to_text(value: str) -> str:
+    parser = _ResearchHtmlTextParser()
+    parser.feed(value)
+    parser.close()
+    return parser.text()
+
+
+class _ResearchHtmlTextParser(HTMLParser):
+    ignored_tags = {"script", "style", "noscript", "svg", "canvas", "template"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._ignored_depth = 0
+        self._chunks: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag in self.ignored_tags:
+            self._ignored_depth += 1
+        if tag in {"p", "li", "br", "h1", "h2", "h3", "h4", "section", "article", "div"}:
+            self._chunks.append(" ")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self.ignored_tags and self._ignored_depth:
+            self._ignored_depth -= 1
+        if tag in {"p", "li", "h1", "h2", "h3", "h4", "section", "article", "div"}:
+            self._chunks.append(" ")
+
+    def handle_data(self, data: str) -> None:
+        if self._ignored_depth:
+            return
+        cleaned = data.strip()
+        if cleaned:
+            self._chunks.append(cleaned)
+
+    def text(self) -> str:
+        return " ".join(self._chunks)

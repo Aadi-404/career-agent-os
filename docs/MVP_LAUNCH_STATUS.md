@@ -208,11 +208,11 @@ Built:
 - Typed company, interview, and market research signals inside generated research note drafts.
 - Google Custom Search execution path for cited company, interview, and market source discovery when configured.
 - Deterministic snippet extraction that turns cited search result titles/snippets into preparation topics and source-backed key signals.
+- Safe full-page extraction for cited URLs, using readable page text to enrich preparation topics and source evidence when pages allow it.
 - Research Notes UI provider status showing local versus Google mode, verified citation count, and provider warnings.
 
 Still needs:
 
-- Full source-page extraction beyond search result snippets.
 - Deeper role/company topic synthesis from cited pages.
 - Produce market opportunity signals from cited source patterns.
 
