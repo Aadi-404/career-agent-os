@@ -2214,6 +2214,37 @@ button.premiumButton:not(.secondaryButton) span {
   font-size: 13px;
 }
 
+.runbookGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.runbookGrid > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+}
+
+.runbookGrid strong {
+  color: var(--brand);
+}
+
+.runbookGrid span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.runbookGrid code {
+  white-space: normal;
+  word-break: break-word;
+}
+
 .evaluationGrid {
   display: grid;
   gap: 18px;
@@ -3548,6 +3579,7 @@ pre {
   .launchMetrics,
   .commandReadiness,
   .commandReadinessList,
+  .runbookGrid,
   .checkGrid,
   .evaluationGrid,
   .calibrationGrid,

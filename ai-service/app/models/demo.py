@@ -25,3 +25,21 @@ class DemoSeedResponse(BaseModel):
     averageMatchScore: int | None = None
     sessionToken: str
     message: str
+
+
+class DemoCleanupRequest(BaseModel):
+    userId: str = Field(default="demo-aditya", min_length=2, max_length=80)
+    confirm: bool = False
+
+
+class DemoCleanupResponse(BaseModel):
+    userId: str
+    deleted: bool
+    resumeCount: int = 0
+    jobDescriptionCount: int = 0
+    analysisCount: int = 0
+    preparationSessionCount: int = 0
+    jobOpportunityCount: int = 0
+    researchNoteCount: int = 0
+    usageEventCount: int = 0
+    message: str

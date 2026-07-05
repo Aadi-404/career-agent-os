@@ -443,6 +443,19 @@ type DemoSeedResponse = {
   message: string;
 };
 
+type DemoCleanupResponse = {
+  userId: string;
+  deleted: boolean;
+  resumeCount: number;
+  jobDescriptionCount: number;
+  analysisCount: number;
+  preparationSessionCount: number;
+  jobOpportunityCount: number;
+  researchNoteCount: number;
+  usageEventCount: number;
+  message: string;
+};
+
 type UsageSummary = {
   totalEvents: number;
   totalEstimatedUnits: number;
@@ -851,6 +864,7 @@ function App() {
   const [usageQuota, setUsageQuota] = useState<UsageQuotaStatus | null>(null);
   const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
   const [demoSeedResult, setDemoSeedResult] = useState<DemoSeedResponse | null>(null);
+  const [demoCleanupResult, setDemoCleanupResult] = useState<DemoCleanupResponse | null>(null);
   const [launchChecklist, setLaunchChecklist] = useState<LaunchChecklistState>(() => loadLaunchChecklist());
   const [settingsInfo, setSettingsInfo] = useState("");
   const [sessionInfo, setSessionInfo] = useState("");
@@ -2501,6 +2515,7 @@ function App() {
   async function seedDemoWorkspace() {
     setSettingsInfo("");
     setDemoSeedResult(null);
+    setDemoCleanupResult(null);
     try {
       await ensureLocalUser();
       const response = await fetch(`${API_BASE_URL}/admin/demo/seed`, {
@@ -2538,6 +2553,35 @@ function App() {
       setActiveTask("history");
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "Demo seed failed");
+    }
+  }
+
+  async function cleanupDemoWorkspace() {
+    setSettingsInfo("");
+    setDemoCleanupResult(null);
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/admin/demo/cleanup`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          userId: "demo-aditya",
+          confirm: true,
+        }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response, "Demo cleanup failed. Admin access is required."));
+      const cleaned = await response.json() as DemoCleanupResponse;
+      setDemoCleanupResult(cleaned);
+      setDemoSeedResult(null);
+      setSettingsInfo(
+        cleaned.deleted
+          ? `Deleted demo workspace: ${cleaned.resumeCount} resume(s), ${cleaned.jobDescriptionCount} JD(s), ${cleaned.analysisCount} analysis, ${cleaned.jobOpportunityCount} opportunity, ${cleaned.researchNoteCount} research note(s), and ${cleaned.usageEventCount} usage event(s).`
+          : cleaned.message,
+      );
+      updateLaunchChecklist("demo_seed", false);
+      await Promise.all([loadAdminUsers(), loadUsageSummary()]);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Demo cleanup failed");
     }
   }
 
@@ -3919,6 +3963,7 @@ function App() {
                 usageSummary={usageSummary}
                 billingDraft={billingDraft}
                 demoSeedResult={demoSeedResult}
+                demoCleanupResult={demoCleanupResult}
                 launchChecklist={launchChecklist}
                 canManageSettings={currentUser?.role === "admin"}
                 info={settingsInfo}
@@ -3937,6 +3982,7 @@ function App() {
                 onBillingSave={saveBillingMetadata}
                 onBillingCancel={() => setBillingDraft(null)}
                 onSeedDemo={seedDemoWorkspace}
+                onCleanupDemo={cleanupDemoWorkspace}
                 onToggleLaunchChecklist={updateLaunchChecklist}
                 onResetLaunchChecklist={resetLaunchChecklist}
               />
@@ -5035,6 +5081,7 @@ function ScoringSettingsPanel({
   usageSummary,
   billingDraft,
   demoSeedResult,
+  demoCleanupResult,
   launchChecklist,
   canManageSettings,
   info,
@@ -5053,6 +5100,7 @@ function ScoringSettingsPanel({
   onBillingSave,
   onBillingCancel,
   onSeedDemo,
+  onCleanupDemo,
   onToggleLaunchChecklist,
   onResetLaunchChecklist,
 }: {
@@ -5066,6 +5114,7 @@ function ScoringSettingsPanel({
   usageSummary: UsageSummary | null;
   billingDraft: BillingDraft | null;
   demoSeedResult: DemoSeedResponse | null;
+  demoCleanupResult: DemoCleanupResponse | null;
   launchChecklist: LaunchChecklistState;
   canManageSettings: boolean;
   info: string;
@@ -5084,6 +5133,7 @@ function ScoringSettingsPanel({
   onBillingSave: (draft: BillingDraft) => void;
   onBillingCancel: () => void;
   onSeedDemo: () => void;
+  onCleanupDemo: () => void;
   onToggleLaunchChecklist: (itemId: string, checked: boolean) => void;
   onResetLaunchChecklist: () => void;
 }) {
@@ -5298,9 +5348,31 @@ function ScoringSettingsPanel({
         <div className="panelHeader">
           <div>
             <p className="eyebrow">Staging</p>
-            <h3>Smoke Runbook</h3>
+            <h3>Deployment Runbook</h3>
           </div>
           <span className="statusPill warn">manual</span>
+        </div>
+        <div className="runbookGrid">
+          <div>
+            <strong>Environment</strong>
+            <span>Set production mode, auth, CORS, billing, and LLM/embedding providers before public traffic.</span>
+            <code>ENVIRONMENT=production / REQUIRE_USER_AUTH=true / CORS_ALLOW_ORIGINS=&lt;frontend-origin&gt;</code>
+          </div>
+          <div>
+            <strong>Database</strong>
+            <span>Point the API at the production PostgreSQL database, then run startup once to initialize schema.</span>
+            <code>DATABASE_URL=postgresql://... / POSTGRES_DB=careerAgentOS</code>
+          </div>
+          <div>
+            <strong>Commercial gates</strong>
+            <span>Configure checkout provider, checkout URL, success/cancel URLs, and webhook secret before paid access.</span>
+            <code>BILLING_CHECKOUT_PROVIDER=stripe / BILLING_WEBHOOK_SECRET=&lt;secret&gt;</code>
+          </div>
+          <div>
+            <strong>Post-deploy verification</strong>
+            <span>Run readiness, smoke checks, extension packaging, and one real score-only match.</span>
+            <code>python deployment/smoke_check.py --api {API_BASE_URL} --frontend {window.location.origin} --strict-production</code>
+          </div>
         </div>
         <div className="compactList">
           <div>
@@ -5329,9 +5401,12 @@ function ScoringSettingsPanel({
             <p className="eyebrow">Demo</p>
             <h3>Portfolio Workspace</h3>
           </div>
-          <button type="button" className="secondaryButton" disabled={!canManageSettings} onClick={onSeedDemo}>Seed Demo Data</button>
+          <div className="inlineActions">
+            <button type="button" className="secondaryButton" disabled={!canManageSettings} onClick={onSeedDemo}>Seed Demo Data</button>
+            <button type="button" className="secondaryButton dangerButton" disabled={!canManageSettings} onClick={onCleanupDemo}>Clean Demo Data</button>
+          </div>
         </div>
-        <p className="hint">Creates a resettable Premium demo workspace for project reviews, then switches this browser session to the demo user.</p>
+        <p className="hint">Use Seed for portfolio reviews. Use Clean before production demos or public deployment to remove demo-aditya records and demo usage events.</p>
         <div className="usageQuotaStrip">
           <div><span>User</span><strong>demo-aditya</strong></div>
           <div><span>Password</span><strong>DemoPass123!</strong></div>
@@ -5347,7 +5422,16 @@ function ScoringSettingsPanel({
             <p>{demoSeedResult.message}</p>
           </div>
         )}
-        {!canManageSettings && <p className="hint">Admin role is required to reset and seed demo data.</p>}
+        {demoCleanupResult && (
+          <div className="recommendationPanel">
+            <div>
+              <strong>{demoCleanupResult.deleted ? "Demo data cleaned" : "No demo data found"}</strong>
+              <span>{demoCleanupResult.resumeCount} resume(s), {demoCleanupResult.jobDescriptionCount} JD(s), {demoCleanupResult.analysisCount} analysis, {demoCleanupResult.jobOpportunityCount} opportunity record(s), {demoCleanupResult.usageEventCount} usage event(s)</span>
+            </div>
+            <p>{demoCleanupResult.message}</p>
+          </div>
+        )}
+        {!canManageSettings && <p className="hint">Admin role is required to seed or clean demo data.</p>}
       </div>
 
       <div className="panel diagnosticsPanel">

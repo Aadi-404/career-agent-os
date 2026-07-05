@@ -36,7 +36,7 @@ from app.models.analysis import (
 )
 from app.models.auth import UserLoginRequest, UserPasswordRegisterRequest, UserSessionResponse
 from app.models.command_center import CommandCenterResponse
-from app.models.demo import DemoSeedRequest, DemoSeedResponse
+from app.models.demo import DemoCleanupRequest, DemoCleanupResponse, DemoSeedRequest, DemoSeedResponse
 from app.models.evaluation import (
     MatchFeedbackDataset,
     MatchFeedbackImportRequest,
@@ -117,7 +117,7 @@ from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.agent_orchestration_service import build_career_agent_plan
 from app.services.application_decision_service import build_application_decision
 from app.services.command_center_service import build_command_center
-from app.services.demo_seed_service import seed_demo_workspace
+from app.services.demo_seed_service import cleanup_demo_workspace, seed_demo_workspace
 from app.services.history_store import (
     create_or_touch_anonymous_session,
     claim_anonymous_session,
@@ -785,6 +785,15 @@ def seed_admin_demo_workspace(
 ) -> DemoSeedResponse:
     _authorize_admin(session_token)
     return seed_demo_workspace(request)
+
+
+@app.post("/admin/demo/cleanup", response_model=DemoCleanupResponse)
+def cleanup_admin_demo_workspace(
+    request: DemoCleanupRequest,
+    session_token: str | None = Header(default=None, alias="X-Session-Token"),
+) -> DemoCleanupResponse:
+    _authorize_admin(session_token)
+    return cleanup_demo_workspace(request)
 
 
 @app.get("/usage/quota", response_model=UsageQuotaStatus)

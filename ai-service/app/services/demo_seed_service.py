@@ -20,7 +20,7 @@ from app.models.analysis import (
     SystemDesignReadiness,
     WeaklyEvidencedSkill,
 )
-from app.models.demo import DemoSeedRequest, DemoSeedResponse
+from app.models.demo import DemoCleanupRequest, DemoCleanupResponse, DemoSeedRequest, DemoSeedResponse
 from app.models.evaluation import MatchFeedbackSaveRequest
 from app.models.extension import ExtensionValidationSaveRequest
 from app.models.history import (
@@ -206,6 +206,44 @@ def seed_demo_workspace(request: DemoSeedRequest) -> DemoSeedResponse:
         averageMatchScore=summary.averageMatchScore,
         sessionToken=token,
         message="Demo workspace seeded. Use the returned login to show history, score, prep, extension, evaluation, and usage dashboards.",
+    )
+
+
+def cleanup_demo_workspace(request: DemoCleanupRequest) -> DemoCleanupResponse:
+    initialize_database()
+    if not request.confirm:
+        return DemoCleanupResponse(
+            userId=request.userId,
+            deleted=False,
+            message="Cleanup skipped. Set confirm=true to delete the demo workspace.",
+        )
+
+    summary = get_workspace_summary(request.userId)
+    with get_connection() as connection:
+        usage_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM usage_events WHERE user_id = ?",
+            (request.userId,),
+        ).fetchone()
+        deleted_usage_count = int((usage_count or {}).get("count", 0))
+        connection.execute("DELETE FROM usage_events WHERE user_id = ?", (request.userId,))
+        deleted_user = connection.execute("DELETE FROM users WHERE id = ?", (request.userId,)).rowcount
+
+    deleted = bool(deleted_user)
+    return DemoCleanupResponse(
+        userId=request.userId,
+        deleted=deleted,
+        resumeCount=summary.resumeCount if deleted else 0,
+        jobDescriptionCount=summary.jobDescriptionCount if deleted else 0,
+        analysisCount=summary.analysisCount if deleted else 0,
+        preparationSessionCount=summary.preparationSessionCount if deleted else 0,
+        jobOpportunityCount=summary.jobOpportunityCount if deleted else 0,
+        researchNoteCount=summary.researchNoteCount if deleted else 0,
+        usageEventCount=deleted_usage_count if deleted else 0,
+        message=(
+            "Demo workspace cleanup completed."
+            if deleted
+            else "No demo workspace existed for the requested user id."
+        ),
     )
 
 
