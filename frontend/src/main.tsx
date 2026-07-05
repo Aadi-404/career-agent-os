@@ -340,6 +340,24 @@ type ResumeVersionRecord = {
   createdAt: string;
 };
 
+type ResumeVersionComparison = {
+  versionId: string;
+  title: string;
+  summary: string;
+  currentCounts: ResumeSnapshotCounts;
+  versionCounts: ResumeSnapshotCounts;
+  addedInVersion: string[];
+  missingFromVersion: string[];
+};
+
+type ResumeSnapshotCounts = {
+  experience: number;
+  projects: number;
+  skills: number;
+  certifications: number;
+  bullets: number;
+};
+
 type UsageEventRecord = {
   id: string;
   userId?: string | null;
@@ -791,6 +809,7 @@ function App() {
   const [appliedRewriteKeys, setAppliedRewriteKeys] = useState<string[]>([]);
   const [acceptedResumeRewrites, setAcceptedResumeRewrites] = useState<AcceptedResumeRewriteRecord[]>([]);
   const [resumeVersions, setResumeVersions] = useState<ResumeVersionRecord[]>([]);
+  const [selectedResumeVersionComparison, setSelectedResumeVersionComparison] = useState<ResumeVersionComparison | null>(null);
   const [rewriteInfo, setRewriteInfo] = useState("");
   const [rewriteLoading, setRewriteLoading] = useState(false);
   const [comparisonResumeIds, setComparisonResumeIds] = useState<string[]>([]);
@@ -1647,6 +1666,29 @@ function App() {
     } catch (err) {
       setRewriteInfo(`Applied rewrite suggestion to ${targetLabel}, but history save was incomplete: ${err instanceof Error ? err.message : "unknown error"}`);
     }
+  }
+
+  function compareResumeVersion(version: ResumeVersionRecord) {
+    if (!structuredResume) {
+      setRewriteInfo("Parse or load a structured resume before comparing a saved version.");
+      setScoreStep("review");
+      setReviewPane("resume");
+      return;
+    }
+    const comparison = buildResumeVersionComparison(structuredResume, version);
+    setSelectedResumeVersionComparison(comparison);
+    setRewriteInfo(`Compared current draft with ${version.title}.`);
+  }
+
+  function restoreResumeVersion(version: ResumeVersionRecord) {
+    const restoredResume = cloneStructuredResume(version.structuredResume);
+    setStructuredResume(restoredResume);
+    setResumeText(formatStructuredResume(restoredResume));
+    setReviewPane("resume");
+    setScoreStep("review");
+    setActiveTask("matching");
+    setSelectedResumeVersionComparison(buildResumeVersionComparison(restoredResume, version));
+    setRewriteInfo(`Restored ${version.title} into the resume review editor. Re-score after reviewing the draft.`);
   }
 
   function useSavedResume(resume: HistoryResumeRecord) {
@@ -3441,8 +3483,11 @@ function App() {
                 appliedKeys={appliedRewriteKeys}
                 acceptedRewrites={acceptedResumeRewrites}
                 resumeVersions={resumeVersions}
+                versionComparison={selectedResumeVersionComparison}
                 onBuild={buildResumeRewrite}
                 onApplySuggestion={applyRewriteSuggestion}
+                onCompareVersion={compareResumeVersion}
+                onRestoreVersion={restoreResumeVersion}
                 onTierChange={updateAccountTier}
               />
             </TaskPanel>
@@ -5721,8 +5766,11 @@ function ResumeRewritePanel({
   appliedKeys,
   acceptedRewrites,
   resumeVersions,
+  versionComparison,
   onBuild,
   onApplySuggestion,
+  onCompareVersion,
+  onRestoreVersion,
   onTierChange,
 }: {
   rewrite: ResumeRewriteResponse | null;
@@ -5733,8 +5781,11 @@ function ResumeRewritePanel({
   appliedKeys: string[];
   acceptedRewrites: AcceptedResumeRewriteRecord[];
   resumeVersions: ResumeVersionRecord[];
+  versionComparison: ResumeVersionComparison | null;
   onBuild: () => void;
   onApplySuggestion: (item: ResumeRewriteSuggestion, index: number) => void | Promise<void>;
+  onCompareVersion: (version: ResumeVersionRecord) => void;
+  onRestoreVersion: (version: ResumeVersionRecord) => void;
   onTierChange: (tier: AccessTier) => void;
 }) {
   return (
@@ -5855,6 +5906,11 @@ function ResumeRewritePanel({
                   <span>{formatDate(version.createdAt)}</span>
                 </div>
                 <p>{version.structuredResume.projects.length} project(s), {version.structuredResume.experience.length} experience item(s), {version.structuredResume.skills.length} skill(s)</p>
+                <div className="rewriteActions">
+                  <button type="button" className="secondaryButton" onClick={() => onCompareVersion(version)}>Compare</button>
+                  <button type="button" className="secondaryButton" onClick={() => onRestoreVersion(version)}>Restore to Editor</button>
+                  <small>Compare is local and restore only updates the review draft until you score/save again.</small>
+                </div>
               </article>
             ))}
           </div>
@@ -5862,6 +5918,39 @@ function ResumeRewritePanel({
           <EmptyState title="No resume versions yet" body="Apply a rewrite after a saved score to capture the resulting structured resume snapshot." />
         )}
       </section>
+
+      {versionComparison && (
+        <section className="panel rewriteComparePanel">
+          <h3>Version Compare</h3>
+          <p className="hint">{versionComparison.title}: {versionComparison.summary}</p>
+          <div className="scoreGrid">
+            <div className="scoreTile"><span>Current projects</span><strong>{versionComparison.currentCounts.projects}</strong></div>
+            <div className="scoreTile"><span>Version projects</span><strong>{versionComparison.versionCounts.projects}</strong></div>
+            <div className="scoreTile"><span>Current bullets</span><strong>{versionComparison.currentCounts.bullets}</strong></div>
+            <div className="scoreTile"><span>Version bullets</span><strong>{versionComparison.versionCounts.bullets}</strong></div>
+            <div className="scoreTile"><span>Current skills</span><strong>{versionComparison.currentCounts.skills}</strong></div>
+            <div className="scoreTile"><span>Version skills</span><strong>{versionComparison.versionCounts.skills}</strong></div>
+          </div>
+          <div className="rewriteCompareGrid">
+            <div>
+              <h4>Only in version</h4>
+              {versionComparison.addedInVersion.length ? (
+                <ul>{versionComparison.addedInVersion.map((item) => <li key={item}>{item}</li>)}</ul>
+              ) : (
+                <p className="hint">No unique version lines.</p>
+              )}
+            </div>
+            <div>
+              <h4>Only in current draft</h4>
+              {versionComparison.missingFromVersion.length ? (
+                <ul>{versionComparison.missingFromVersion.map((item) => <li key={item}>{item}</li>)}</ul>
+              ) : (
+                <p className="hint">No unique current draft lines.</p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -6877,6 +6966,59 @@ function addUniqueLine(items: string[], value: string) {
 
 function normalizeLine(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function cloneStructuredResume(resume: StructuredResume): StructuredResume {
+  return {
+    ...resume,
+    profile: { ...resume.profile },
+    experience: resume.experience.map((entry) => ({ ...entry, highlights: [...entry.highlights] })),
+    projects: resume.projects.map((project) => ({ ...project, techStack: [...project.techStack], highlights: [...project.highlights] })),
+    skills: [...resume.skills],
+    education: [...resume.education],
+    achievements: [...resume.achievements],
+    certifications: [...resume.certifications],
+  };
+}
+
+function buildResumeVersionComparison(currentResume: StructuredResume, version: ResumeVersionRecord): ResumeVersionComparison {
+  const currentLines = resumeComparableLines(currentResume);
+  const versionLines = resumeComparableLines(version.structuredResume);
+  const currentSet = new Set(currentLines.map(normalizeLine));
+  const versionSet = new Set(versionLines.map(normalizeLine));
+  const addedInVersion = versionLines.filter((line) => !currentSet.has(normalizeLine(line))).slice(0, 12);
+  const missingFromVersion = currentLines.filter((line) => !versionSet.has(normalizeLine(line))).slice(0, 12);
+  return {
+    versionId: version.id,
+    title: version.title,
+    summary: `${addedInVersion.length} line(s) only in version, ${missingFromVersion.length} line(s) only in current draft.`,
+    currentCounts: resumeSnapshotCounts(currentResume),
+    versionCounts: resumeSnapshotCounts(version.structuredResume),
+    addedInVersion,
+    missingFromVersion,
+  };
+}
+
+function resumeSnapshotCounts(resume: StructuredResume): ResumeSnapshotCounts {
+  return {
+    experience: resume.experience.length,
+    projects: resume.projects.length,
+    skills: resume.skills.length,
+    certifications: resume.certifications.length,
+    bullets: resume.experience.reduce((count, item) => count + item.highlights.length, 0)
+      + resume.projects.reduce((count, item) => count + item.highlights.length, 0)
+      + resume.achievements.length,
+  };
+}
+
+function resumeComparableLines(resume: StructuredResume) {
+  return [
+    ...resume.experience.flatMap((item) => [item.title, item.company, ...item.highlights]),
+    ...resume.projects.flatMap((item) => [item.name, ...item.techStack, ...item.highlights]),
+    ...resume.skills,
+    ...resume.certifications,
+    ...resume.achievements,
+  ].filter((item): item is string => Boolean(item && item.trim()));
 }
 
 function formatParsedJd(jd: ParsedJobDescription) {

@@ -164,11 +164,12 @@ Built:
 - Rewrite approval workflow that applies safe or user-verified suggestions into the structured resume draft while blocking gap-only claims.
 - Accepted rewrite audit history in PostgreSQL with linked analysis/resume/JD context when available.
 - Resume version snapshots after accepted rewrites, preserving the full structured resume draft.
+- Resume version compare and restore controls in the rewrite workspace.
 
 Remaining:
 
 - Apply-decision agent with tool orchestration.
-- Resume version compare and rollback controls.
+- Persisted rollback audit for restored resume versions.
 - Company research agent.
 - Interview-prep tracker agent.
 - RAG memory over saved workspace history.

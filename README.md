@@ -102,6 +102,7 @@ Current Phase 6 groundwork:
 - Rewrite approval workflow: safe or user-verified suggestions can be applied into the structured resume draft, while gap-only suggestions stay blocked from becoming resume claims.
 - Accepted rewrite audit: applied bullets are saved in PostgreSQL with proof-safety, target section, and linked analysis/resume/JD context when available.
 - Resume version snapshots: accepted rewrites can preserve the full structured resume draft for future compare and rollback controls.
+- Resume version controls: saved versions can be compared against the current draft and restored into the review editor.
 
 ## Run AI Service
 
