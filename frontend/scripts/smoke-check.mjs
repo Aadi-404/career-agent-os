@@ -8,7 +8,7 @@ const checks = [
   {
     name: "score workflow task",
     file: "src/main.tsx",
-    patterns: ["Resume Match", "Requirement Match Matrix", "Explainable Score Breakdown"],
+    patterns: ["Resume Match", "Command Center", "Requirement Match Matrix", "Explainable Score Breakdown"],
   },
   {
     name: "review and parser workflow",
@@ -63,7 +63,7 @@ const checks = [
   {
     name: "launch tracker styles",
     file: "src/styles.css",
-    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions", ".prepNextAction", ".opportunityNextAction"],
+    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions", ".prepNextAction", ".opportunityNextAction", ".commandCenter"],
   },
   {
     name: "package smoke script wiring",

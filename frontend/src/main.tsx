@@ -76,7 +76,7 @@ type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
-type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "research" | "agent" | "decision" | "rewrite" | "extension" | "evaluation" | "settings";
+type ActiveTask = "command" | "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "research" | "agent" | "decision" | "rewrite" | "extension" | "evaluation" | "settings";
 type CostMode = "free" | "standard" | "premium";
 type AccessTier = "free" | "premium" | "admin";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
@@ -3189,6 +3189,37 @@ function App() {
             onClear={() => clearStoredSession()}
           />
 
+          {activeTask === "command" && (
+            <TaskPanel
+              eyebrow="Workspace"
+              title="Command Center"
+              description="One operational view for the latest score, career-agent recommendation, preparation memory, and application pipeline."
+            >
+              <CommandCenterPanel
+                result={result}
+                agentPlan={agentPlan}
+                prepMemory={prepMemory}
+                opportunityActions={opportunityActions}
+                workspaceSummary={workspaceSummary}
+                onOpenTask={setActiveTask}
+                onBuildAgentPlan={buildAgentPlan}
+                onRunAgentRecommendation={runAgentRecommendation}
+                onOpenPrepAction={openPrepMemoryAction}
+                onRunOpportunityAction={(action) => {
+                  const opportunity = jobOpportunityHistory.find((item) => item.id === action.opportunityId);
+                  if (!opportunity) return;
+                  if (action.artifactKey) {
+                    void buildOpportunityArtifact(opportunity, action.artifactKey);
+                    return;
+                  }
+                  if (action.recommendedStatus) {
+                    void updateJobOpportunityStatus(opportunity.id, action.recommendedStatus);
+                  }
+                }}
+              />
+            </TaskPanel>
+          )}
+
           {activeTask === "matching" && (
             <TaskPanel
               eyebrow="Task 1"
@@ -4308,6 +4339,12 @@ function TaskNav({
     status: string;
   }> = [
     {
+      id: "command",
+      label: "Command Center",
+      description: "Next best actions",
+      status: hasResult ? "Active" : "Start here",
+    },
+    {
       id: "matching",
       label: "Resume Matching",
       description: "Resume + JD fit scoring",
@@ -4437,6 +4474,123 @@ function TaskPanel({
       </div>
       {children}
     </section>
+  );
+}
+
+function CommandCenterPanel({
+  result,
+  agentPlan,
+  prepMemory,
+  opportunityActions,
+  workspaceSummary,
+  onOpenTask,
+  onBuildAgentPlan,
+  onRunAgentRecommendation,
+  onOpenPrepAction,
+  onRunOpportunityAction,
+}: {
+  result: AnalysisResponse | null;
+  agentPlan: AgentPlanResponse | null;
+  prepMemory: PrepMemoryResponse | null;
+  opportunityActions: OpportunityNextActionsResponse | null;
+  workspaceSummary: WorkspaceSummary | null;
+  onOpenTask: (task: ActiveTask) => void;
+  onBuildAgentPlan: () => void;
+  onRunAgentRecommendation: (tool: AgentPlanResponse["recommendations"][number]["tool"]) => void;
+  onOpenPrepAction: (action: NonNullable<PrepMemoryResponse["nextAction"]>) => void;
+  onRunOpportunityAction: (action: OpportunityNextAction) => void;
+}) {
+  const agentRecommendation = agentPlan?.recommendations.find((item) => !item.alreadySatisfied) ?? null;
+  const prepAction = prepMemory?.nextAction ?? null;
+  const opportunityAction = opportunityActions?.actions[0] ?? null;
+
+  return (
+    <div className="commandCenter">
+      <section className="panel commandHero">
+        <div>
+          <p className="eyebrow">Operating System</p>
+          <h3>{result ? `${result.technicalMatchScore}% - ${result.fitCategory}` : "Run the first score"}</h3>
+          <p>{result?.overallSummary ?? "Start with resume matching. After that, this view coordinates paid artifacts, prep progress, and job pipeline actions."}</p>
+        </div>
+        <div className="commandMetrics">
+          <div><span>Reports</span><strong>{workspaceSummary?.analysisCount ?? 0}</strong></div>
+          <div><span>Jobs</span><strong>{workspaceSummary?.jobOpportunityCount ?? 0}</strong></div>
+          <div><span>Plans</span><strong>{workspaceSummary?.preparationSessionCount ?? 0}</strong></div>
+        </div>
+      </section>
+
+      <div className="commandGrid">
+        <CommandActionCard
+          label="Career Agent"
+          title={agentPlan?.nextBestAction ?? "Build next-step plan"}
+          body={agentPlan?.headline ?? "Generate a planner view from the latest score and workspace memory."}
+          primaryLabel={agentRecommendation ? "Run Recommendation" : "Build Plan"}
+          secondaryLabel="Open Planner"
+          onPrimary={() => agentRecommendation ? onRunAgentRecommendation(agentRecommendation.tool) : onBuildAgentPlan()}
+          onSecondary={() => onOpenTask("agent")}
+          disabledPrimary={!result}
+        />
+        <CommandActionCard
+          label="Preparation"
+          title={prepAction?.label ?? "No prep action yet"}
+          body={prepAction?.task ? `Day ${prepAction.day ?? ""}: ${prepAction.task}` : prepAction?.reason ?? "Build a preparation plan or load saved prep memory."}
+          primaryLabel={prepAction ? "Open Action" : "Open Progress"}
+          secondaryLabel="Open Prep"
+          onPrimary={() => prepAction ? onOpenPrepAction(prepAction) : onOpenTask("progress")}
+          onSecondary={() => onOpenTask("preparation")}
+        />
+        <CommandActionCard
+          label="Pipeline"
+          title={opportunityAction?.action ?? "No pipeline action yet"}
+          body={opportunityAction?.reason ?? opportunityActions?.summary ?? "Save extension matches or refresh history to build opportunity actions."}
+          primaryLabel={opportunityAction?.artifactKey ? "Generate" : opportunityAction?.recommendedStatus ? "Apply" : "Open History"}
+          secondaryLabel="Open Pipeline"
+          onPrimary={() => opportunityAction ? onRunOpportunityAction(opportunityAction) : onOpenTask("history")}
+          onSecondary={() => onOpenTask("history")}
+        />
+        <CommandActionCard
+          label="Score"
+          title={result ? "Review latest report" : "Run score-only match"}
+          body={result ? "Inspect requirement matrix and generate optional artifacts one at a time." : "Upload, parse, review, then calculate the free score."}
+          primaryLabel={result ? "Open Report" : "Open Matching"}
+          secondaryLabel="Review Inputs"
+          onPrimary={() => onOpenTask(result ? "report" : "matching")}
+          onSecondary={() => onOpenTask("review")}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CommandActionCard({
+  label,
+  title,
+  body,
+  primaryLabel,
+  secondaryLabel,
+  onPrimary,
+  onSecondary,
+  disabledPrimary = false,
+}: {
+  label: string;
+  title: string;
+  body: string;
+  primaryLabel: string;
+  secondaryLabel: string;
+  onPrimary: () => void;
+  onSecondary: () => void;
+  disabledPrimary?: boolean;
+}) {
+  return (
+    <article className="commandCard">
+      <span>{label}</span>
+      <h3>{title}</h3>
+      <p>{body}</p>
+      <div>
+        <button type="button" disabled={disabledPrimary} onClick={onPrimary}>{primaryLabel}</button>
+        <button type="button" className="secondaryButton" onClick={onSecondary}>{secondaryLabel}</button>
+      </div>
+    </article>
   );
 }
 

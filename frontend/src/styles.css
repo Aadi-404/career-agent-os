@@ -767,6 +767,81 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.commandCenter {
+  display: grid;
+  gap: 18px;
+}
+
+.commandHero {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 18px;
+}
+
+.commandHero h3 {
+  font-size: 30px;
+  margin-bottom: 8px;
+}
+
+.commandMetrics,
+.commandGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.commandMetrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.commandMetrics div,
+.commandCard {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 14px;
+}
+
+.commandMetrics span,
+.commandCard > span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.commandMetrics strong {
+  color: var(--brand);
+  display: block;
+  font-size: 28px;
+  margin-top: 4px;
+}
+
+.commandGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.commandCard {
+  display: grid;
+  gap: 10px;
+}
+
+.commandCard h3 {
+  margin: 0;
+}
+
+.commandCard p {
+  margin: 0;
+}
+
+.commandCard div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
 .researchWorkspace {
   display: grid;
   grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
