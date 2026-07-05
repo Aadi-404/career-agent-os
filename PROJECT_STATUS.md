@@ -24,7 +24,7 @@ Core app is implemented. Remaining public-launch work is deployment-specific: st
 | Explainable matching | Complete | Score breakdown, requirement match matrix, semantic evidence matching. |
 | Shortlisting signals | Complete | Location, work mode, notice period, experience band, opportunity score. |
 | Optional AI modules | Complete | Preparation plan, gap report, interview questions, cross-questions, resume improvements. |
-| Cost control | Complete | Mandatory score call separated from optional premium-style AI calls. |
+| Cost control | Complete | Mandatory score call uses a score-only prompt; optional premium-style artifacts use separate endpoints. |
 | Persistence | Complete | PostgreSQL users, resumes, JDs, analyses, comparisons, prep sessions, opportunities. |
 | Auth | Complete | Password auth, session tokens, guarded user APIs, admin guard. |
 | Browser extension | Mostly complete | Saved resume matching, page parsing, manual JD fallback, parser feedback, research handoff. |
@@ -49,6 +49,7 @@ Why:
 - LLM output is better for coaching content than deterministic scoring.
 - Optional modules can be called one at a time to reduce cost.
 - Saved results can be reused from PostgreSQL.
+- The score prompt explicitly returns empty preparation/coaching artifacts; prep and coaching are generated only when their endpoints are called.
 
 ## AI Concepts Used
 

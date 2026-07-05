@@ -25,7 +25,7 @@ from app.services.scoring_service import score_resume_against_jd
 
 
 def analyze_resume_jd(request: AnalyzeRequest) -> AnalysisResponse:
-    return _analyze_resume_jd(request, include_preparation=True)
+    return _analyze_resume_jd(request, include_preparation=False)
 
 
 def match_resume_jd(request: AnalyzeRequest) -> AnalysisResponse:

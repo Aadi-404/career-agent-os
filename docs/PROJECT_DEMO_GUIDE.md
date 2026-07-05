@@ -110,7 +110,7 @@ How did you reduce LLM cost?
 Answer:
 
 ```text
-The app splits score, prep plan, gap report, interview questions, cross-questions, and resume improvements into separate endpoints. Saved results are reused from PostgreSQL when inputs repeat.
+The app splits score, prep plan, gap report, interview questions, cross-questions, and resume improvements into separate endpoints. The score prompt explicitly avoids preparation/coaching artifacts, and saved results are reused from PostgreSQL when inputs repeat.
 ```
 
 ### 5. History And Progress

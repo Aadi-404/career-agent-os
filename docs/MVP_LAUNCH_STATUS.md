@@ -100,6 +100,7 @@ Built:
 - Interview questions.
 - Cross-questions.
 - Optional artifact endpoints split from the mandatory score step.
+- Score-only LLM prompt for mandatory matching, including the legacy analyze route.
 
 Why it matters:
 

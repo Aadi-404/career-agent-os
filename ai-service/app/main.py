@@ -340,9 +340,9 @@ def production_readiness(userId: str | None = None, session_token: str | None = 
 
 @app.post("/ai/resume-jd/analyze", response_model=AnalysisResponse)
 def analyze(request: AnalyzeRequest) -> AnalysisResponse:
-    _enforce_ai_usage("full_analysis", request)
+    _enforce_ai_usage("score", request)
     response = analyze_resume_jd(request)
-    _record_ai_usage("full_analysis", request)
+    _record_ai_usage("score", request)
     return response
 
 
