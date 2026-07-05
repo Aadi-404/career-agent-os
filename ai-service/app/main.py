@@ -99,6 +99,7 @@ from app.models.history import (
     WorkspaceSummary,
 )
 from app.models.jd_parse import JdParseRequest, JdParseResponse
+from app.models.opportunity_intelligence import OpportunityNextActionsResponse
 from app.models.prep_memory import PrepMemoryResponse
 from app.models.resume_extract import ResumeExtractResponse
 from app.models.resume_normalize import ResumeNormalizeRequest, ResumeNormalizeResponse
@@ -175,6 +176,7 @@ from app.services.optional_artifact_service import (
     build_interview_questions,
     build_resume_improvements,
 )
+from app.services.opportunity_intelligence_service import build_opportunity_next_actions
 from app.services.preparation_service import build_preparation_intelligence
 from app.services.prep_memory_service import build_prep_memory
 from app.services.research_service import build_research_note_draft
@@ -972,6 +974,12 @@ def create_job_opportunity_record(request: JobOpportunitySaveRequest, session_to
 def get_user_job_opportunities(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> list[JobOpportunityRecord]:
     _authorize_user(user_id, session_token)
     return list_job_opportunities_for_user(user_id)
+
+
+@app.get("/ai/opportunities/next-actions/{user_id}", response_model=OpportunityNextActionsResponse)
+def get_opportunity_next_actions(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> OpportunityNextActionsResponse:
+    _authorize_user(user_id, session_token)
+    return build_opportunity_next_actions(list_job_opportunities_for_user(user_id))
 
 
 @app.get("/history/anonymous-sessions/{anonymous_session_id}/job-opportunities", response_model=list[JobOpportunityRecord])

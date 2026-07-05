@@ -23,7 +23,7 @@ const checks = [
   {
     name: "history and comparison workflow",
     file: "src/main.tsx",
-    patterns: ["Saved Comparisons", "Application Pipeline", "Preparation Progress", "Open Action"],
+    patterns: ["Saved Comparisons", "Application Pipeline", "Preparation Progress", "Open Action", "/ai/opportunities/next-actions", "pipelineNextActions"],
   },
   {
     name: "research notes workflow",
@@ -63,7 +63,7 @@ const checks = [
   {
     name: "launch tracker styles",
     file: "src/styles.css",
-    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions", ".prepNextAction"],
+    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions", ".prepNextAction", ".opportunityNextAction"],
   },
   {
     name: "package smoke script wiring",

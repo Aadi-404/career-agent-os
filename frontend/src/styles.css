@@ -1166,6 +1166,35 @@ h1 {
   padding: 8px 10px;
 }
 
+.pipelineNextActions {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 12px;
+}
+
+.pipelineNextActions > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pipelineNextActions span,
+.opportunityNextHint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pipelineNextActions button {
+  white-space: nowrap;
+}
+
 .historyList,
 .compactHistoryList {
   display: grid;
@@ -1425,6 +1454,34 @@ h1 {
   margin: 6px 0 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.opportunityNextAction {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.opportunityNextAction span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.opportunityNextAction strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.opportunityNextAction p {
+  margin: 6px 0 0;
 }
 
 .opportunityDetailGrid {

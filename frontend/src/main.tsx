@@ -493,6 +493,25 @@ type PrepMemoryResponse = {
 
 type JobOpportunityStatus = "viewed" | "shortlisted" | "applied" | "interview" | "rejected" | "offer" | "archived";
 
+type OpportunityNextAction = {
+  opportunityId: string;
+  title: string;
+  company?: string | null;
+  currentStatus: JobOpportunityStatus;
+  recommendedStatus?: JobOpportunityStatus | null;
+  artifactKey?: "resume_improvements" | "interview_questions" | "cross_questions" | null;
+  endpoint?: string | null;
+  priority: "critical" | "high" | "medium" | "low";
+  action: string;
+  reason: string;
+  score?: number | null;
+};
+
+type OpportunityNextActionsResponse = {
+  summary: string;
+  actions: OpportunityNextAction[];
+};
+
 type HistoryJobOpportunityRecord = {
   id: string;
   resumeId?: string | null;
@@ -833,6 +852,7 @@ function App() {
   const [jdHistory, setJdHistory] = useState<HistoryJobDescriptionRecord[]>([]);
   const [preparationHistory, setPreparationHistory] = useState<HistoryPreparationRecord[]>([]);
   const [jobOpportunityHistory, setJobOpportunityHistory] = useState<HistoryJobOpportunityRecord[]>([]);
+  const [opportunityActions, setOpportunityActions] = useState<OpportunityNextActionsResponse | null>(null);
   const [comparisonHistory, setComparisonHistory] = useState<HistoryComparisonRecord[]>([]);
   const [researchNotes, setResearchNotes] = useState<ResearchNoteRecord[]>([]);
   const [researchInfo, setResearchInfo] = useState("");
@@ -1091,6 +1111,7 @@ function App() {
     setJdHistory([]);
     setPreparationHistory([]);
     setJobOpportunityHistory([]);
+    setOpportunityActions(null);
     setComparisonHistory([]);
     setResearchNotes([]);
     setActiveComparisonId(null);
@@ -1311,13 +1332,14 @@ function App() {
     try {
       await ensureLocalUser();
       const getOptions = { headers: authHeaders(false) };
-      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, comparisonsResponse, researchResponse, rewritesResponse, versionsResponse, restoresResponse] = await Promise.all([
+      const [workspaceResponse, analysesResponse, resumesResponse, jdsResponse, preparationsResponse, opportunitiesResponse, opportunityActionsResponse, comparisonsResponse, researchResponse, rewritesResponse, versionsResponse, restoresResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/workspace`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/analyses`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resumes`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/job-descriptions`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/preparation-sessions`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/job-opportunities`, getOptions),
+        fetch(`${API_BASE_URL}/ai/opportunities/next-actions/${workspaceUserId}`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/comparisons`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/research-notes`, getOptions),
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/accepted-resume-rewrites`, getOptions),
@@ -1325,7 +1347,7 @@ function App() {
         fetch(`${API_BASE_URL}/history/users/${workspaceUserId}/resume-version-restores`, getOptions),
       ]);
 
-      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !comparisonsResponse.ok || !researchResponse.ok || !rewritesResponse.ok || !versionsResponse.ok || !restoresResponse.ok) {
+      if (!workspaceResponse.ok || !analysesResponse.ok || !resumesResponse.ok || !jdsResponse.ok || !preparationsResponse.ok || !opportunitiesResponse.ok || !opportunityActionsResponse.ok || !comparisonsResponse.ok || !researchResponse.ok || !rewritesResponse.ok || !versionsResponse.ok || !restoresResponse.ok) {
         throw new Error("History load failed");
       }
 
@@ -1339,6 +1361,7 @@ function App() {
         setActivePreparationSession(savedPreparations[0]);
       }
       setJobOpportunityHistory(await opportunitiesResponse.json() as HistoryJobOpportunityRecord[]);
+      setOpportunityActions(await opportunityActionsResponse.json() as OpportunityNextActionsResponse);
       setComparisonHistory(await comparisonsResponse.json() as HistoryComparisonRecord[]);
       setResearchNotes(await researchResponse.json() as ResearchNoteRecord[]);
       setAcceptedResumeRewrites(await rewritesResponse.json() as AcceptedResumeRewriteRecord[]);
@@ -2088,6 +2111,16 @@ function App() {
     }
   }
 
+  async function loadOpportunityActions() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/ai/opportunities/next-actions/${workspaceUserId}`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error("Opportunity actions unavailable");
+      setOpportunityActions(await response.json() as OpportunityNextActionsResponse);
+    } catch {
+      setOpportunityActions(null);
+    }
+  }
+
   async function openPrepMemoryAction(action: NonNullable<PrepMemoryResponse["nextAction"]>) {
     if (action.sessionId) {
       let session = preparationHistory.find((item) => item.id === action.sessionId) ?? null;
@@ -2132,6 +2165,7 @@ function App() {
       const updated = await response.json() as HistoryJobOpportunityRecord;
       setJobOpportunityHistory((items) => items.map((item) => item.id === updated.id ? updated : item));
       setHistoryInfo(`Updated ${updated.title} to ${updated.status}.`);
+      void loadOpportunityActions();
     } catch (err) {
       setHistoryInfo(err instanceof Error ? err.message : "Opportunity status update failed");
     }
@@ -2887,6 +2921,7 @@ function App() {
         await persistAnalysisArtifact(linkedAnalysis.id, artifactKey, updatedAnalysis);
       }
       setHistoryInfo(`${config.label} saved for ${opportunity.title}.`);
+      void loadOpportunityActions();
     } catch (err) {
       setHistoryInfo(err instanceof Error ? err.message : `${config.label} generation failed`);
     } finally {
@@ -3607,6 +3642,7 @@ function App() {
                 jobDescriptions={jdHistory}
                 preparations={preparationHistory}
                 opportunities={jobOpportunityHistory}
+                opportunityActions={opportunityActions}
                 comparisons={comparisonHistory}
                 currentResult={result}
                 onOpportunityStatusChange={updateJobOpportunityStatus}
@@ -6435,6 +6471,7 @@ function HistoryPanel({
   jobDescriptions,
   preparations,
   opportunities,
+  opportunityActions,
   comparisons,
   currentResult,
   onOpportunityStatusChange,
@@ -6447,6 +6484,7 @@ function HistoryPanel({
   jobDescriptions: HistoryJobDescriptionRecord[];
   preparations: HistoryPreparationRecord[];
   opportunities: HistoryJobOpportunityRecord[];
+  opportunityActions: OpportunityNextActionsResponse | null;
   comparisons: HistoryComparisonRecord[];
   currentResult: AnalysisResponse | null;
   onOpportunityStatusChange: (jobOpportunityId: string, status: JobOpportunityStatus) => void;
@@ -6455,6 +6493,20 @@ function HistoryPanel({
 }) {
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(opportunities[0]?.id ?? null);
   const selectedOpportunity = opportunities.find((item) => item.id === selectedOpportunityId) ?? opportunities[0] ?? null;
+  const actionByOpportunity = new Map((opportunityActions?.actions ?? []).map((action) => [action.opportunityId, action]));
+  const selectedOpportunityAction = selectedOpportunity ? actionByOpportunity.get(selectedOpportunity.id) ?? null : null;
+
+  function runOpportunityAction(action: OpportunityNextAction) {
+    const opportunity = opportunities.find((item) => item.id === action.opportunityId);
+    if (!opportunity) return;
+    if (action.artifactKey) {
+      onOpportunityArtifactBuild(opportunity, action.artifactKey);
+      return;
+    }
+    if (action.recommendedStatus) {
+      onOpportunityStatusChange(opportunity.id, action.recommendedStatus);
+    }
+  }
 
   return (
     <div className="historyGrid">
@@ -6492,6 +6544,19 @@ function HistoryPanel({
           <span>Applied to interview: <strong>{summary?.applicationToInterviewRate ?? "--"}%</strong></span>
           <span>Interview to offer: <strong>{summary?.interviewToOfferRate ?? "--"}%</strong></span>
         </div>
+        {opportunityActions && (
+          <div className="pipelineNextActions">
+            <div>
+              <span>Next actions</span>
+              <strong>{opportunityActions.summary}</strong>
+            </div>
+            {opportunityActions.actions.slice(0, 3).map((action) => (
+              <button key={action.opportunityId} type="button" className="secondaryButton" onClick={() => runOpportunityAction(action)}>
+                {action.action}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="panel">
@@ -6552,6 +6617,9 @@ function HistoryPanel({
                     {[opportunity.company, opportunity.location, formatDate(opportunity.createdAt)].filter(Boolean).join(" - ")}
                   </small>
                   <p>{opportunity.description.slice(0, 180)}{opportunity.description.length > 180 ? "..." : ""}</p>
+                  {actionByOpportunity.get(opportunity.id) && (
+                    <small className="opportunityNextHint">{actionByOpportunity.get(opportunity.id)?.action}</small>
+                  )}
                 </div>
                 <span>{opportunity.technicalMatchScore ?? "--"}%</span>
                 <em>{opportunity.fitCategory ?? "Not scored"}</em>
@@ -6574,8 +6642,10 @@ function HistoryPanel({
       {selectedOpportunity && (
         <JobOpportunityDetail
           opportunity={selectedOpportunity}
+          nextAction={selectedOpportunityAction}
           onStatusChange={onOpportunityStatusChange}
           onArtifactBuild={onOpportunityArtifactBuild}
+          onRunAction={runOpportunityAction}
           artifactLoading={artifactLoading}
         />
       )}
@@ -6635,13 +6705,17 @@ function HistoryPanel({
 
 function JobOpportunityDetail({
   opportunity,
+  nextAction,
   onStatusChange,
   onArtifactBuild,
+  onRunAction,
   artifactLoading,
 }: {
   opportunity: HistoryJobOpportunityRecord;
+  nextAction: OpportunityNextAction | null;
   onStatusChange: (jobOpportunityId: string, status: JobOpportunityStatus) => void;
   onArtifactBuild: (opportunity: HistoryJobOpportunityRecord, artifactKey: "resume_improvements" | "interview_questions" | "cross_questions") => void;
+  onRunAction: (action: OpportunityNextAction) => void;
   artifactLoading: string;
 }) {
   const analysis = opportunity.analysisResponse;
@@ -6695,6 +6769,19 @@ function JobOpportunityDetail({
         <div className="opportunityCallout">
           <strong>Recommended action</strong>
           <p>{analysis.recommendedAction}</p>
+        </div>
+      )}
+
+      {nextAction && (
+        <div className={`opportunityNextAction priority-${nextAction.priority}`}>
+          <div>
+            <span>{formatCategory(nextAction.priority)}</span>
+            <strong>{nextAction.action}</strong>
+            <p>{nextAction.reason}</p>
+          </div>
+          <button type="button" onClick={() => onRunAction(nextAction)}>
+            {nextAction.artifactKey ? "Generate" : "Apply"}
+          </button>
         </div>
       )}
 
