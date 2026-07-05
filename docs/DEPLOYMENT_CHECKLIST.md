@@ -17,6 +17,7 @@ Use this before deploying staging or production. The app is split into a FastAPI
 - `LLM_MODE=live` when optional AI artifacts should call a real provider.
 - One provider key: `GROQ_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or generic `LLM_API_KEY`.
 - `EMBEDDING_PROVIDER=auto` for provider-backed semantic matching with local fallback.
+- `RESEARCH_PROVIDER=google`, `GOOGLE_API_KEY`, and `GOOGLE_SEARCH_ENGINE_ID` when live cited research-note discovery should be enabled.
 - `JD_PARSER_MODE=auto` for deterministic parsing with LLM assist when configured.
 - `LOG_LEVEL=INFO`.
 

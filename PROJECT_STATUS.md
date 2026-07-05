@@ -148,11 +148,10 @@ Built:
 - Citation quality checks for research sources, including verified URL, manual note, weak, and uncited states.
 - Research enrichment provider interface with a local query-plan provider and Google provider configuration hooks.
 - Research enrichment now separates company, interview, and market signals before they are saved into draft notes.
+- Google research provider can execute Custom Search, convert results into verified URL citations, and fall back to local query plans when keys or HTTP calls fail.
 
 Remaining:
 
-- Search similar job postings.
-- Search recent company interview experiences.
 - Extract role/company preparation topics from live sources.
 - Produce live cited research-backed preparation signals.
 

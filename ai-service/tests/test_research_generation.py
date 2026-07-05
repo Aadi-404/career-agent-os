@@ -1,4 +1,6 @@
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from app.models.analysis import (
     AnalysisResponse,
@@ -14,6 +16,7 @@ from app.models.analysis import (
     WeaklyEvidencedSkill,
 )
 from app.services.preparation_service import build_preparation_intelligence
+from app.services.research_enrichment_service import GoogleSearchItem
 from app.services.research_service import build_research_note_draft
 
 
@@ -130,6 +133,44 @@ class ResearchGenerationTests(unittest.TestCase):
         self.assertIn("Research enrichment separated", draft.summary)
         self.assertTrue(any(source.title.startswith("Planned search:") for source in draft.sources))
         self.assertTrue(any(source.citationQuality == "weak" for source in draft.sources if source.title.startswith("Planned search:")))
+
+    def test_google_research_provider_adds_cited_sources_without_heavy_llm_call(self):
+        with (
+            patch(
+                "app.services.research_enrichment_service.get_settings",
+                return_value=SimpleNamespace(
+                    research_provider="google",
+                    google_api_key="test-key",
+                    google_search_engine_id="test-cx",
+                ),
+            ),
+            patch(
+                "app.services.research_enrichment_service.GoogleResearchEnrichmentProvider._search",
+                return_value=[
+                    GoogleSearchItem(
+                        title="DemoFin Python AI Full Stack interview experience",
+                        url="https://example.com/demofin-interview",
+                        snippet="Recent interview notes mention Django APIs and AI guardrail design.",
+                    )
+                ],
+            ) as search_mock,
+        ):
+            draft = build_research_note_draft(
+                ResearchBuildRequest(
+                    sourceRequest=_request(),
+                    analysis=_analysis(),
+                    company="DemoFin",
+                    roleTitle="Python AI Full Stack Engineer",
+                    researchType="interview",
+                )
+            )
+
+        self.assertGreaterEqual(search_mock.call_count, 1)
+        self.assertTrue(any("Google research provider returned" in signal for signal in draft.keySignals))
+        self.assertTrue(any(source.url == "https://example.com/demofin-interview" for source in draft.sources))
+        cited_source = next(source for source in draft.sources if source.url == "https://example.com/demofin-interview")
+        self.assertEqual(cited_source.citationQuality, "verified_url")
+        self.assertEqual(cited_source.sourceType, "company_page")
 
     def test_preparation_uses_saved_research_notes(self):
         prep = build_preparation_intelligence(

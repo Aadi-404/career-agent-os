@@ -1,5 +1,9 @@
 from dataclasses import dataclass, field
+import json
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 from app.core.config import get_settings
 from app.models.analysis import AnalyzeRequest, AnalysisResponse, ResearchContextSource
@@ -113,6 +117,7 @@ class LocalResearchEnrichmentProvider(ResearchEnrichmentProvider):
 
 class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
     name = "google"
+    search_url = "https://www.googleapis.com/customsearch/v1"
 
     def enrich(
         self,
@@ -129,8 +134,87 @@ class GoogleResearchEnrichmentProvider(LocalResearchEnrichmentProvider):
         if not settings.google_api_key or not settings.google_search_engine_id:
             result.warnings.append("Google research provider is configured but missing GOOGLE_API_KEY or GOOGLE_SEARCH_ENGINE_ID.")
             return result
-        result.warnings.append("Google provider interface is ready; live HTTP search execution is intentionally disabled in local builds.")
+
+        search_sources: list[ResearchContextSource] = []
+        search_key_signals: list[str] = []
+        for query in result.queries[:4]:
+            try:
+                response = self._search(
+                    query=query,
+                    api_key=settings.google_api_key,
+                    engine_id=settings.google_search_engine_id,
+                )
+            except ResearchSearchError as exc:
+                result.warnings.append(f"Google search failed for '{query}': {exc}")
+                continue
+
+            for item in response[:2]:
+                source = _assess_source(
+                    title=item.title,
+                    url=item.url,
+                    sourceType=_source_type_for_query(query, research_type),
+                    note=f"Google Custom Search result for query: {query}. {item.snippet}",
+                )
+                search_sources.append(source)
+                search_key_signals.append(f"Live source found for {source.sourceType}: {item.title}.")
+
+        verified_sources = _dedupe_sources(search_sources)
+        if verified_sources:
+            planned_sources = [source for source in result.sources if source.citationQuality != "weak"]
+            result.sources = [*verified_sources, *planned_sources][:10]
+            result.key_signals = _dedupe([
+                f"Google research provider returned {len(verified_sources)} cited source(s).",
+                *search_key_signals,
+                *result.key_signals,
+            ])[:12]
+            result.warnings.append("Google provider used live Custom Search results; review citations before relying on them.")
+        else:
+            result.warnings.append("Google provider returned no usable cited sources; local query-plan sources were kept.")
         return result
+
+    def _search(self, query: str, api_key: str, engine_id: str) -> list["GoogleSearchItem"]:
+        params = urlencode({
+            "key": api_key,
+            "cx": engine_id,
+            "q": query,
+            "num": 3,
+        })
+        request = Request(
+            f"{self.search_url}?{params}",
+            headers={"User-Agent": "career-agent-os-research/0.1"},
+        )
+        try:
+            with urlopen(request, timeout=12) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise ResearchSearchError(f"HTTP {exc.code}") from exc
+        except (OSError, URLError, json.JSONDecodeError) as exc:
+            raise ResearchSearchError(str(exc)) from exc
+
+        items = payload.get("items", [])
+        if not isinstance(items, list):
+            return []
+        parsed: list[GoogleSearchItem] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or "").strip()
+            url = str(item.get("link") or "").strip()
+            snippet = str(item.get("snippet") or "").strip()
+            if title and url:
+                parsed.append(GoogleSearchItem(title=title[:220], url=url, snippet=snippet[:500]))
+        return parsed
+
+
+@dataclass
+class GoogleSearchItem:
+    title: str
+    url: str
+    snippet: str = ""
+
+
+class ResearchSearchError(Exception):
+    pass
 
 
 def build_research_enrichment(
@@ -151,7 +235,7 @@ def build_research_enrichment(
 
 
 def _source_type_for_query(query: str, research_type: str) -> str:
-    text = f"{query} {research_type}".lower()
+    text = query.lower()
     if "interview" in text:
         return "interview_experience"
     if "trend" in text or "market" in text:
@@ -159,6 +243,13 @@ def _source_type_for_query(query: str, research_type: str) -> str:
     if "job" in text or "requirements" in text:
         return "job_post"
     if "company" in text or "engineering blog" in text or "careers" in text:
+        return "company_page"
+    research_text = research_type.lower()
+    if "interview" in research_text:
+        return "interview_experience"
+    if "market" in research_text:
+        return "market_signal"
+    if "company" in research_text:
         return "company_page"
     return "other"
 
@@ -208,4 +299,16 @@ def _dedupe(items: list[str]) -> list[str]:
             continue
         seen.add(key)
         output.append(cleaned)
+    return output
+
+
+def _dedupe_sources(items: list[ResearchContextSource]) -> list[ResearchContextSource]:
+    seen: set[str] = set()
+    output: list[ResearchContextSource] = []
+    for item in items:
+        key = (item.url or item.title).strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        output.append(item)
     return output

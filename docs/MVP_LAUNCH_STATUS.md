@@ -206,11 +206,10 @@ Built:
 - Citation quality checks for saved and generated research sources.
 - Research enrichment adapter interface with local query plans and Google provider configuration hooks.
 - Typed company, interview, and market research signals inside generated research note drafts.
+- Google Custom Search execution path for cited company, interview, and market source discovery when configured.
 
 Still needs:
 
-- Search similar job postings.
-- Search recent company interview experiences.
 - Extract role-specific preparation topics.
 - Live source extraction and citation enrichment.
 - Produce market opportunity signals.
