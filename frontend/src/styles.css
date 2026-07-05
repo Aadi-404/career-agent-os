@@ -859,6 +859,70 @@ h1 {
   padding: 7px 10px;
 }
 
+.commandReadiness {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.6fr) minmax(0, 1.4fr);
+  gap: 16px;
+  padding: 16px;
+}
+
+.commandReadiness.ready {
+  border-color: #bde8d0;
+  background: #f7fcf9;
+}
+
+.commandReadiness.needsWork {
+  border-color: #f1d0a8;
+  background: #fffaf2;
+}
+
+.commandReadiness h4 {
+  font-size: 18px;
+  margin: 0 0 6px;
+}
+
+.commandReadiness p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.commandReadinessList {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.commandReadinessList button {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-height: 112px;
+  padding: 12px;
+  text-align: left;
+}
+
+.commandReadinessList button:hover {
+  border-color: var(--brand);
+}
+
+.commandReadinessList strong,
+.commandReadinessList small {
+  line-height: 1.35;
+}
+
+.commandReadinessList small {
+  color: var(--muted);
+}
+
 .researchWorkspace {
   display: grid;
   grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
@@ -3482,6 +3546,8 @@ pre {
   .extensionStatusGrid,
   .diagnosticGrid,
   .launchMetrics,
+  .commandReadiness,
+  .commandReadinessList,
   .checkGrid,
   .evaluationGrid,
   .calibrationGrid,

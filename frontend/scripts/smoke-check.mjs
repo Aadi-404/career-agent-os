@@ -58,12 +58,12 @@ const checks = [
   {
     name: "settings launch readiness workflow",
     file: "src/main.tsx",
-    patterns: ["Production Readiness", "Manual Launch Tracker", "Smoke Runbook", "Seed Demo Data"],
+    patterns: ["Production Readiness", "Manual Launch Tracker", "Smoke Runbook", "Seed Demo Data", "Launch Readiness", "Resolve launch blockers before deploy"],
   },
   {
     name: "launch tracker styles",
     file: "src/styles.css",
-    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions", ".prepNextAction", ".opportunityNextAction", ".commandCenter", ".commandTopActions"],
+    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions", ".prepNextAction", ".opportunityNextAction", ".commandCenter", ".commandTopActions", ".commandReadiness", ".commandReadinessList"],
   },
   {
     name: "package smoke script wiring",

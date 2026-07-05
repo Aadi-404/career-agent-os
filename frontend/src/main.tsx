@@ -4556,6 +4556,8 @@ function CommandCenterPanel({
   const opportunityAction = opportunityActions?.actions[0] ?? null;
   const displayResult = result ?? workspaceSummary?.latestAnalysis?.response ?? null;
   const readinessBlockers = productionReadiness?.checks.filter((check) => check.status === "fail").length ?? 0;
+  const readinessWarnings = productionReadiness?.checks.filter((check) => check.status === "warn").length ?? 0;
+  const readinessFocusItems = productionReadiness?.checks.filter((check) => check.status !== "pass").slice(0, 4) ?? [];
 
   return (
     <div className="commandCenter">
@@ -4583,6 +4585,33 @@ function CommandCenterPanel({
           <div><span>Launch</span><strong>{productionReadiness ? readinessBlockers ? `${readinessBlockers} block` : "Ready" : "--"}</strong></div>
         </div>
       </section>
+
+      {productionReadiness && (
+        <section className={`commandReadiness ${productionReadiness.readyForProduction ? "ready" : "needsWork"}`}>
+          <div>
+            <p className="eyebrow">Launch Readiness</p>
+            <h4>{productionReadiness.readyForProduction ? "Production gates are clear" : "Resolve launch blockers before deploy"}</h4>
+            <p>
+              {productionReadiness.environment} environment / {readinessBlockers} blocker(s) / {readinessWarnings} warning(s)
+            </p>
+          </div>
+          <div className="commandReadinessList">
+            {readinessFocusItems.length ? readinessFocusItems.map((check) => (
+              <button type="button" key={check.key} onClick={() => onOpenTask("settings")}>
+                <span className={`statusPill ${check.status}`}>{check.status}</span>
+                <strong>{check.label}</strong>
+                <small>{check.detail}</small>
+              </button>
+            )) : (
+              <button type="button" onClick={() => onOpenTask("settings")}>
+                <span className="statusPill pass">pass</span>
+                <strong>All checks passing</strong>
+                <small>Open settings to review the full production readiness checklist.</small>
+              </button>
+            )}
+          </div>
+        </section>
+      )}
 
       <div className="commandGrid">
         <CommandActionCard

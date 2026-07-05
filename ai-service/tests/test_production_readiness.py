@@ -18,7 +18,10 @@ class ProductionReadinessTests(unittest.TestCase):
             "embedding_fallback_local": settings.embedding_fallback_local,
             "jd_parser_mode": settings.jd_parser_mode,
             "billing_webhook_secret": settings.billing_webhook_secret,
+            "billing_checkout_provider": settings.billing_checkout_provider,
             "billing_checkout_url": settings.billing_checkout_url,
+            "billing_checkout_success_url": settings.billing_checkout_success_url,
+            "billing_checkout_cancel_url": settings.billing_checkout_cancel_url,
             "log_level": settings.log_level,
         }
 
@@ -48,11 +51,29 @@ class ProductionReadinessTests(unittest.TestCase):
         self.assertEqual(checks["billingWebhook"].status, "pass")
 
     def test_billing_checkout_passes_when_configured(self):
+        settings.billing_checkout_provider = "stripe"
         settings.billing_checkout_url = "https://checkout.example.test/session"
 
         checks = {check.key: check for check in _build_production_readiness_checks(database_ok=True)}
 
         self.assertEqual(checks["billingCheckout"].status, "pass")
+
+    def test_billing_checkout_fails_in_production_when_provider_is_manual(self):
+        settings.environment = "production"
+        settings.billing_checkout_provider = "manual"
+        settings.billing_checkout_url = "https://checkout.example.test/session"
+
+        checks = {check.key: check for check in _build_production_readiness_checks(database_ok=True)}
+
+        self.assertEqual(checks["billingCheckout"].status, "fail")
+
+    def test_billing_return_urls_pass_when_configured(self):
+        settings.billing_checkout_success_url = "https://app.example.test/billing/success"
+        settings.billing_checkout_cancel_url = "https://app.example.test/billing/cancel"
+
+        checks = {check.key: check for check in _build_production_readiness_checks(database_ok=True)}
+
+        self.assertEqual(checks["billingReturnUrls"].status, "pass")
 
     def test_live_llm_without_key_is_a_blocker(self):
         settings.llm_mode = "live"

@@ -1140,6 +1140,9 @@ def _build_production_readiness_checks(database_ok: bool, database_error: str = 
     llm_key_configured = _llm_key_configured(settings)
     embedding_key_configured = _embedding_key_configured(settings)
     admin_ids = [item.strip() for item in settings.admin_user_ids.split(",") if item.strip()]
+    billing_provider_ready = settings.billing_checkout_provider != "manual"
+    billing_checkout_ready = bool(settings.billing_checkout_url)
+    billing_return_urls_ready = bool(settings.billing_checkout_success_url and settings.billing_checkout_cancel_url)
 
     checks: list[ReadinessCheck] = [
         ReadinessCheck(
@@ -1175,11 +1178,17 @@ def _build_production_readiness_checks(database_ok: bool, database_error: str = 
         ReadinessCheck(
             key="billingCheckout",
             label="Billing checkout",
-            status="pass" if settings.billing_checkout_url else ("fail" if is_production else "warn"),
+            status="pass" if billing_provider_ready and billing_checkout_ready else ("fail" if is_production else "warn"),
+            detail=_billing_checkout_readiness_detail(billing_provider_ready, billing_checkout_ready),
+        ),
+        ReadinessCheck(
+            key="billingReturnUrls",
+            label="Billing return URLs",
+            status="pass" if billing_return_urls_ready else ("fail" if is_production else "warn"),
             detail=(
-                f"{settings.billing_checkout_provider} checkout URL is configured."
-                if settings.billing_checkout_url
-                else "BILLING_CHECKOUT_URL is empty; Premium can only be unlocked manually until checkout is configured."
+                "Billing success and cancel URLs are configured."
+                if billing_return_urls_ready
+                else "Configure BILLING_CHECKOUT_SUCCESS_URL and BILLING_CHECKOUT_CANCEL_URL before public checkout."
             ),
         ),
         ReadinessCheck(
@@ -1234,6 +1243,16 @@ def _llm_readiness_detail(llm_key_configured: bool, is_production: bool) -> str:
     if is_production:
         return "LLM mode is mock; paid optional artifacts will return deterministic placeholders."
     return "Mock LLM mode is active, which is fine for local development."
+
+
+def _billing_checkout_readiness_detail(provider_ready: bool, checkout_ready: bool) -> str:
+    if provider_ready and checkout_ready:
+        return f"{settings.billing_checkout_provider} checkout URL is configured."
+    if not provider_ready and not checkout_ready:
+        return "Billing is still manual and BILLING_CHECKOUT_URL is empty; paid access cannot be self-served."
+    if not provider_ready:
+        return "BILLING_CHECKOUT_PROVIDER is manual; select stripe, razorpay, or paddle before public paid launch."
+    return "BILLING_CHECKOUT_URL is empty; Premium checkout cannot start from the app."
 
 
 def _embedding_readiness_detail(embedding_key_configured: bool) -> str:
