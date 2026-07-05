@@ -236,10 +236,11 @@ Built:
 - Resume version snapshots that preserve the full structured resume after accepted rewrites.
 - Resume version compare and restore controls inside the rewrite workspace.
 - Persisted restore audit history for rollback decisions.
+- Career Agent Plan task and `/ai/agent/plan` endpoint that recommend the next optional module from score, research memory, preparation state, and generated artifacts.
 
 Still planned:
 
-- Apply-decision agent.
+- Deeper apply-decision agent execution after the planner chooses tools.
 - Interview-prep tracker agent.
 - Company research agent.
 - RAG memory over saved resumes, JDs, analyses, feedback, and preparation progress.
@@ -260,8 +261,9 @@ Why it is later:
 | Calibration | Score Evaluation and Admin settings | Allows future tuning from labelled examples. |
 | Usage quotas | Free/premium/admin limits | Controls AI cost and supports commercial packaging. |
 | Session auth | Web and extension login | Enables multi-user history and protected APIs. |
-| Future RAG memory | Planned phase | Will use saved history as context for personal career guidance. |
-| Future agents | Planned phase | Will coordinate research, scoring, prep, and rewrite workflows. |
+| Planner orchestration | Career Agent Plan | Chooses the next optional tool without generating every artifact at once. |
+| Future RAG memory | Planned deeper phase | Will use saved history as context for personal career guidance. |
+| Future agents | Planned deeper phase | Will execute research, scoring, prep, and rewrite workflows with stronger memory and guardrails. |
 
 ## Launch Blockers
 

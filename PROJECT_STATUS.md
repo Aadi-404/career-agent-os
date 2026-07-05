@@ -34,6 +34,7 @@ Core app is implemented. Remaining public-launch work is deployment-specific: st
 | Research memory | Started | Manual and generated company/role/interview research notes saved in PostgreSQL for future cited research agents. |
 | Apply decisioning | Started | Score + research based apply / prepare / skip decision module. |
 | Resume rewrite | Started | Evidence-constrained rewrite suggestions with proof-safety labels. |
+| Agent orchestration | Started | Career Agent planner recommends the next optional module from saved score, research, prep, and artifact state. |
 
 ## AI Design
 
@@ -59,9 +60,10 @@ Why:
 | Deterministic scoring | Stable score breakdowns and opportunity scoring. |
 | Structured extraction | Resume and JD normalization into editable sections. |
 | LLM generation | Optional prep plans, questions, cross-questions, improvements. |
+| Tool orchestration | Career Agent planner ranks which optional module to run next without triggering every paid call. |
 | Calibration loop | Feedback labels and role-family weight tuning. |
 | Future RAG | Saved resumes, JDs, analyses, feedback, and prep progress can become memory. |
-| Future agents | Research, rewrite, apply-decision, and prep-tracker agents are planned. |
+| Future agents | Research, rewrite, apply-decision, and prep-tracker agents build on the current planner. |
 
 ## Tech Stack
 
@@ -174,10 +176,11 @@ Built:
 - Resume version snapshots after accepted rewrites, preserving the full structured resume draft.
 - Resume version compare and restore controls in the rewrite workspace.
 - Persisted restore audit history for resume version rollback decisions.
+- Career Agent Plan task and `/ai/agent/plan` endpoint that rank the next optional module from score, research memory, preparation state, and generated artifacts.
 
 Remaining:
 
-- Apply-decision agent with tool orchestration.
+- Deeper apply-decision agent execution after the planner chooses tools.
 - Company research agent.
 - Interview-prep tracker agent.
 - RAG memory over saved workspace history.

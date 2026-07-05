@@ -279,3 +279,43 @@ class AnalysisResponse(BaseModel):
     sevenDayPlan: list[DayPlan] = Field(default_factory=list, max_length=30)
     preparationIntelligence: PreparationIntelligence | None = None
     debug: DebugInfo | None = None
+
+
+class AgentToolRecommendation(BaseModel):
+    tool: Literal[
+        "score",
+        "research_note",
+        "preparation_plan",
+        "resume_rewrite",
+        "application_decision",
+        "interview_questions",
+        "cross_questions",
+        "gap_report",
+        "save_progress",
+    ]
+    priority: Literal["critical", "high", "medium", "low"]
+    reason: str
+    endpoint: str | None = None
+    estimatedUnits: int = Field(default=1, ge=0, le=10)
+    requiresPremium: bool = False
+    alreadySatisfied: bool = False
+
+
+class CareerAgentPlanRequest(BaseModel):
+    sourceRequest: AnalyzeRequest
+    analysis: AnalysisResponse
+    researchNotes: list[ResearchContextNote] = Field(default_factory=list, max_length=20)
+    preparation: PreparationIntelligence | None = None
+    generatedArtifacts: list[str] = Field(default_factory=list, max_length=30)
+    company: str | None = Field(default=None, max_length=180)
+    roleTitle: str | None = Field(default=None, max_length=180)
+
+
+class CareerAgentPlanResponse(BaseModel):
+    phase: str = "Phase 8"
+    headline: str
+    nextBestAction: str
+    reasoning: list[str] = Field(default_factory=list)
+    recommendations: list[AgentToolRecommendation] = Field(default_factory=list)
+    memorySignals: list[str] = Field(default_factory=list)
+    guardrails: list[str] = Field(default_factory=list)

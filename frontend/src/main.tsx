@@ -76,7 +76,7 @@ type LlmProvider = "groq" | "openai" | "gemini";
 type ResumeSource = "text" | "file";
 type ScoreStep = "upload" | "review" | "score";
 type ReviewPane = "resume" | "jd";
-type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "research" | "decision" | "rewrite" | "extension" | "evaluation" | "settings";
+type ActiveTask = "matching" | "review" | "report" | "preparation" | "progress" | "history" | "compare" | "research" | "agent" | "decision" | "rewrite" | "extension" | "evaluation" | "settings";
 type CostMode = "free" | "standard" | "premium";
 type AccessTier = "free" | "premium" | "admin";
 type PreparationIntelligence = NonNullable<AnalysisResponse["preparationIntelligence"]>;
@@ -299,6 +299,24 @@ type ApplicationDecisionResponse = {
   nextActions: string[];
   researchSignalsUsed: string[];
   scoreSignals: Record<string, number | null>;
+};
+
+type AgentPlanResponse = {
+  phase: string;
+  headline: string;
+  nextBestAction: string;
+  reasoning: string[];
+  recommendations: Array<{
+    tool: "score" | "research_note" | "preparation_plan" | "resume_rewrite" | "application_decision" | "interview_questions" | "cross_questions" | "gap_report" | "save_progress";
+    priority: "critical" | "high" | "medium" | "low";
+    reason: string;
+    endpoint?: string | null;
+    estimatedUnits: number;
+    requiresPremium: boolean;
+    alreadySatisfied: boolean;
+  }>;
+  memorySignals: string[];
+  guardrails: string[];
 };
 
 type ResumeRewriteResponse = {
@@ -823,6 +841,9 @@ function App() {
   const [researchDraftWarnings, setResearchDraftWarnings] = useState<string[]>([]);
   const [researchDraftMarketSignals, setResearchDraftMarketSignals] = useState<string[]>([]);
   const [researchDraftSynthesis, setResearchDraftSynthesis] = useState<string[]>([]);
+  const [agentPlan, setAgentPlan] = useState<AgentPlanResponse | null>(null);
+  const [agentInfo, setAgentInfo] = useState("");
+  const [agentLoading, setAgentLoading] = useState(false);
   const [applicationDecision, setApplicationDecision] = useState<ApplicationDecisionResponse | null>(null);
   const [decisionInfo, setDecisionInfo] = useState("");
   const [decisionLoading, setDecisionLoading] = useState(false);
@@ -867,6 +888,9 @@ function App() {
       void loadComparisonHistory();
     }
     if (activeTask === "research") {
+      void loadResearchNotes();
+    }
+    if (activeTask === "agent") {
       void loadResearchNotes();
     }
     if (activeTask === "rewrite") {
@@ -1507,6 +1531,50 @@ function App() {
     const citedCount = draft.sources.filter((source) => source.citationQuality === "verified_url").length;
     const providerLabel = formatCategory(draft.researchProvider ?? "local");
     setResearchInfo(`Generated a ${providerLabel} research draft with ${citedCount} verified citation(s). Review it before saving.`);
+  }
+
+  function currentGeneratedArtifacts(currentResult: AnalysisResponse | null): string[] {
+    if (!currentResult) return [];
+    return [
+      currentResult.resumeImprovements.length > 0 ? "resume_improvements" : "",
+      currentResult.interviewQuestions.length > 0 ? "interview_questions" : "",
+      currentResult.crossQuestions.length > 0 ? "cross_questions" : "",
+      currentResult.preparationIntelligence || activePreparationSession ? "preparation_plan" : "",
+      applicationDecision ? "application_decision" : "",
+      resumeRewrite ? "resume_rewrite" : "",
+    ].filter(Boolean);
+  }
+
+  async function buildAgentPlan() {
+    if (!result || !lastAnalysisRequest) {
+      setAgentInfo("Run resume matching before building the career agent plan.");
+      return;
+    }
+    setAgentLoading(true);
+    setAgentInfo("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/ai/agent/plan`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          sourceRequest: lastAnalysisRequest,
+          analysis: result,
+          researchNotes: researchNotes.map(toResearchContextNote),
+          preparation: result.preparationIntelligence ?? activePreparationSession?.plan ?? null,
+          generatedArtifacts: currentGeneratedArtifacts(result),
+          company: researchCompany.trim() || null,
+          roleTitle: researchRoleTitle.trim() || targetRole,
+        }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response, "Career agent planning failed"));
+      setAgentPlan(await response.json() as AgentPlanResponse);
+      setAgentInfo("Career agent plan updated from the latest score, memory, and artifact state.");
+      void loadCurrentQuota();
+    } catch (err) {
+      setAgentInfo(err instanceof Error ? err.message : "Career agent planning failed");
+    } finally {
+      setAgentLoading(false);
+    }
   }
 
   async function buildApplicationDecision() {
@@ -2448,6 +2516,8 @@ function App() {
     setLastSavedAnalysisId(null);
     setLastSavedResumeId(null);
     setLastSavedJobDescriptionId(null);
+    setAgentPlan(null);
+    setAgentInfo("");
 
     try {
       if (!structuredResume || !parsedJd) {
@@ -3542,6 +3612,26 @@ function App() {
             </TaskPanel>
           )}
 
+          {activeTask === "agent" && (
+            <TaskPanel
+              eyebrow="Phase 8"
+              title="Career Agent Plan"
+              description="Choose the next optional module from the saved score, research memory, preparation state, and generated artifacts."
+            >
+              <AgentPlanPanel
+                plan={agentPlan}
+                result={result}
+                loading={agentLoading}
+                info={agentInfo}
+                accessTier={effectiveAccessTier}
+                researchNotes={researchNotes}
+                artifacts={currentGeneratedArtifacts(result)}
+                onBuild={buildAgentPlan}
+                onTierChange={updateAccountTier}
+              />
+            </TaskPanel>
+          )}
+
           {activeTask === "rewrite" && (
             <TaskPanel
               eyebrow="Phase 8"
@@ -4132,6 +4222,12 @@ function TaskNav({
       label: "Research Notes",
       description: "Company and role signals",
       status: "Phase 7",
+    },
+    {
+      id: "agent",
+      label: "Career Agent",
+      description: "Next best paid module",
+      status: hasResult ? "Plan ready" : "Needs score",
     },
     {
       id: "decision",
@@ -5858,6 +5954,108 @@ function ApplicationDecisionPanel({
         <section className="panel">
           <h3>Decision Output</h3>
           <p className="hint">Build the decision after scoring and adding at least one research note for better confidence.</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function AgentPlanPanel({
+  plan,
+  result,
+  loading,
+  info,
+  accessTier,
+  researchNotes,
+  artifacts,
+  onBuild,
+  onTierChange,
+}: {
+  plan: AgentPlanResponse | null;
+  result: AnalysisResponse | null;
+  loading: boolean;
+  info: string;
+  accessTier: AccessTier;
+  researchNotes: ResearchNoteRecord[];
+  artifacts: string[];
+  onBuild: () => void;
+  onTierChange: (tier: AccessTier) => void;
+}) {
+  return (
+    <div className="decisionWorkspace">
+      <ProductAccessPanel active="premium" accessTier={accessTier} onTierChange={onTierChange} compact />
+      <section className="panel decisionControlPanel">
+        <div className="panelHeader">
+          <div>
+            <h3>Agent Inputs</h3>
+            <p className="hint">Uses the latest score, {researchNotes.length} research note(s), and {artifacts.length} generated artifact marker(s).</p>
+          </div>
+          <button type="button" className="premiumButton" disabled={loading || !result} onClick={onBuild}>
+            <span>Pro</span>
+            {loading ? "Planning..." : "Build Next-Step Plan"}
+          </button>
+        </div>
+        {result ? (
+          <div className="scoreGrid">
+            <div className="scoreTile"><span>Technical</span><strong>{result.technicalMatchScore}%</strong></div>
+            <div className="scoreTile"><span>Weak reqs</span><strong>{result.requirementMatches.filter((item) => item.score < 60).length}</strong></div>
+            <div className="scoreTile"><span>Research</span><strong>{researchNotes.length}</strong></div>
+            <div className="scoreTile"><span>Artifacts</span><strong>{artifacts.length}</strong></div>
+          </div>
+        ) : (
+          <EmptyState title="No score yet" body="Run resume matching first. The career agent planner depends on the saved requirement matrix." />
+        )}
+        {info && <p className="hint">{info}</p>}
+      </section>
+
+      {plan ? (
+        <section className="panel decisionResultPanel">
+          <div className="decisionHeader">
+            <div>
+              <p className="eyebrow">{plan.phase}</p>
+              <h3>{plan.headline}</h3>
+              <small>Next action: {plan.nextBestAction}</small>
+            </div>
+            <span>Planner</span>
+          </div>
+          <div className="decisionColumns">
+            <div>
+              <h4>Reasoning</h4>
+              <ul>{plan.reasoning.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+            <div>
+              <h4>Memory</h4>
+              <ul>{plan.memorySignals.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+            <div>
+              <h4>Guardrails</h4>
+              <ul>{plan.guardrails.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+          </div>
+          <div className="prepSection">
+            <h4>Recommended Tool Order</h4>
+            <div className="recommendationList">
+              {plan.recommendations.map((item) => (
+                <article className={`recommendationItem priority-${item.priority}`} key={`${item.tool}-${item.priority}-${item.reason}`}>
+                  <div>
+                    <strong>{formatCategory(item.tool)}</strong>
+                    <small>{item.endpoint ?? "No API call"} - {item.estimatedUnits} unit(s)</small>
+                  </div>
+                  <p>{item.reason}</p>
+                  <div className="tags">
+                    <span>{formatCategory(item.priority)}</span>
+                    {item.requiresPremium && <span>Premium</span>}
+                    {item.alreadySatisfied && <span>Already satisfied</span>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="panel">
+          <h3>Planner Output</h3>
+          <p className="hint">Build this after scoring. It recommends the next paid/optional module without generating every artifact at once.</p>
         </section>
       )}
     </div>

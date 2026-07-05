@@ -36,6 +36,11 @@ const checks = [
     patterns: ["Apply Decision", "Build Apply Decision", "Research Signals Used"],
   },
   {
+    name: "career agent planner workflow",
+    file: "src/main.tsx",
+    patterns: ["Career Agent Plan", "Build Next-Step Plan", "Recommended Tool Order", "/ai/agent/plan"],
+  },
+  {
     name: "resume rewrite workflow",
     file: "src/main.tsx",
     patterns: ["Resume Rewrite", "Build Rewrite Suggestions", "Evidence-Constrained Rewrite", "Apply to Resume Draft", "Accepted Rewrite History", "Resume Version Snapshots", "Version Compare", "Restore to Editor", "Restore Audit History", "accepted-resume-rewrites", "resume-versions", "resume-version-restores", "gap_do_not_claim"],

@@ -95,11 +95,13 @@ Show optional calls one by one:
 - Interview questions.
 - Cross-questions.
 - Resume improvements.
+- Career Agent planner for the next best optional module.
 
 Explain:
 
 - The mandatory score call is separate from optional premium modules.
 - This reduces AI cost because users only generate what they need.
+- The planner ranks the next paid action from saved state instead of generating every artifact at once.
 
 Expected cross-question:
 
@@ -110,7 +112,7 @@ How did you reduce LLM cost?
 Answer:
 
 ```text
-The app splits score, prep plan, gap report, interview questions, cross-questions, and resume improvements into separate endpoints. The score prompt explicitly avoids preparation/coaching artifacts, and saved results are reused from PostgreSQL when inputs repeat.
+The app splits score, prep plan, gap report, interview questions, cross-questions, resume improvements, rewrite, decisioning, and agent planning into separate endpoints. The score prompt explicitly avoids preparation/coaching artifacts, the planner recommends what to run next, and saved results are reused from PostgreSQL when inputs repeat.
 ```
 
 ### 5. History And Progress

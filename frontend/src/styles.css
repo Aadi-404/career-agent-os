@@ -846,6 +846,47 @@ h1 {
   background: #fff7f7;
 }
 
+.recommendationList {
+  display: grid;
+  gap: 12px;
+}
+
+.recommendationItem {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 14px;
+}
+
+.recommendationItem > div:first-child {
+  align-items: start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.recommendationItem p {
+  margin: 0;
+}
+
+.priority-critical {
+  border-left: 4px solid #dc2626;
+}
+
+.priority-high {
+  border-left: 4px solid #d97706;
+}
+
+.priority-medium {
+  border-left: 4px solid #2563eb;
+}
+
+.priority-low {
+  border-left: 4px solid #64748b;
+}
+
 .rewriteList {
   display: grid;
   gap: 14px;

@@ -19,6 +19,8 @@ from app.models.analysis import (
     AnalysisResponse,
     ApplicationDecisionRequest,
     ApplicationDecisionResponse,
+    CareerAgentPlanRequest,
+    CareerAgentPlanResponse,
     CandidateContext,
     CrossQuestion,
     InterviewQuestion,
@@ -110,6 +112,7 @@ from app.models.scoring_config import (
 )
 from app.models.system import ProductionReadinessResponse, ReadinessCheck, SystemDiagnostics
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
+from app.services.agent_orchestration_service import build_career_agent_plan
 from app.services.application_decision_service import build_application_decision
 from app.services.demo_seed_service import seed_demo_workspace
 from app.services.history_store import (
@@ -371,6 +374,14 @@ def build_gap_report(request: OptionalArtifactBuildRequest) -> list[RequirementM
         for match in request.analysis.requirementMatches
         if match.score < 60
     ][: request.limit]
+
+
+@app.post("/ai/agent/plan", response_model=CareerAgentPlanResponse)
+def build_agent_plan(request: CareerAgentPlanRequest) -> CareerAgentPlanResponse:
+    _enforce_ai_usage("agent_plan", request.sourceRequest, estimated_units=1)
+    response = build_career_agent_plan(request)
+    _record_ai_usage("agent_plan", request.sourceRequest, estimated_units=1)
+    return response
 
 
 @app.post("/extension/bootstrap", response_model=ExtensionBootstrapResponse)
