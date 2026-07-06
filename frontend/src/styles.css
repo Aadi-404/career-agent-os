@@ -2316,6 +2316,32 @@ button.premiumButton:not(.secondaryButton) span {
   padding: 7px 10px;
 }
 
+.manualLaunchTasks {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.manualLaunchTasks strong {
+  color: var(--brand);
+}
+
+.manualLaunchTasks span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.manualLaunchTasks span::before {
+  color: var(--brand);
+  content: "- ";
+  font-weight: 900;
+}
+
 .evaluationGrid {
   display: grid;
   gap: 18px;

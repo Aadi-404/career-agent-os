@@ -2518,6 +2518,46 @@ function App() {
     }
   }
 
+  async function exportLaunchEvidence() {
+    setSettingsInfo("");
+    try {
+      await ensureLocalUser();
+      const evidence = {
+        exportedAt: new Date().toISOString(),
+        workspaceUserId,
+        releaseSummary,
+        productionReadiness,
+        productionSmokeChecks,
+        launchChecklist: launchChecklistItems.map((item) => ({
+          id: item.id,
+          title: item.title,
+          detail: item.detail,
+          done: Boolean(launchChecklist[item.id]),
+        })),
+        workspaceSummary,
+        usageQuota,
+        extensionValidationCount: extensionValidations.length,
+        docs: [
+          "PROJECT_STATUS.md",
+          "docs/MVP_LAUNCH_STATUS.md",
+          "docs/DEPLOYMENT_GUIDE.md",
+          "docs/DEPLOYMENT_CHECKLIST.md",
+          "docs/STAGING_DEPLOYMENT_RUNBOOK.md",
+        ],
+      };
+      const blob = new Blob([JSON.stringify(evidence, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `career-agent-launch-evidence-${workspaceUserId}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setSettingsInfo("Launch evidence exported.");
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Launch evidence export failed");
+    }
+  }
+
   async function loadAdminUsers() {
     try {
       await ensureLocalUser();
@@ -4099,6 +4139,7 @@ function App() {
                 onSeedDemo={seedDemoWorkspace}
                 onCleanupDemo={cleanupDemoWorkspace}
                 onRefreshReleaseSummary={loadReleaseSummary}
+                onExportLaunchEvidence={exportLaunchEvidence}
                 onRunProductionSmoke={runProductionSmokeCheck}
                 onToggleLaunchChecklist={updateLaunchChecklist}
                 onResetLaunchChecklist={resetLaunchChecklist}
@@ -5223,6 +5264,7 @@ function ScoringSettingsPanel({
   onSeedDemo,
   onCleanupDemo,
   onRefreshReleaseSummary,
+  onExportLaunchEvidence,
   onRunProductionSmoke,
   onToggleLaunchChecklist,
   onResetLaunchChecklist,
@@ -5262,6 +5304,7 @@ function ScoringSettingsPanel({
   onSeedDemo: () => void;
   onCleanupDemo: () => void;
   onRefreshReleaseSummary: () => void;
+  onExportLaunchEvidence: () => void;
   onRunProductionSmoke: () => void;
   onToggleLaunchChecklist: (itemId: string, checked: boolean) => void;
   onResetLaunchChecklist: () => void;
@@ -5315,6 +5358,13 @@ function ScoringSettingsPanel({
   const demoState = releaseSummary ? releaseSummary.demoUserPresent ? "seeded" : "clean" : demoCleanupResult?.deleted ? "clean" : demoSeedResult ? "seeded" : launchChecklist.demo_seed ? "seeded" : "unknown";
   const extensionReady = extensionValidationCount > 0 || Boolean(launchChecklist.extension_validation);
   const extensionPackage = releaseSummary?.extensionPackage;
+  const manualLaunchTasks = [
+    ...(releaseSummary?.nextActions ?? []),
+    "Run deployment/smoke_check.py with --strict-production against the deployed URLs.",
+    "Validate LinkedIn, Naukri, Indeed, and one company careers page with the packaged extension.",
+    "Confirm production secrets and provider keys are configured outside git.",
+    "Confirm backup export or provider snapshot is available before public traffic.",
+  ];
 
   if (!configs.length) {
     return (
@@ -5489,6 +5539,7 @@ function ScoringSettingsPanel({
           <div className="inlineActions">
             <strong>{launchCompletion}% checklist</strong>
             <button type="button" className="secondaryButton" onClick={onRefreshReleaseSummary}>Refresh Release Summary</button>
+            <button type="button" className="secondaryButton" onClick={onExportLaunchEvidence}>Export Launch Evidence</button>
           </div>
         </div>
         <div className="releaseDashboardGrid">
@@ -5527,6 +5578,10 @@ function ScoringSettingsPanel({
             {releaseSummary.nextActions.map((action) => <span key={action}>{action}</span>)}
           </div>
         ) : null}
+        <div className="manualLaunchTasks">
+          <strong>Known remaining manual launch tasks</strong>
+          {manualLaunchTasks.map((task) => <span key={task}>{task}</span>)}
+        </div>
       </div>
 
       <div className="panel diagnosticsPanel">

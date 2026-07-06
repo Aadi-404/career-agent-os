@@ -146,6 +146,8 @@ Built:
 - Production readiness diagnostics.
 - Server-backed release summary endpoint.
 - Release readiness dashboard in Settings.
+- Launch evidence JSON export from Settings.
+- Known remaining manual launch tasks panel.
 - In-app production smoke action for health, readiness, Command Center, and quota.
 - Smoke-check script.
 - Extension package metadata tracking.
