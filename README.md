@@ -43,6 +43,12 @@ Project demo and interview explanation guide:
 docs/PROJECT_DEMO_GUIDE.md
 ```
 
+MVP release notes for reviewers:
+
+```text
+RELEASE_NOTES.md
+```
+
 Staging deployment steps are documented in:
 
 ```text

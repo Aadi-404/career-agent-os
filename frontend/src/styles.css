@@ -2342,6 +2342,33 @@ button.premiumButton:not(.secondaryButton) span {
   font-weight: 900;
 }
 
+.releaseVerificationPanel {
+  grid-column: 1 / -1;
+}
+
+.verificationCommandList {
+  display: grid;
+  gap: 10px;
+}
+
+.verificationCommandList > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+}
+
+.verificationCommandList strong {
+  color: var(--brand);
+}
+
+.verificationCommandList code {
+  white-space: normal;
+  word-break: break-word;
+}
+
 .evaluationGrid {
   display: grid;
   gap: 18px;

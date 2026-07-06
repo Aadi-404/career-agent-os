@@ -192,6 +192,7 @@ Remaining:
 
 - `docs/CAREER_AGENT_OS_ROADMAP.md`
 - `docs/MVP_LAUNCH_STATUS.md`
+- `RELEASE_NOTES.md`
 - `docs/PROJECT_DEMO_GUIDE.md`
 - `docs/STAGING_DEPLOYMENT_RUNBOOK.md`
 - `docs/DEPLOYMENT_GUIDE.md`

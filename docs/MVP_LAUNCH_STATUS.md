@@ -148,6 +148,7 @@ Built:
 - Release readiness dashboard in Settings.
 - Launch evidence JSON export from Settings.
 - Known remaining manual launch tasks panel.
+- Local release verification command panel.
 - In-app production smoke action for health, readiness, Command Center, and quota.
 - Smoke-check script.
 - Extension package metadata tracking.
@@ -185,6 +186,7 @@ Built:
 - End-to-end deployment guide.
 - Project demo guide for portfolio and interview walkthroughs.
 - GitHub-facing project status summary.
+- MVP release notes for GitHub reviewers.
 - CI checks for backend, frontend, deployment scripts, extension packaging, and production rehearsal.
 
 Still needs:

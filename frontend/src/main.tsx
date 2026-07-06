@@ -5365,6 +5365,31 @@ function ScoringSettingsPanel({
     "Confirm production secrets and provider keys are configured outside git.",
     "Confirm backup export or provider snapshot is available before public traffic.",
   ];
+  const localVerificationCommands = [
+    {
+      label: "Full local release verification",
+      command: ".\\ai-service\\.venv\\Scripts\\python.exe deployment\\verify_release.py",
+    },
+    {
+      label: "Backend tests",
+      command: "cd ai-service && .\\.venv\\Scripts\\python.exe -m unittest discover -s tests",
+    },
+    {
+      label: "Frontend build and smoke",
+      command: "cd frontend && npm run build && npm run smoke",
+    },
+    {
+      label: "Extension parser fixtures",
+      command: "node extension\\test-content-script.mjs",
+    },
+    {
+      label: "Strict deployed smoke",
+      command: ".\\ai-service\\.venv\\Scripts\\python.exe deployment\\smoke_check.py --api https://api.your-domain.com --frontend https://app.your-domain.com --user-id <user-id> --session-token <token> --check-extension-package --strict-production",
+    },
+  ];
+  const lastKnownVerification = productionSmokeChecks.length
+    ? smokePassed ? "In-app smoke passed in this browser." : `In-app smoke has ${smokeFailures} failed check(s).`
+    : "No in-app smoke run is recorded in this browser.";
 
   if (!configs.length) {
     return (
@@ -5647,6 +5672,27 @@ function ScoringSettingsPanel({
           <li>Confirm Settings readiness has no failed checks before enabling live LLM mode.</li>
           <li>Validate extension parsing on LinkedIn, Naukri, Indeed, and one company careers page.</li>
         </ul>
+      </div>
+
+      <div className="panel diagnosticsPanel releaseVerificationPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Release</p>
+            <h3>Local Release Verification</h3>
+          </div>
+          <span className={`statusPill ${productionSmokeChecks.length ? smokePassed ? "pass" : "fail" : "warn"}`}>
+            {productionSmokeChecks.length ? smokePassed ? "pass" : "fail" : "check"}
+          </span>
+        </div>
+        <p className="hint">{lastKnownVerification}</p>
+        <div className="verificationCommandList">
+          {localVerificationCommands.map((item) => (
+            <div key={item.label}>
+              <strong>{item.label}</strong>
+              <code>{item.command}</code>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="panel diagnosticsPanel">
