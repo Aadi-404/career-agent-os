@@ -519,6 +519,27 @@ type PrepMemoryResponse = {
     unfinishedTaskCount: number;
     lowConfidenceDays: number;
   }>;
+  todayFocus: Array<{
+    sessionId: string;
+    sessionTitle: string;
+    day: number;
+    taskId?: string | null;
+    task: string;
+    status: string;
+    confidence?: string | null;
+    urgency: string;
+    reason: string;
+  }>;
+  attentionSessions: Array<{
+    sessionId: string;
+    title: string;
+    currentPlanDay: number;
+    completionPercent: number;
+    overdueTaskCount: number;
+    lowConfidenceDays: number;
+    nextTask?: string | null;
+    reason: string;
+  }>;
   nextRecommendedActions: string[];
   nextAction?: {
     kind: string;
@@ -6430,6 +6451,51 @@ function PrepMemoryPanel({
               <ul>
                 {memory.nextRecommendedActions.map((action) => <li key={action}>{action}</li>)}
               </ul>
+            </div>
+          )}
+          {memory.todayFocus.length > 0 && (
+            <div className="prepSection">
+              <h4>Today's Focus</h4>
+              <div className="prepFocusGrid">
+                {memory.todayFocus.map((focus) => (
+                  <div className={`prepFocusCard ${focus.urgency}`} key={`${focus.sessionId}-${focus.taskId ?? focus.day}-${focus.urgency}`}>
+                    <div className="prepTopicTop">
+                      <strong>{focus.sessionTitle}</strong>
+                      <span>{focus.urgency.replace("_", " ")}</span>
+                    </div>
+                    <p>Day {focus.day}: {focus.task}</p>
+                    <small>{focus.reason}{focus.confidence ? ` Confidence: ${focus.confidence}.` : ""}</small>
+                    <button type="button" className="secondaryButton" onClick={() => onOpenAction({
+                      kind: "track_today_focus",
+                      label: focus.sessionTitle,
+                      sessionId: focus.sessionId,
+                      sessionTitle: focus.sessionTitle,
+                      day: focus.day,
+                      taskId: focus.taskId,
+                      task: focus.task,
+                      reason: focus.reason,
+                    })}>Open</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {memory.attentionSessions.length > 0 && (
+            <div className="prepSection">
+              <h4>Sessions Needing Attention</h4>
+              <div className="historyList">
+                {memory.attentionSessions.map((item) => (
+                  <div className="historyItem attentionItem" key={item.sessionId}>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <small>Day {item.currentPlanDay}: {item.reason}</small>
+                      {item.nextTask && <small>Next: {item.nextTask}</small>}
+                    </div>
+                    <span>{item.completionPercent}%</span>
+                    <em>{item.overdueTaskCount} overdue</em>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {memory.repeatedWeakTopics.length > 0 && (

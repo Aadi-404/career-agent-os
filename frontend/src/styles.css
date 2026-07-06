@@ -1814,6 +1814,51 @@ h1 {
   margin: 6px 0 0;
 }
 
+.prepFocusGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.prepFocusCard {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.prepFocusCard.overdue {
+  border-color: #f0b4a8;
+  background: #fff8f6;
+}
+
+.prepFocusCard.today {
+  border-color: #b7ded8;
+  background: #f5fbfa;
+}
+
+.prepFocusCard.low_confidence {
+  border-color: #ead190;
+  background: #fffaf0;
+}
+
+.prepFocusCard p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.prepFocusCard small,
+.attentionItem small + small {
+  display: block;
+  margin-top: 4px;
+}
+
+.prepFocusCard button {
+  justify-self: start;
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 8px;

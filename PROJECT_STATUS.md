@@ -180,12 +180,12 @@ Built:
 - Career Agent Plan task and `/ai/agent/plan` endpoint that rank the next optional module from score, research memory, preparation state, and generated artifacts.
 - Command Center default workspace with `/ai/command-center/{user_id}` aggregate payload, top actions, preparation memory, and opportunity pipeline next actions.
 - Release readiness dashboard in Settings combining server release summary, production readiness, in-app smoke result, demo data state, extension package status, and extension validation status.
+- Preparation tracker automation that derives current-day focus items, overdue tasks, low-confidence review signals, and sessions needing attention from saved preparation progress.
 
 Remaining:
 
 - Deeper apply-decision agent execution after the planner chooses tools.
 - Company research agent with richer source review.
-- Interview-prep tracker automation beyond current next-action tracking.
 - RAG memory over saved workspace history.
 
 ## Important Docs

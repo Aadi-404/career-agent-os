@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 
 from app.models.analysis import (
     AnalysisResponse,
@@ -99,7 +100,7 @@ class PrepMemoryServiceTests(unittest.TestCase):
         self.assertEqual(memory.repeatedWeakTopics[0].topic, "Azure cloud basics")
         self.assertEqual(memory.unfinishedPreparation[0].unfinishedTaskCount, 1)
         self.assertIsNotNone(memory.nextAction)
-        self.assertEqual(memory.nextAction.kind, "continue_preparation")
+        self.assertEqual(memory.nextAction.kind, "track_today_focus")
         self.assertEqual(memory.nextAction.sessionId, "prep-1")
         self.assertEqual(memory.nextAction.taskId, "day-1-task-1")
         self.assertTrue(memory.nextRecommendedActions)
@@ -163,6 +164,60 @@ class PrepMemoryServiceTests(unittest.TestCase):
         self.assertIsNotNone(memory.nextAction)
         self.assertEqual(memory.nextAction.kind, "prepare_repeated_gap")
         self.assertEqual(memory.nextAction.task, "System design caching")
+
+    def test_build_prep_memory_surfaces_today_focus_and_overdue_sessions(self):
+        weak_match = RequirementMatch(
+            requirement="Azure cloud basics",
+            category="cloud",
+            importance="high",
+            bestEvidence=None,
+            evidenceSource="missing",
+            score=35,
+            matchType="weak",
+            reason="Needs stronger cloud evidence.",
+        )
+        session = PreparationSessionRecord(
+            id="prep-3",
+            userId="user-1",
+            title="Cloud interview sprint",
+            status="in_progress",
+            plan={
+                "dailyPlan": [
+                    {
+                        "day": 1,
+                        "focus": "Azure basics",
+                        "goal": "Revise fundamentals.",
+                        "tasks": ["Review compute, storage, and network basics"],
+                        "output": "Cloud notes",
+                    },
+                    {
+                        "day": 2,
+                        "focus": "Scenario practice",
+                        "goal": "Answer applied cloud questions.",
+                        "tasks": ["Practice AZ-900 scenario answers"],
+                        "output": "Scenario answers",
+                    },
+                ]
+            },
+            progress={
+                "tasks": {"day-1-task-0": "todo", "day-2-task-0": "todo"},
+                "confidence": {"day-1": "low"},
+            },
+            createdAt="2026-06-22T00:00:00Z",
+            updatedAt="2026-06-22T00:00:00Z",
+        )
+
+        memory = build_prep_memory(
+            [_analysis(weak_match)],
+            [session],
+            reference_time=datetime(2026, 6, 23, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(memory.todayFocus[0].urgency, "overdue")
+        self.assertEqual(memory.todayFocus[0].taskId, "day-1-task-0")
+        self.assertEqual(memory.attentionSessions[0].overdueTaskCount, 1)
+        self.assertEqual(memory.attentionSessions[0].currentPlanDay, 2)
+        self.assertEqual(memory.nextAction.kind, "track_today_focus")
 
 
 if __name__ == "__main__":

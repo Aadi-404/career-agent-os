@@ -24,6 +24,7 @@ Status: staging-ready after hosted environment values and secrets are configured
 - Password auth, session tokens, user-scoped APIs, and admin guards.
 - Browser extension with saved-resume matching, job-page parsing, manual JD fallback, login/register, and parser feedback.
 - Research notes, apply decisioning, evidence-constrained resume rewrite, and Career Agent planner groundwork.
+- Preparation memory with current-day focus, overdue task detection, low-confidence review signals, and sessions needing attention.
 - Settings release dashboard with readiness, smoke, demo-data, extension package, and validation status.
 
 ## AI And Cost-Control Design
@@ -37,6 +38,8 @@ Algorithm calculates. LLM explains and coaches.
 Mandatory matching uses a score-only path. Preparation, questions, rewrite, and other coaching artifacts are split into separate endpoints so they can be called only when needed.
 
 Semantic matching uses provider-backed embeddings when configured and local fallback when offline or in mock mode.
+
+Preparation memory derives progress signals from saved sessions without calling an LLM, so daily prep tracking does not add AI cost.
 
 ## Verified Local Gates
 
