@@ -309,6 +309,26 @@ type ResearchNoteDraft = Omit<ResearchNoteRecord, "id" | "userId" | "createdAt" 
   providerWarnings?: string[];
   marketOpportunitySignals?: string[];
   roleCompanySynthesis?: string[];
+  sourceReview?: ResearchSourceReview | null;
+};
+
+type ResearchSourceReview = {
+  confidence: "low" | "medium" | "high";
+  citationScore: number;
+  verifiedSourceCount: number;
+  manualSourceCount: number;
+  weakSourceCount: number;
+  sourceTypeCounts: Record<string, number>;
+  topSources: Array<{
+    title: string;
+    url?: string | null;
+    sourceType: string;
+    citationQuality: string;
+    credibilityScore: number;
+    reason: string;
+  }>;
+  gaps: string[];
+  recommendedSearches: string[];
 };
 
 type ApplicationDecisionResponse = {
@@ -960,6 +980,7 @@ function App() {
   const [researchDraftWarnings, setResearchDraftWarnings] = useState<string[]>([]);
   const [researchDraftMarketSignals, setResearchDraftMarketSignals] = useState<string[]>([]);
   const [researchDraftSynthesis, setResearchDraftSynthesis] = useState<string[]>([]);
+  const [researchDraftSourceReview, setResearchDraftSourceReview] = useState<ResearchSourceReview | null>(null);
   const [agentPlan, setAgentPlan] = useState<AgentPlanResponse | null>(null);
   const [agentInfo, setAgentInfo] = useState("");
   const [agentLoading, setAgentLoading] = useState(false);
@@ -1618,6 +1639,7 @@ function App() {
       setResearchDraftWarnings([]);
       setResearchDraftMarketSignals([]);
       setResearchDraftSynthesis([]);
+      setResearchDraftSourceReview(null);
       void loadWorkspaceSummary();
     } catch (err) {
       setResearchInfo(err instanceof Error ? err.message : "Research note save failed");
@@ -1676,6 +1698,7 @@ function App() {
     setResearchDraftWarnings(draft.providerWarnings ?? []);
     setResearchDraftMarketSignals(draft.marketOpportunitySignals ?? []);
     setResearchDraftSynthesis(draft.roleCompanySynthesis ?? []);
+    setResearchDraftSourceReview(draft.sourceReview ?? null);
     const citedCount = draft.sources.filter((source) => source.citationQuality === "verified_url").length;
     const providerLabel = formatCategory(draft.researchProvider ?? "local");
     setResearchInfo(`Generated a ${providerLabel} research draft with ${citedCount} verified citation(s). Review it before saving.`);
@@ -4004,6 +4027,7 @@ function App() {
                 draftWarnings={researchDraftWarnings}
                 draftMarketSignals={researchDraftMarketSignals}
                 draftSynthesis={researchDraftSynthesis}
+                draftSourceReview={researchDraftSourceReview}
                 saving={researchSaving}
                 generating={researchGenerating}
                 info={researchInfo}
@@ -6561,6 +6585,7 @@ function ResearchNotesPanel({
   draftWarnings,
   draftMarketSignals,
   draftSynthesis,
+  draftSourceReview,
   saving,
   generating,
   info,
@@ -6591,6 +6616,7 @@ function ResearchNotesPanel({
   draftWarnings: string[];
   draftMarketSignals: string[];
   draftSynthesis: string[];
+  draftSourceReview: ResearchSourceReview | null;
   saving: boolean;
   generating: boolean;
   info: string;
@@ -6627,7 +6653,7 @@ function ResearchNotesPanel({
             {generating ? "Generating Draft..." : "Generate From Latest Score"}
           </button>
         </div>
-        {(draftProvider || draftWarnings.length > 0 || draftMarketSignals.length > 0 || draftSynthesis.length > 0) && (
+        {(draftProvider || draftWarnings.length > 0 || draftMarketSignals.length > 0 || draftSynthesis.length > 0 || draftSourceReview) && (
           <div className="researchProviderStatus">
             <div>
               <span>Research provider</span>
@@ -6637,6 +6663,12 @@ function ResearchNotesPanel({
               <span>Status</span>
               <strong>{draftWarnings.length ? `${draftWarnings.length} warning(s)` : "Ready"}</strong>
             </div>
+            {draftSourceReview && (
+              <div>
+                <span>Source confidence</span>
+                <strong>{formatCategory(draftSourceReview.confidence)} / {draftSourceReview.citationScore}%</strong>
+              </div>
+            )}
             {draftWarnings.length > 0 && (
               <ul>
                 {draftWarnings.slice(0, 4).map((warning) => <li key={warning}>{warning}</li>)}
@@ -6647,6 +6679,35 @@ function ResearchNotesPanel({
                 {draftMarketSignals.slice(0, 3).map((signal) => <li key={`market-${signal}`}>Market: {signal}</li>)}
                 {draftSynthesis.slice(0, 3).map((signal) => <li key={`synthesis-${signal}`}>Synthesis: {signal}</li>)}
               </ul>
+            )}
+            {draftSourceReview && (
+              <div className="sourceReviewBox">
+                <div className="sourceReviewStats">
+                  <span>Verified {draftSourceReview.verifiedSourceCount}</span>
+                  <span>Manual {draftSourceReview.manualSourceCount}</span>
+                  <span>Weak {draftSourceReview.weakSourceCount}</span>
+                </div>
+                {draftSourceReview.gaps.length > 0 && (
+                  <ul>
+                    {draftSourceReview.gaps.slice(0, 4).map((gap) => <li key={gap}>Gap: {gap}</li>)}
+                  </ul>
+                )}
+                {draftSourceReview.recommendedSearches.length > 0 && (
+                  <ul>
+                    {draftSourceReview.recommendedSearches.slice(0, 4).map((query) => <li key={query}>Search next: {query}</li>)}
+                  </ul>
+                )}
+                {draftSourceReview.topSources.length > 0 && (
+                  <div className="topSourceList">
+                    {draftSourceReview.topSources.slice(0, 3).map((source) => (
+                      <div key={`${source.title}-${source.url ?? source.citationQuality}`}>
+                        <strong>{source.title}</strong>
+                        <small>{source.credibilityScore}% | {formatCategory(source.sourceType)} | {formatCategory(source.citationQuality)}</small>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

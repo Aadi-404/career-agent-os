@@ -69,6 +69,27 @@ class ResearchContextNote(BaseModel):
     sources: list[ResearchContextSource] = Field(default_factory=list, max_length=20)
 
 
+class ResearchSourceReviewItem(BaseModel):
+    title: str
+    url: str | None = None
+    sourceType: str
+    citationQuality: str
+    credibilityScore: int = Field(ge=0, le=100)
+    reason: str
+
+
+class ResearchSourceReview(BaseModel):
+    confidence: Literal["low", "medium", "high"]
+    citationScore: int = Field(ge=0, le=100)
+    verifiedSourceCount: int = Field(ge=0)
+    manualSourceCount: int = Field(ge=0)
+    weakSourceCount: int = Field(ge=0)
+    sourceTypeCounts: dict[str, int] = Field(default_factory=dict)
+    topSources: list[ResearchSourceReviewItem] = Field(default_factory=list, max_length=5)
+    gaps: list[str] = Field(default_factory=list, max_length=10)
+    recommendedSearches: list[str] = Field(default_factory=list, max_length=10)
+
+
 class ResearchNoteDraft(BaseModel):
     title: str = Field(min_length=2, max_length=180)
     company: str | None = Field(default=None, max_length=180)
@@ -82,6 +103,7 @@ class ResearchNoteDraft(BaseModel):
     providerWarnings: list[str] = Field(default_factory=list, max_length=20)
     marketOpportunitySignals: list[str] = Field(default_factory=list, max_length=20)
     roleCompanySynthesis: list[str] = Field(default_factory=list, max_length=20)
+    sourceReview: ResearchSourceReview | None = None
 
 
 class ResearchBuildRequest(BaseModel):

@@ -1277,7 +1277,7 @@ h1 {
 
 .researchProviderStatus {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 180px)) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 180px)) minmax(0, 1fr);
   gap: 12px;
   align-items: start;
   border: 1px solid #d5e5e2;
@@ -1307,6 +1307,46 @@ h1 {
   color: #7a4a00;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.sourceReviewBox {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  border-top: 1px solid #d5e5e2;
+  padding-top: 10px;
+}
+
+.sourceReviewStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sourceReviewStats span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--brand);
+  padding: 6px 9px;
+}
+
+.topSourceList {
+  display: grid;
+  gap: 8px;
+}
+
+.topSourceList div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.topSourceList small {
+  color: var(--muted);
 }
 
 .researchNoteCard {

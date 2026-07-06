@@ -158,10 +158,10 @@ Built:
 - Deterministic market opportunity signals are produced from cited source counts and repeated source patterns.
 - Role/company synthesis connects cited evidence back to candidate weak requirements and repeated preparation emphasis.
 - Research Notes UI shows draft provider status, verified citation counts, and provider warnings.
+- Deterministic source review scores generated research drafts by citation confidence, credibility-ranked top sources, source gaps, and recommended next searches.
 
 Remaining:
 
-- Replace deterministic first-pass synthesis with richer agentic research review when cost and source coverage are acceptable.
 - Validate market signals against real role/company searches during staging.
 
 ### Phase 8: Agentic Career OS
@@ -185,7 +185,6 @@ Built:
 
 Remaining:
 
-- Company research agent with richer source review.
 - RAG memory over saved workspace history.
 
 ## Important Docs

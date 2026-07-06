@@ -1,6 +1,15 @@
 from urllib.parse import urlparse
 
-from app.models.analysis import AnalysisResponse, AnalyzeRequest, ResearchBuildRequest, ResearchContextSource, ResearchNoteDraft, RequirementMatch
+from app.models.analysis import (
+    AnalysisResponse,
+    AnalyzeRequest,
+    ResearchBuildRequest,
+    ResearchContextSource,
+    ResearchNoteDraft,
+    ResearchSourceReview,
+    ResearchSourceReviewItem,
+    RequirementMatch,
+)
 from app.services.research_enrichment_service import build_research_enrichment
 
 
@@ -56,6 +65,13 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
         *source_labels,
         *enrichment.sources,
     ][:10]
+    source_review = _review_sources(
+        sources=sources,
+        company=company,
+        role_title=role_title,
+        weak_matches=weak_matches,
+        provider=enrichment.provider,
+    )
 
     summary = _summary(
         role_title=role_title,
@@ -80,6 +96,7 @@ def build_research_note_draft(request: ResearchBuildRequest) -> ResearchNoteDraf
         providerWarnings=enrichment.warnings,
         marketOpportunitySignals=enrichment.market_opportunity_signals,
         roleCompanySynthesis=enrichment.role_company_synthesis,
+        sourceReview=source_review,
     )
 
 
@@ -199,6 +216,153 @@ def assess_research_source(
 
 
 _assess_source = assess_research_source
+
+
+def _review_sources(
+    sources: list[ResearchContextSource],
+    company: str | None,
+    role_title: str,
+    weak_matches: list[RequirementMatch],
+    provider: str,
+) -> ResearchSourceReview:
+    verified = [source for source in sources if source.citationQuality == "verified_url"]
+    manual = [source for source in sources if source.citationQuality == "manual_note"]
+    weak = [source for source in sources if source.citationQuality == "weak"]
+    type_counts: dict[str, int] = {}
+    for source in sources:
+        type_counts[source.sourceType] = type_counts.get(source.sourceType, 0) + 1
+    verified_type_counts: dict[str, int] = {}
+    for source in verified:
+        verified_type_counts[source.sourceType] = verified_type_counts.get(source.sourceType, 0) + 1
+
+    reviewed = sorted(
+        [_review_source_item(source, company, role_title) for source in sources],
+        key=lambda item: (-item.credibilityScore, item.title.lower()),
+    )
+    citation_score = _citation_score(reviewed, sources)
+    gaps = _research_gaps(sources, type_counts, verified_type_counts, verified, weak, company, provider)
+    searches = _recommended_source_searches(company, role_title, weak_matches, verified_type_counts, gaps)
+    return ResearchSourceReview(
+        confidence=_research_confidence(citation_score, len(verified), gaps),
+        citationScore=citation_score,
+        verifiedSourceCount=len(verified),
+        manualSourceCount=len(manual),
+        weakSourceCount=len(weak),
+        sourceTypeCounts=type_counts,
+        topSources=reviewed[:5],
+        gaps=gaps,
+        recommendedSearches=searches,
+    )
+
+
+def _review_source_item(source: ResearchContextSource, company: str | None, role_title: str) -> ResearchSourceReviewItem:
+    score = 20
+    reasons = []
+    if source.citationQuality == "verified_url":
+        score += 45
+        reasons.append("verified URL")
+    elif source.citationQuality == "manual_note":
+        score += 25
+        reasons.append("manual provenance")
+    elif source.citationQuality == "weak":
+        score += 5
+        reasons.append("weak or missing citation")
+
+    score += {
+        "company_page": 15,
+        "interview_experience": 14,
+        "job_post": 12,
+        "market_signal": 10,
+        "manual": 6,
+        "other": 4,
+    }.get(source.sourceType, 4)
+
+    text = f"{source.title} {source.url or ''} {source.note or ''}".lower()
+    if company and company.lower() in text:
+        score += 8
+        reasons.append("company-specific")
+    if role_title.lower() in text:
+        score += 5
+        reasons.append("role-specific")
+    if source.note and len(source.note) >= 120:
+        score += 5
+        reasons.append("has usable evidence note")
+    if source.validationIssues:
+        score -= min(25, 8 * len(source.validationIssues))
+        reasons.append("validation issue")
+
+    return ResearchSourceReviewItem(
+        title=source.title,
+        url=source.url,
+        sourceType=source.sourceType,
+        citationQuality=source.citationQuality,
+        credibilityScore=max(0, min(100, score)),
+        reason=", ".join(reasons) or "source recorded without strong quality signal",
+    )
+
+
+def _citation_score(reviewed: list[ResearchSourceReviewItem], sources: list[ResearchContextSource]) -> int:
+    if not sources:
+        return 0
+    average = round(sum(item.credibilityScore for item in reviewed) / len(sources))
+    verified_bonus = min(15, 5 * len([source for source in sources if source.citationQuality == "verified_url"]))
+    weak_penalty = min(20, 5 * len([source for source in sources if source.citationQuality == "weak"]))
+    return max(0, min(100, average + verified_bonus - weak_penalty))
+
+
+def _research_confidence(citation_score: int, verified_count: int, gaps: list[str]) -> str:
+    if citation_score >= 72 and verified_count >= 3 and len(gaps) <= 1:
+        return "high"
+    if citation_score >= 45 and verified_count >= 1:
+        return "medium"
+    return "low"
+
+
+def _research_gaps(
+    sources: list[ResearchContextSource],
+    type_counts: dict[str, int],
+    verified_type_counts: dict[str, int],
+    verified: list[ResearchContextSource],
+    weak: list[ResearchContextSource],
+    company: str | None,
+    provider: str,
+) -> list[str]:
+    gaps = []
+    if not sources:
+        gaps.append("No research sources are attached.")
+    if not verified:
+        gaps.append("No verified URL citation is available yet.")
+    if weak:
+        gaps.append(f"{len(weak)} source(s) are weak because citations are missing or invalid.")
+    if company and verified_type_counts.get("company_page", 0) == 0:
+        gaps.append("No verified company-specific source is attached.")
+    if verified_type_counts.get("interview_experience", 0) == 0:
+        gaps.append("No verified interview-experience source is attached.")
+    if verified_type_counts.get("job_post", 0) == 0:
+        gaps.append("No verified comparable job-post source is attached.")
+    if provider == "local":
+        gaps.append("Research is still a local query plan until live sources are added.")
+    return gaps[:8]
+
+
+def _recommended_source_searches(
+    company: str | None,
+    role_title: str,
+    weak_matches: list[RequirementMatch],
+    type_counts: dict[str, int],
+    gaps: list[str],
+) -> list[str]:
+    company_prefix = f"{company} " if company else ""
+    searches = []
+    if any("company-specific" in gap for gap in gaps):
+        searches.append(f"{company_prefix}{role_title} careers engineering blog")
+    if type_counts.get("interview_experience", 0) == 0:
+        searches.append(f"{company_prefix}{role_title} interview experience")
+    if type_counts.get("job_post", 0) == 0:
+        searches.append(f"{role_title} similar job postings requirements")
+    for match in weak_matches[:3]:
+        searches.append(f"{company_prefix}{role_title} {match.requirement} interview questions")
+    return _dedupe(searches)[:8]
 
 
 def _infer_source_type(url: str, title: str) -> str:

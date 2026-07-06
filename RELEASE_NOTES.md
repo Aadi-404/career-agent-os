@@ -24,6 +24,7 @@ Status: staging-ready after hosted environment values and secrets are configured
 - Password auth, session tokens, user-scoped APIs, and admin guards.
 - Browser extension with saved-resume matching, job-page parsing, manual JD fallback, login/register, and parser feedback.
 - Research notes, apply decisioning, evidence-constrained resume rewrite, and Career Agent planner groundwork.
+- Research draft source review with citation confidence, source credibility ranking, gaps, and recommended next searches.
 - Apply-decision execution plans with ordered steps, dependencies, blocker state, endpoint hints, and estimated units.
 - Preparation memory with current-day focus, overdue task detection, low-confidence review signals, and sessions needing attention.
 - Settings release dashboard with readiness, smoke, demo-data, extension package, and validation status.

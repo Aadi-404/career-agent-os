@@ -100,6 +100,9 @@ class ResearchGenerationTests(unittest.TestCase):
         self.assertEqual(draft.sources[1].url, "https://example.com/interview")
         self.assertEqual(draft.sources[1].citationQuality, "verified_url")
         self.assertEqual(draft.sources[1].sourceType, "interview_experience")
+        self.assertIsNotNone(draft.sourceReview)
+        self.assertGreaterEqual(draft.sourceReview.verifiedSourceCount, 1)
+        self.assertTrue(any(item.url == "https://example.com/interview" for item in draft.sourceReview.topSources))
 
     def test_research_source_quality_flags_weak_citations(self):
         draft = build_research_note_draft(
@@ -135,6 +138,9 @@ class ResearchGenerationTests(unittest.TestCase):
         self.assertTrue(any("does not browse live web" in warning for warning in draft.providerWarnings))
         self.assertTrue(any(source.title.startswith("Planned search:") for source in draft.sources))
         self.assertTrue(any(source.citationQuality == "weak" for source in draft.sources if source.title.startswith("Planned search:")))
+        self.assertEqual(draft.sourceReview.confidence, "low")
+        self.assertTrue(any("local query plan" in gap for gap in draft.sourceReview.gaps))
+        self.assertTrue(any("interview experience" in query for query in draft.sourceReview.recommendedSearches))
 
     def test_google_research_provider_adds_cited_sources_without_heavy_llm_call(self):
         with (
@@ -198,6 +204,10 @@ class ResearchGenerationTests(unittest.TestCase):
         self.assertEqual(cited_source.citationQuality, "verified_url")
         self.assertEqual(cited_source.sourceType, "company_page")
         self.assertIn("Extracted page text", cited_source.note or "")
+        self.assertIsNotNone(draft.sourceReview)
+        self.assertGreaterEqual(draft.sourceReview.citationScore, 45)
+        self.assertGreaterEqual(draft.sourceReview.verifiedSourceCount, 1)
+        self.assertTrue(any(item.citationQuality == "verified_url" for item in draft.sourceReview.topSources))
 
     def test_preparation_uses_saved_research_notes(self):
         prep = build_preparation_intelligence(

@@ -224,11 +224,11 @@ Built:
 - First-pass market opportunity signals from cited source mix and repeated market terms.
 - First-pass role/company synthesis from cited evidence mapped against candidate weak requirements.
 - Research Notes UI provider status showing local versus Google mode, verified citation count, and provider warnings.
+- Deterministic source review scores generated research drafts by citation confidence, credibility-ranked top sources, source gaps, and recommended next searches.
 
 Still needs:
 
 - Staging validation with real role/company searches.
-- Future agentic research review for deeper synthesis and source ranking.
 
 Why the remaining work is later:
 
@@ -254,7 +254,6 @@ Built:
 
 Still planned:
 
-- Company research agent with richer source review.
 - RAG memory over saved resumes, JDs, analyses, feedback, and preparation progress.
 
 Why it is later:
