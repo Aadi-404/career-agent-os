@@ -1002,6 +1002,87 @@ h1 {
   background: #fff7f7;
 }
 
+.executionStepGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.executionStep {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.executionStep.blocked {
+  border-color: #f0b4a8;
+  background: #fff8f6;
+}
+
+.executionStep.ready {
+  border-color: #b7ded8;
+  background: #f5fbfa;
+}
+
+.executionStep.optional {
+  border-color: #d8e0ea;
+  background: #f8fafc;
+}
+
+.executionStepTop {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+}
+
+.executionStepTop span {
+  border-radius: 999px;
+  background: var(--brand);
+  color: #ffffff;
+  display: grid;
+  font-size: 12px;
+  font-weight: 900;
+  height: 28px;
+  place-items: center;
+  width: 28px;
+}
+
+.executionStepTop em {
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #334155;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  padding: 5px 8px;
+  text-transform: uppercase;
+}
+
+.executionStep p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.executionMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.executionMeta span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  padding: 5px 8px;
+}
+
 .recommendationList {
   display: grid;
   gap: 12px;

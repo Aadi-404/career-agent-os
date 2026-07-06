@@ -181,10 +181,10 @@ Built:
 - Command Center default workspace with `/ai/command-center/{user_id}` aggregate payload, top actions, preparation memory, and opportunity pipeline next actions.
 - Release readiness dashboard in Settings combining server release summary, production readiness, in-app smoke result, demo data state, extension package status, and extension validation status.
 - Preparation tracker automation that derives current-day focus items, overdue tasks, low-confidence review signals, and sessions needing attention from saved preparation progress.
+- Apply-decision execution plan that turns apply / prepare / skip guidance into ordered agent steps with dependencies, blockers, endpoints, and estimated units.
 
 Remaining:
 
-- Deeper apply-decision agent execution after the planner chooses tools.
 - Company research agent with richer source review.
 - RAG memory over saved workspace history.
 

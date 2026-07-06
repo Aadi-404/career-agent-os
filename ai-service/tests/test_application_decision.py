@@ -79,6 +79,8 @@ class ApplicationDecisionTests(unittest.TestCase):
         self.assertEqual(response.decision, "apply")
         self.assertEqual(response.confidence, "medium")
         self.assertTrue(response.researchSignalsUsed)
+        self.assertTrue(any(step.actionType == "apply" and step.status == "ready" for step in response.executionPlan))
+        self.assertTrue(any(step.id == "track-opportunity" for step in response.executionPlan))
 
     def test_gap_heavy_score_prepares_first(self):
         response = build_application_decision(
@@ -92,6 +94,11 @@ class ApplicationDecisionTests(unittest.TestCase):
         self.assertEqual(response.decision, "prepare_first")
         self.assertTrue(any("AI agent guardrails" in blocker for blocker in response.blockers))
         self.assertIn("No company or role research note is attached yet.", response.blockers)
+        self.assertEqual(response.executionPlan[0].id, "research-note")
+        self.assertTrue(any(step.id == "preparation-plan" and step.priority == "critical" for step in response.executionPlan))
+        review_step = next(step for step in response.executionPlan if step.id == "review-after-prep")
+        self.assertEqual(review_step.status, "blocked")
+        self.assertIn("preparation-plan", review_step.dependsOn)
 
 
 if __name__ == "__main__":

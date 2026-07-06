@@ -103,6 +103,26 @@ class ApplicationDecisionRequest(BaseModel):
     roleTitle: str | None = Field(default=None, max_length=180)
 
 
+class ApplicationExecutionStep(BaseModel):
+    id: str
+    label: str
+    actionType: Literal[
+        "apply",
+        "research",
+        "prepare",
+        "rewrite_resume",
+        "track_opportunity",
+        "skip",
+        "review",
+    ]
+    priority: Literal["critical", "high", "medium", "low"]
+    status: Literal["ready", "blocked", "optional"]
+    reason: str
+    endpoint: str | None = None
+    dependsOn: list[str] = Field(default_factory=list, max_length=10)
+    estimatedUnits: int = Field(default=0, ge=0, le=10)
+
+
 class ApplicationDecisionResponse(BaseModel):
     decision: Literal["apply", "prepare_first", "selective_apply", "skip"]
     confidence: Literal["low", "medium", "high"]
@@ -110,6 +130,7 @@ class ApplicationDecisionResponse(BaseModel):
     reasoning: list[str] = Field(default_factory=list)
     blockers: list[str] = Field(default_factory=list)
     nextActions: list[str] = Field(default_factory=list)
+    executionPlan: list[ApplicationExecutionStep] = Field(default_factory=list)
     researchSignalsUsed: list[str] = Field(default_factory=list)
     scoreSignals: dict[str, int | None] = Field(default_factory=dict)
 

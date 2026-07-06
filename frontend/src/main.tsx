@@ -318,6 +318,17 @@ type ApplicationDecisionResponse = {
   reasoning: string[];
   blockers: string[];
   nextActions: string[];
+  executionPlan: Array<{
+    id: string;
+    label: string;
+    actionType: "apply" | "research" | "prepare" | "rewrite_resume" | "track_opportunity" | "skip" | "review";
+    priority: "critical" | "high" | "medium" | "low";
+    status: "ready" | "blocked" | "optional";
+    reason: string;
+    endpoint?: string | null;
+    dependsOn: string[];
+    estimatedUnits: number;
+  }>;
   researchSignalsUsed: string[];
   scoreSignals: Record<string, number | null>;
 };
@@ -6813,6 +6824,30 @@ function ApplicationDecisionPanel({
               <ul>{decision.nextActions.map((item) => <li key={item}>{item}</li>)}</ul>
             </div>
           </div>
+          {decision.executionPlan.length > 0 && (
+            <div className="prepSection">
+              <h4>Execution Plan</h4>
+              <div className="executionStepGrid">
+                {decision.executionPlan.map((step, index) => (
+                  <div className={`executionStep ${step.status}`} key={step.id}>
+                    <div className="executionStepTop">
+                      <span>{index + 1}</span>
+                      <strong>{step.label}</strong>
+                      <em>{step.status}</em>
+                    </div>
+                    <p>{step.reason}</p>
+                    <div className="executionMeta">
+                      <span>{formatCategory(step.actionType)}</span>
+                      <span>{step.priority}</span>
+                      <span>{step.estimatedUnits} unit(s)</span>
+                      {step.endpoint && <span>{step.endpoint}</span>}
+                    </div>
+                    {step.dependsOn.length > 0 && <small>Depends on: {step.dependsOn.join(", ")}</small>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {decision.researchSignalsUsed.length > 0 && (
             <div className="prepSection">
               <h4>Research Signals Used</h4>

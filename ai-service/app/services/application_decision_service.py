@@ -1,4 +1,4 @@
-from app.models.analysis import ApplicationDecisionRequest, ApplicationDecisionResponse, RequirementMatch
+from app.models.analysis import ApplicationDecisionRequest, ApplicationDecisionResponse, ApplicationExecutionStep, RequirementMatch
 
 
 def build_application_decision(request: ApplicationDecisionRequest) -> ApplicationDecisionResponse:
@@ -22,6 +22,7 @@ def build_application_decision(request: ApplicationDecisionRequest) -> Applicati
         reasoning=_reasoning(analysis, weak_high, research_signals),
         blockers=blockers,
         nextActions=_next_actions(decision, weak_high, research_signals),
+        executionPlan=_execution_plan(request, decision, weak_high, missing_high, research_signals, blockers),
         researchSignalsUsed=research_signals[:10],
         scoreSignals={
             "technicalMatchScore": technical,
@@ -120,6 +121,127 @@ def _next_actions(decision: str, weak_high: list[RequirementMatch], research_sig
     if decision == "skip":
         actions.append("Use this JD as a benchmark and collect similar roles with better fit.")
     return actions[:6]
+
+
+def _execution_plan(
+    request: ApplicationDecisionRequest,
+    decision: str,
+    weak_high: list[RequirementMatch],
+    missing_high: list[RequirementMatch],
+    research_signals: list[str],
+    blockers: list[str],
+) -> list[ApplicationExecutionStep]:
+    steps: list[ApplicationExecutionStep] = []
+    has_research = bool(research_signals)
+    has_blocking_gap = bool(missing_high)
+
+    if not has_research:
+        steps.append(
+            ApplicationExecutionStep(
+                id="research-note",
+                label="Add company or role research note",
+                actionType="research",
+                priority="high" if decision != "skip" else "medium",
+                status="ready",
+                reason="Decision confidence is limited without company, role, or interview research memory.",
+                endpoint="/ai/research/note-draft",
+                estimatedUnits=1,
+            )
+        )
+
+    if weak_high:
+        top_gap = weak_high[0]
+        steps.append(
+            ApplicationExecutionStep(
+                id="preparation-plan",
+                label=f"Prepare proof for {top_gap.requirement}",
+                actionType="prepare",
+                priority="critical" if has_blocking_gap else "high",
+                status="ready",
+                reason=f"{len(weak_high)} high-importance requirement(s) are below the confidence threshold.",
+                endpoint="/ai/preparation/plan",
+                dependsOn=["research-note"] if not has_research else [],
+                estimatedUnits=2,
+            )
+        )
+        steps.append(
+            ApplicationExecutionStep(
+                id="resume-rewrite",
+                label="Review resume wording for weak evidence",
+                actionType="rewrite_resume",
+                priority="high" if has_blocking_gap else "medium",
+                status="ready",
+                reason="Evidence-safe rewrite can improve how existing proof is presented, while unsupported gaps stay blocked.",
+                endpoint="/ai/resume/rewrite",
+                estimatedUnits=2,
+            )
+        )
+
+    if decision in {"apply", "selective_apply"}:
+        steps.append(
+            ApplicationExecutionStep(
+                id="apply",
+                label="Apply and save opportunity status",
+                actionType="apply",
+                priority="critical" if decision == "apply" else "high",
+                status="ready" if not blockers else "blocked",
+                reason="The score is strong enough for an application path." if not blockers else "Clear blockers before applying or apply selectively with risk accepted.",
+                endpoint="/history/opportunities",
+                dependsOn=_apply_dependencies(has_research, weak_high, blockers),
+                estimatedUnits=0,
+            )
+        )
+        steps.append(
+            ApplicationExecutionStep(
+                id="track-opportunity",
+                label="Track follow-up in application pipeline",
+                actionType="track_opportunity",
+                priority="medium",
+                status="ready",
+                reason="Pipeline tracking preserves the apply decision and next follow-up state for the workspace.",
+                endpoint="/history/opportunities",
+                dependsOn=["apply"],
+                estimatedUnits=0,
+            )
+        )
+    elif decision == "prepare_first":
+        steps.append(
+            ApplicationExecutionStep(
+                id="review-after-prep",
+                label="Recheck decision after preparation",
+                actionType="review",
+                priority="medium",
+                status="blocked" if weak_high else "ready",
+                reason="Application should wait until the highest-risk gaps are prepared or marked acceptable.",
+                endpoint="/ai/application-decision",
+                dependsOn=["preparation-plan"] if weak_high else [],
+                estimatedUnits=1,
+            )
+        )
+    else:
+        steps.append(
+            ApplicationExecutionStep(
+                id="skip",
+                label="Skip and use this JD as a benchmark",
+                actionType="skip",
+                priority="high",
+                status="ready",
+                reason="Current score and blockers make this role a poor immediate application target.",
+                endpoint="/history/opportunities",
+                estimatedUnits=0,
+            )
+        )
+
+    return steps[:6]
+
+
+def _apply_dependencies(has_research: bool, weak_high: list[RequirementMatch], blockers: list[str]) -> list[str]:
+    dependencies = []
+    if not has_research:
+        dependencies.append("research-note")
+    if weak_high and blockers:
+        dependencies.append("preparation-plan")
+    return dependencies
 
 
 def _weak_high_requirements(matches: list[RequirementMatch]) -> list[RequirementMatch]:

@@ -250,10 +250,10 @@ Built:
 - Career Agent Plan task and `/ai/agent/plan` endpoint that recommend the next optional module from score, research memory, preparation state, and generated artifacts.
 - Command Center default workspace and `/ai/command-center/{user_id}` aggregate API for top actions, preparation memory, and opportunity pipeline next actions.
 - Preparation tracker automation that surfaces today focus, overdue plan tasks, low-confidence review signals, and sessions needing attention without another LLM call.
+- Apply-decision execution plan that converts apply / prepare / skip output into ordered agent steps with dependencies, blocker state, endpoint hints, and estimated units.
 
 Still planned:
 
-- Deeper apply-decision agent execution after the planner chooses tools.
 - Company research agent with richer source review.
 - RAG memory over saved resumes, JDs, analyses, feedback, and preparation progress.
 
