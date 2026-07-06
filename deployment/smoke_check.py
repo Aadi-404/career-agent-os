@@ -2,6 +2,7 @@ import argparse
 import json
 import subprocess
 import sys
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -209,8 +210,18 @@ def check_extension_package(api_base: str, frontend_url: str, version: str) -> C
     ]
     try:
         completed = subprocess.run(command, cwd=root, check=True, capture_output=True, text=True)
+        if not output.exists():
+            return CheckResult("extension packaging", False, "package script completed but zip was not created")
+        with zipfile.ZipFile(output) as archive:
+            names = set(archive.namelist())
+        required_entries = {"manifest.json", "config.js", "popup.html", "popup.js", "release.json"}
+        missing_entries = sorted(required_entries - names)
+        if missing_entries:
+            return CheckResult("extension packaging", False, f"zip missing: {', '.join(missing_entries)}")
     except subprocess.CalledProcessError as exc:
         return CheckResult("extension packaging", False, (exc.stderr or exc.stdout or str(exc)).strip())
+    except zipfile.BadZipFile as exc:
+        return CheckResult("extension packaging", False, f"invalid zip: {exc}")
     finally:
         if output.exists():
             output.unlink()

@@ -4098,6 +4098,7 @@ function App() {
                 onBillingCancel={() => setBillingDraft(null)}
                 onSeedDemo={seedDemoWorkspace}
                 onCleanupDemo={cleanupDemoWorkspace}
+                onRefreshReleaseSummary={loadReleaseSummary}
                 onRunProductionSmoke={runProductionSmokeCheck}
                 onToggleLaunchChecklist={updateLaunchChecklist}
                 onResetLaunchChecklist={resetLaunchChecklist}
@@ -5221,6 +5222,7 @@ function ScoringSettingsPanel({
   onBillingCancel,
   onSeedDemo,
   onCleanupDemo,
+  onRefreshReleaseSummary,
   onRunProductionSmoke,
   onToggleLaunchChecklist,
   onResetLaunchChecklist,
@@ -5259,6 +5261,7 @@ function ScoringSettingsPanel({
   onBillingCancel: () => void;
   onSeedDemo: () => void;
   onCleanupDemo: () => void;
+  onRefreshReleaseSummary: () => void;
   onRunProductionSmoke: () => void;
   onToggleLaunchChecklist: (itemId: string, checked: boolean) => void;
   onResetLaunchChecklist: () => void;
@@ -5483,7 +5486,10 @@ function ScoringSettingsPanel({
             <p className="eyebrow">Launch</p>
             <h3>Release Readiness Dashboard</h3>
           </div>
-          <strong>{launchCompletion}% checklist</strong>
+          <div className="inlineActions">
+            <strong>{launchCompletion}% checklist</strong>
+            <button type="button" className="secondaryButton" onClick={onRefreshReleaseSummary}>Refresh Release Summary</button>
+          </div>
         </div>
         <div className="releaseDashboardGrid">
           <div>

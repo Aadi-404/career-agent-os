@@ -3,6 +3,7 @@ import logging
 import re
 import time
 import hmac
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -1266,20 +1267,21 @@ def _build_production_readiness_checks(database_ok: bool, database_error: str = 
 
 def _latest_extension_package_status() -> ExtensionPackageStatus:
     release_dir = Path(__file__).resolve().parents[2] / "deployment" / "releases" / "extension"
+    required_entries = _extension_package_required_entries()
     if not release_dir.exists():
-        return ExtensionPackageStatus(packaged=False, message="No extension release package has been generated yet.")
+        return ExtensionPackageStatus(packaged=False, requiredEntries=sorted(required_entries), message="No extension release package has been generated yet.")
     metadata_files = sorted(release_dir.glob("*/release.json"), key=lambda path: path.stat().st_mtime, reverse=True)
     if not metadata_files:
-        return ExtensionPackageStatus(packaged=False, message="No extension release metadata was found.")
+        return ExtensionPackageStatus(packaged=False, requiredEntries=sorted(required_entries), message="No extension release metadata was found.")
     metadata_path = metadata_files[0]
     try:
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        return ExtensionPackageStatus(packaged=False, message=f"Latest extension release metadata could not be read: {exc}")
+        return ExtensionPackageStatus(packaged=False, requiredEntries=sorted(required_entries), message=f"Latest extension release metadata could not be read: {exc}")
     zip_path = metadata.get("zipPath") or f"{metadata_path.parent}.zip"
-    zip_exists = Path(zip_path).exists()
+    package_valid, missing_entries, package_message = _verify_extension_package_zip(Path(zip_path), required_entries)
     return ExtensionPackageStatus(
-        packaged=zip_exists,
+        packaged=package_valid,
         version=metadata.get("version"),
         apiBaseUrl=metadata.get("apiBaseUrl"),
         webAppUrl=metadata.get("webAppUrl"),
@@ -1287,8 +1289,28 @@ def _latest_extension_package_status() -> ExtensionPackageStatus:
         packagedAt=metadata.get("packagedAt"),
         unpackedPath=metadata.get("unpackedPath") or str(metadata_path.parent),
         zipPath=zip_path,
-        message="Latest extension package is available." if zip_exists else "Latest extension metadata exists, but the zip artifact is missing.",
+        requiredEntries=sorted(required_entries),
+        missingEntries=missing_entries,
+        message=package_message,
     )
+
+
+def _extension_package_required_entries() -> set[str]:
+    return {"manifest.json", "config.js", "popup.html", "popup.js", "release.json"}
+
+
+def _verify_extension_package_zip(zip_path: Path, required_entries: set[str]) -> tuple[bool, list[str], str]:
+    if not zip_path.exists():
+        return False, sorted(required_entries), "Latest extension metadata exists, but the zip artifact is missing."
+    try:
+        with zipfile.ZipFile(zip_path) as archive:
+            names = set(archive.namelist())
+    except zipfile.BadZipFile as exc:
+        return False, sorted(required_entries), f"Latest extension zip is invalid: {exc}"
+    missing_entries = sorted(required_entries - names)
+    if missing_entries:
+        return False, missing_entries, f"Latest extension zip is missing: {', '.join(missing_entries)}."
+    return True, [], "Latest extension package is available and contains required files."
 
 
 def _release_next_actions(

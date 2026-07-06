@@ -1,7 +1,10 @@
 import unittest
+import zipfile
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from app.main import _build_production_readiness_checks, _release_next_actions, release_summary, settings
+from app.main import _build_production_readiness_checks, _extension_package_required_entries, _release_next_actions, _verify_extension_package_zip, release_summary, settings
 from app.models.system import ExtensionPackageStatus
 
 
@@ -106,6 +109,19 @@ class ProductionReadinessTests(unittest.TestCase):
         self.assertTrue(any("warning" in action for action in actions))
         self.assertTrue(any("Package the browser extension" in action for action in actions))
         self.assertTrue(any("Clean demo workspace" in action for action in actions))
+
+    def test_extension_package_zip_verifier_requires_release_files(self):
+        with TemporaryDirectory() as temp_dir:
+            zip_path = Path(temp_dir) / "extension.zip"
+            with zipfile.ZipFile(zip_path, "w") as archive:
+                archive.writestr("manifest.json", "{}")
+                archive.writestr("config.js", "")
+
+            valid, missing, message = _verify_extension_package_zip(zip_path, _extension_package_required_entries())
+
+        self.assertFalse(valid)
+        self.assertIn("popup.html", missing)
+        self.assertIn("missing", message)
 
     def test_release_summary_returns_server_backed_status(self):
         package = ExtensionPackageStatus(packaged=True, version="0.1.0", message="ready")

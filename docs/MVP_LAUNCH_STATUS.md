@@ -149,6 +149,7 @@ Built:
 - In-app production smoke action for health, readiness, Command Center, and quota.
 - Smoke-check script.
 - Extension package metadata tracking.
+- Extension zip required-file verification.
 - CI pipeline.
 - Quota enforcement.
 - Billing checkout handoff.

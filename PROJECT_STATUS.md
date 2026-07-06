@@ -30,7 +30,7 @@ Core app is implemented. Remaining public-launch work is deployment-specific: st
 | Browser extension | Mostly complete | Saved resume matching, page parsing, manual JD fallback, parser feedback, research handoff. |
 | Evaluation/tuning | Complete groundwork | Feedback labels, role-family calibration, audit history, rollback. |
 | Admin readiness | Complete groundwork | Diagnostics, production readiness, release summary, usage dashboard, billing handoff, launch tracker, release dashboard. |
-| Deployment tooling | Complete groundwork | Dockerfiles, compose examples, in-app smoke, CLI smoke check, extension package status, production rehearsal, backup/restore. |
+| Deployment tooling | Complete groundwork | Dockerfiles, compose examples, in-app smoke, CLI smoke check, extension package content verification, extension package status, production rehearsal, backup/restore. |
 | Research memory | Started | Manual and generated company/role/interview research notes saved in PostgreSQL for future cited research agents. |
 | Apply decisioning | Started | Score + research based apply / prepare / skip decision module. |
 | Resume rewrite | Started | Evidence-constrained rewrite suggestions with proof-safety labels. |

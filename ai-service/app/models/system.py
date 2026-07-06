@@ -43,6 +43,8 @@ class ExtensionPackageStatus(BaseModel):
     packagedAt: str | None = None
     unpackedPath: str | None = None
     zipPath: str | None = None
+    requiredEntries: list[str] = Field(default_factory=list)
+    missingEntries: list[str] = Field(default_factory=list)
     message: str
 
 
