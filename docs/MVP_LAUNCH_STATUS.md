@@ -144,6 +144,8 @@ Built:
 - Production env templates.
 - Dockerfiles and Docker Compose examples.
 - Production readiness diagnostics.
+- Release readiness dashboard in Settings.
+- In-app production smoke action for health, readiness, Command Center, and quota.
 - Smoke-check script.
 - CI pipeline.
 - Quota enforcement.
@@ -173,7 +175,9 @@ Built:
 - Staging deployment runbook.
 - Demo workspace seed script.
 - Admin-only demo seed endpoint and Settings button.
+- Admin-only demo cleanup endpoint and Settings button.
 - In-app launch checklist tracker.
+- End-to-end deployment guide.
 - Project demo guide for portfolio and interview walkthroughs.
 - GitHub-facing project status summary.
 - CI checks for backend, frontend, deployment scripts, extension packaging, and production rehearsal.
@@ -181,7 +185,7 @@ Built:
 Still needs:
 
 - Hosted staging deployment.
-- End-to-end smoke run against staging.
+- In-app and CLI smoke run against staging.
 - First real user account and admin bootstrap check.
 - Backup/restore rehearsal with non-sensitive test data.
 
@@ -277,6 +281,7 @@ These must be handled before a public deployment:
 - Set billing checkout and webhook values.
 - Set provider API keys in backend secrets only.
 - Run `/diagnostics/production-readiness` with no failed checks.
+- Run Settings -> Deployment Runbook -> Run Production Smoke with no failed checks.
 - Run `deployment/smoke_check.py` against the deployed API and frontend.
 - Validate extension parsing on real job pages.
 
@@ -308,6 +313,6 @@ Use this for project explanation:
 
 ## Current Launch Decision
 
-Status: MVP is locally functional and close to deploy-ready.
+Status: MVP is locally functional and staging-ready once hosted environment values and secrets are configured.
 
-Not yet public-launch complete because real staging deployment, production smoke checks, and real job-site extension validation are still manual required steps.
+Not yet public-launch complete because real staging deployment, staging smoke checks, and real job-site extension validation are still manual required steps.

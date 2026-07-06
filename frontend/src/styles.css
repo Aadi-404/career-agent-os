@@ -2269,6 +2269,36 @@ button.premiumButton:not(.secondaryButton) span {
   line-height: 1.4;
 }
 
+.releaseDashboard {
+  grid-column: 1 / -1;
+}
+
+.releaseDashboardGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.releaseDashboardGrid > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  min-height: 128px;
+  padding: 12px;
+}
+
+.releaseDashboardGrid strong,
+.releaseDashboardGrid small {
+  line-height: 1.35;
+}
+
+.releaseDashboardGrid small {
+  color: var(--muted);
+}
+
 .evaluationGrid {
   display: grid;
   gap: 18px;
@@ -3605,6 +3635,7 @@ pre {
   .commandReadinessList,
   .runbookGrid,
   .productionSmokeList,
+  .releaseDashboardGrid,
   .checkGrid,
   .evaluationGrid,
   .calibrationGrid,

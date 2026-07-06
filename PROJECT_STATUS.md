@@ -12,7 +12,7 @@ Resume scorer -> career workspace -> browser job companion -> agentic career OS
 
 ## Current Build Status
 
-Status: MVP is locally functional and close to staging-ready.
+Status: MVP is locally functional and staging-ready once environment secrets and hosted domains are configured.
 
 Core app is implemented. Remaining public-launch work is deployment-specific: staging deploy, real job-site extension validation, production secrets, billing setup, and real labelled tuning data.
 
@@ -29,8 +29,8 @@ Core app is implemented. Remaining public-launch work is deployment-specific: st
 | Auth | Complete | Password auth, session tokens, guarded user APIs, admin guard. |
 | Browser extension | Mostly complete | Saved resume matching, page parsing, manual JD fallback, parser feedback, research handoff. |
 | Evaluation/tuning | Complete groundwork | Feedback labels, role-family calibration, audit history, rollback. |
-| Admin readiness | Complete groundwork | Diagnostics, production readiness, usage dashboard, billing handoff, launch tracker. |
-| Deployment tooling | Complete groundwork | Dockerfiles, compose examples, smoke check, production rehearsal, backup/restore. |
+| Admin readiness | Complete groundwork | Diagnostics, production readiness, usage dashboard, billing handoff, launch tracker, release dashboard. |
+| Deployment tooling | Complete groundwork | Dockerfiles, compose examples, in-app smoke, CLI smoke check, production rehearsal, backup/restore. |
 | Research memory | Started | Manual and generated company/role/interview research notes saved in PostgreSQL for future cited research agents. |
 | Apply decisioning | Started | Score + research based apply / prepare / skip decision module. |
 | Resume rewrite | Started | Evidence-constrained rewrite suggestions with proof-safety labels. |
@@ -88,6 +88,7 @@ Best demo path:
 7. Show Score Evaluation.
 8. Show Extension Setup.
 9. Show Settings diagnostics and Manual Launch Tracker.
+10. Run Settings -> Deployment Runbook -> Run Production Smoke.
 
 Default seeded demo login:
 
@@ -127,7 +128,7 @@ node extension\test-content-script.mjs
 
 - Deploy staging backend/frontend with real staging domains.
 - Configure production/staging secrets outside git.
-- Run smoke checks against staging.
+- Run in-app and CLI smoke checks against staging.
 - Validate browser extension on LinkedIn, Naukri, Indeed, and one company career page.
 - Configure real billing checkout or keep manual premium unlock for MVP demo.
 - Collect labelled resumes/JDs for scoring calibration.
@@ -178,6 +179,7 @@ Built:
 - Persisted restore audit history for resume version rollback decisions.
 - Career Agent Plan task and `/ai/agent/plan` endpoint that rank the next optional module from score, research memory, preparation state, and generated artifacts.
 - Command Center default workspace with `/ai/command-center/{user_id}` aggregate payload, top actions, preparation memory, and opportunity pipeline next actions.
+- Release readiness dashboard in Settings combining production readiness, in-app smoke result, demo data state, and extension validation status.
 
 Remaining:
 
@@ -192,5 +194,6 @@ Remaining:
 - `docs/MVP_LAUNCH_STATUS.md`
 - `docs/PROJECT_DEMO_GUIDE.md`
 - `docs/STAGING_DEPLOYMENT_RUNBOOK.md`
+- `docs/DEPLOYMENT_GUIDE.md`
 - `docs/PHASE_5_PRODUCTION_READINESS.md`
 - `docs/DEPLOYMENT_CHECKLIST.md`

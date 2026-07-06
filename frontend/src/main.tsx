@@ -4034,6 +4034,7 @@ function App() {
                 productionReadiness={productionReadiness}
                 users={adminUsers}
                 adminAnalyses={adminAnalyses}
+                extensionValidationCount={extensionValidations.length}
                 usageSummary={usageSummary}
                 billingDraft={billingDraft}
                 demoSeedResult={demoSeedResult}
@@ -5155,6 +5156,7 @@ function ScoringSettingsPanel({
   productionReadiness,
   users,
   adminAnalyses,
+  extensionValidationCount,
   usageSummary,
   billingDraft,
   demoSeedResult,
@@ -5191,6 +5193,7 @@ function ScoringSettingsPanel({
   productionReadiness: ProductionReadiness | null;
   users: AdminUserRecord[];
   adminAnalyses: HistoryAnalysisRecord[];
+  extensionValidationCount: number;
   usageSummary: UsageSummary | null;
   billingDraft: BillingDraft | null;
   demoSeedResult: DemoSeedResponse | null;
@@ -5262,6 +5265,12 @@ function ScoringSettingsPanel({
   const adminUserCount = users.filter((user) => user.role === "admin").length;
   const launchDoneCount = launchChecklistItems.filter((item) => launchChecklist[item.id]).length;
   const launchCompletion = Math.round((launchDoneCount / launchChecklistItems.length) * 100);
+  const readinessFailures = productionReadiness?.checks.filter((check) => check.status === "fail").length ?? null;
+  const readinessWarnings = productionReadiness?.checks.filter((check) => check.status === "warn").length ?? 0;
+  const smokeFailures = productionSmokeChecks.filter((check) => check.status === "fail").length;
+  const smokePassed = productionSmokeChecks.length > 0 && smokeFailures === 0;
+  const demoState = demoCleanupResult?.deleted ? "clean" : demoSeedResult ? "seeded" : launchChecklist.demo_seed ? "seeded" : "unknown";
+  const extensionReady = extensionValidationCount > 0 || Boolean(launchChecklist.extension_validation);
 
   if (!configs.length) {
     return (
@@ -5424,6 +5433,42 @@ function ScoringSettingsPanel({
               </span>
             </label>
           ))}
+        </div>
+      </div>
+
+      <div className="panel diagnosticsPanel releaseDashboard">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Launch</p>
+            <h3>Release Readiness Dashboard</h3>
+          </div>
+          <strong>{launchCompletion}% checklist</strong>
+        </div>
+        <div className="releaseDashboardGrid">
+          <div>
+            <span className={`statusPill ${readinessFailures === null ? "warn" : readinessFailures ? "fail" : "pass"}`}>
+              {readinessFailures === null ? "warn" : readinessFailures ? "fail" : "pass"}
+            </span>
+            <strong>Production readiness</strong>
+            <small>{readinessFailures === null ? "Not loaded yet." : `${readinessFailures} blocker(s), ${readinessWarnings} warning(s).`}</small>
+          </div>
+          <div>
+            <span className={`statusPill ${productionSmokeChecks.length ? smokePassed ? "pass" : "fail" : "warn"}`}>
+              {productionSmokeChecks.length ? smokePassed ? "pass" : "fail" : "warn"}
+            </span>
+            <strong>In-app smoke</strong>
+            <small>{productionSmokeChecks.length ? `${productionSmokeChecks.length - smokeFailures} passed, ${smokeFailures} failed.` : "Run Production Smoke before release."}</small>
+          </div>
+          <div>
+            <span className={`statusPill ${demoState === "clean" ? "pass" : demoState === "seeded" ? "warn" : "warn"}`}>{demoState}</span>
+            <strong>Demo data state</strong>
+            <small>{demoState === "clean" ? "Demo workspace was cleaned from this session." : demoState === "seeded" ? "Demo workspace is seeded; clean before public launch." : "No seed or cleanup action recorded in this browser."}</small>
+          </div>
+          <div>
+            <span className={`statusPill ${extensionReady ? "pass" : "warn"}`}>{extensionReady ? "pass" : "warn"}</span>
+            <strong>Extension validation</strong>
+            <small>{extensionReady ? `${extensionValidationCount} saved validation record(s) or checklist completion present.` : "Validate real job pages and package the extension before release."}</small>
+          </div>
         </div>
       </div>
 
