@@ -3,6 +3,7 @@ import json
 import shutil
 import sys
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -30,12 +31,11 @@ def main() -> int:
     copy_extension_files(output_dir)
     manifest = update_manifest(output_dir / "manifest.json", api_base, args.version)
     write_config(output_dir / "config.js", api_base, web_base)
-    write_release_metadata(output_dir / "release.json", manifest["version"], api_base, web_base)
-
     zip_path = Path(args.output) if args.output else Path(f"{output_dir}.zip")
     if zip_path.exists():
         zip_path.unlink()
     zip_path.parent.mkdir(parents=True, exist_ok=True)
+    write_release_metadata(output_dir / "release.json", manifest["version"], api_base, web_base, output_dir, zip_path)
     create_zip(output_dir, zip_path)
 
     print(f"Packaged Career Agent OS extension {manifest['version']} for {api_base}")
@@ -91,7 +91,7 @@ def write_config(config_path: Path, api_base: str, web_base: str) -> None:
     )
 
 
-def write_release_metadata(metadata_path: Path, version: str, api_base: str, web_base: str) -> None:
+def write_release_metadata(metadata_path: Path, version: str, api_base: str, web_base: str, output_dir: Path, zip_path: Path) -> None:
     metadata_path.write_text(
         json.dumps(
             {
@@ -100,6 +100,9 @@ def write_release_metadata(metadata_path: Path, version: str, api_base: str, web
                 "apiBaseUrl": api_base,
                 "webAppUrl": web_base,
                 "packagedFor": api_origin(api_base),
+                "packagedAt": datetime.now(UTC).isoformat(),
+                "unpackedPath": str(output_dir.resolve()),
+                "zipPath": str(zip_path.resolve()),
             },
             indent=2,
         )

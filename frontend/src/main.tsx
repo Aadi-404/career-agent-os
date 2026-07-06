@@ -166,6 +166,27 @@ type ProductionReadiness = {
   warnings: string[];
 };
 
+type ReleaseSummary = {
+  environment: string;
+  readyForProduction: boolean;
+  readinessBlockers: number;
+  readinessWarnings: number;
+  demoUserPresent: boolean;
+  extensionPackage: {
+    packaged: boolean;
+    version?: string | null;
+    apiBaseUrl?: string | null;
+    webAppUrl?: string | null;
+    packagedFor?: string | null;
+    packagedAt?: string | null;
+    unpackedPath?: string | null;
+    zipPath?: string | null;
+    message: string;
+  };
+  launchDecision: "ready" | "needs_attention" | string;
+  nextActions: string[];
+};
+
 type AdminUserRecord = {
   id: string;
   displayName: string;
@@ -862,6 +883,7 @@ function App() {
   const [scoringAudit, setScoringAudit] = useState<ScoringCalibrationAuditRecord[]>([]);
   const [systemDiagnostics, setSystemDiagnostics] = useState<SystemDiagnostics | null>(null);
   const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness | null>(null);
+  const [releaseSummary, setReleaseSummary] = useState<ReleaseSummary | null>(null);
   const [commandCenterInfo, setCommandCenterInfo] = useState("");
   const [commandCenterTopActions, setCommandCenterTopActions] = useState<string[]>([]);
   const [commandCenterLoading, setCommandCenterLoading] = useState(false);
@@ -976,6 +998,7 @@ function App() {
       loadScoringConfigs();
       loadSystemDiagnostics();
       loadProductionReadiness();
+      loadReleaseSummary();
       loadAdminUsers();
       loadAdminAnalyses();
       loadUsageSummary();
@@ -1160,6 +1183,7 @@ function App() {
     setScoringAudit([]);
     setSystemDiagnostics(null);
     setProductionReadiness(null);
+    setReleaseSummary(null);
     setAdminUsers([]);
     setAdminAnalyses([]);
     setUsageSummary(null);
@@ -2483,6 +2507,17 @@ function App() {
     }
   }
 
+  async function loadReleaseSummary() {
+    try {
+      await ensureLocalUser();
+      const response = await fetch(`${API_BASE_URL}/diagnostics/release-summary?userId=${encodeURIComponent(workspaceUserId)}`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error(await readApiError(response, "Release summary unavailable"));
+      setReleaseSummary(await response.json() as ReleaseSummary);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Release summary unavailable");
+    }
+  }
+
   async function loadAdminUsers() {
     try {
       await ensureLocalUser();
@@ -2559,6 +2594,7 @@ function App() {
       );
       setSettingsInfo(`Seeded ${seeded.resumeCount} resume(s), ${seeded.jobDescriptionCount} JD(s), ${seeded.analysisCount} analysis, ${seeded.jobOpportunityCount} opportunity, and ${seeded.researchNoteCount} research note(s).`);
       updateLaunchChecklist("demo_seed", true);
+      void loadReleaseSummary();
       setActiveTask("history");
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "Demo seed failed");
@@ -2588,7 +2624,7 @@ function App() {
           : cleaned.message,
       );
       updateLaunchChecklist("demo_seed", false);
-      await Promise.all([loadAdminUsers(), loadUsageSummary()]);
+      await Promise.all([loadAdminUsers(), loadUsageSummary(), loadReleaseSummary()]);
     } catch (err) {
       setSettingsInfo(err instanceof Error ? err.message : "Demo cleanup failed");
     }
@@ -2675,6 +2711,7 @@ function App() {
       });
       const failed = checks.filter((check) => check.status === "fail").length;
       setSettingsInfo(failed ? `Production smoke finished with ${failed} failed check(s).` : "Production smoke passed.");
+      void loadReleaseSummary();
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Production smoke could not start.";
       checks.push({ key: "session", label: "Session bootstrap", status: "fail", detail });
@@ -4032,6 +4069,7 @@ function App() {
                 audit={scoringAudit}
                 diagnostics={systemDiagnostics}
                 productionReadiness={productionReadiness}
+                releaseSummary={releaseSummary}
                 users={adminUsers}
                 adminAnalyses={adminAnalyses}
                 extensionValidationCount={extensionValidations.length}
@@ -5154,6 +5192,7 @@ function ScoringSettingsPanel({
   audit,
   diagnostics,
   productionReadiness,
+  releaseSummary,
   users,
   adminAnalyses,
   extensionValidationCount,
@@ -5191,6 +5230,7 @@ function ScoringSettingsPanel({
   audit: ScoringCalibrationAuditRecord[];
   diagnostics: SystemDiagnostics | null;
   productionReadiness: ProductionReadiness | null;
+  releaseSummary: ReleaseSummary | null;
   users: AdminUserRecord[];
   adminAnalyses: HistoryAnalysisRecord[];
   extensionValidationCount: number;
@@ -5265,12 +5305,13 @@ function ScoringSettingsPanel({
   const adminUserCount = users.filter((user) => user.role === "admin").length;
   const launchDoneCount = launchChecklistItems.filter((item) => launchChecklist[item.id]).length;
   const launchCompletion = Math.round((launchDoneCount / launchChecklistItems.length) * 100);
-  const readinessFailures = productionReadiness?.checks.filter((check) => check.status === "fail").length ?? null;
-  const readinessWarnings = productionReadiness?.checks.filter((check) => check.status === "warn").length ?? 0;
+  const readinessFailures = releaseSummary?.readinessBlockers ?? productionReadiness?.checks.filter((check) => check.status === "fail").length ?? null;
+  const readinessWarnings = releaseSummary?.readinessWarnings ?? productionReadiness?.checks.filter((check) => check.status === "warn").length ?? 0;
   const smokeFailures = productionSmokeChecks.filter((check) => check.status === "fail").length;
   const smokePassed = productionSmokeChecks.length > 0 && smokeFailures === 0;
-  const demoState = demoCleanupResult?.deleted ? "clean" : demoSeedResult ? "seeded" : launchChecklist.demo_seed ? "seeded" : "unknown";
+  const demoState = releaseSummary ? releaseSummary.demoUserPresent ? "seeded" : "clean" : demoCleanupResult?.deleted ? "clean" : demoSeedResult ? "seeded" : launchChecklist.demo_seed ? "seeded" : "unknown";
   const extensionReady = extensionValidationCount > 0 || Boolean(launchChecklist.extension_validation);
+  const extensionPackage = releaseSummary?.extensionPackage;
 
   if (!configs.length) {
     return (
@@ -5465,11 +5506,21 @@ function ScoringSettingsPanel({
             <small>{demoState === "clean" ? "Demo workspace was cleaned from this session." : demoState === "seeded" ? "Demo workspace is seeded; clean before public launch." : "No seed or cleanup action recorded in this browser."}</small>
           </div>
           <div>
+            <span className={`statusPill ${extensionPackage?.packaged ? "pass" : "warn"}`}>{extensionPackage?.packaged ? "pass" : "warn"}</span>
+            <strong>Extension package</strong>
+            <small>{extensionPackage?.packaged ? `${extensionPackage.version ?? "version"} packaged for ${extensionPackage.packagedFor ?? "configured API"}.` : extensionPackage?.message ?? "Package the extension before release."}</small>
+          </div>
+          <div>
             <span className={`statusPill ${extensionReady ? "pass" : "warn"}`}>{extensionReady ? "pass" : "warn"}</span>
             <strong>Extension validation</strong>
-            <small>{extensionReady ? `${extensionValidationCount} saved validation record(s) or checklist completion present.` : "Validate real job pages and package the extension before release."}</small>
+            <small>{extensionReady ? `${extensionValidationCount} saved validation record(s) or checklist completion present.` : "Validate real job pages with manual JD fallback."}</small>
           </div>
         </div>
+        {releaseSummary?.nextActions.length ? (
+          <div className="releaseNextActions">
+            {releaseSummary.nextActions.map((action) => <span key={action}>{action}</span>)}
+          </div>
+        ) : null}
       </div>
 
       <div className="panel diagnosticsPanel">

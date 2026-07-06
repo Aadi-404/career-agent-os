@@ -2276,7 +2276,7 @@ button.premiumButton:not(.secondaryButton) span {
 .releaseDashboardGrid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .releaseDashboardGrid > div {
@@ -2297,6 +2297,23 @@ button.premiumButton:not(.secondaryButton) span {
 
 .releaseDashboardGrid small {
   color: var(--muted);
+}
+
+.releaseNextActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.releaseNextActions span {
+  border: 1px solid #d5e5e2;
+  border-radius: 999px;
+  background: #f7fbfa;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 900;
+  padding: 7px 10px;
 }
 
 .evaluationGrid {

@@ -29,8 +29,8 @@ Core app is implemented. Remaining public-launch work is deployment-specific: st
 | Auth | Complete | Password auth, session tokens, guarded user APIs, admin guard. |
 | Browser extension | Mostly complete | Saved resume matching, page parsing, manual JD fallback, parser feedback, research handoff. |
 | Evaluation/tuning | Complete groundwork | Feedback labels, role-family calibration, audit history, rollback. |
-| Admin readiness | Complete groundwork | Diagnostics, production readiness, usage dashboard, billing handoff, launch tracker, release dashboard. |
-| Deployment tooling | Complete groundwork | Dockerfiles, compose examples, in-app smoke, CLI smoke check, production rehearsal, backup/restore. |
+| Admin readiness | Complete groundwork | Diagnostics, production readiness, release summary, usage dashboard, billing handoff, launch tracker, release dashboard. |
+| Deployment tooling | Complete groundwork | Dockerfiles, compose examples, in-app smoke, CLI smoke check, extension package status, production rehearsal, backup/restore. |
 | Research memory | Started | Manual and generated company/role/interview research notes saved in PostgreSQL for future cited research agents. |
 | Apply decisioning | Started | Score + research based apply / prepare / skip decision module. |
 | Resume rewrite | Started | Evidence-constrained rewrite suggestions with proof-safety labels. |
@@ -179,7 +179,7 @@ Built:
 - Persisted restore audit history for resume version rollback decisions.
 - Career Agent Plan task and `/ai/agent/plan` endpoint that rank the next optional module from score, research memory, preparation state, and generated artifacts.
 - Command Center default workspace with `/ai/command-center/{user_id}` aggregate payload, top actions, preparation memory, and opportunity pipeline next actions.
-- Release readiness dashboard in Settings combining production readiness, in-app smoke result, demo data state, and extension validation status.
+- Release readiness dashboard in Settings combining server release summary, production readiness, in-app smoke result, demo data state, extension package status, and extension validation status.
 
 Remaining:
 

@@ -144,9 +144,11 @@ Built:
 - Production env templates.
 - Dockerfiles and Docker Compose examples.
 - Production readiness diagnostics.
+- Server-backed release summary endpoint.
 - Release readiness dashboard in Settings.
 - In-app production smoke action for health, readiness, Command Center, and quota.
 - Smoke-check script.
+- Extension package metadata tracking.
 - CI pipeline.
 - Quota enforcement.
 - Billing checkout handoff.

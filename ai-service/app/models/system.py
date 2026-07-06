@@ -32,3 +32,26 @@ class ProductionReadinessResponse(BaseModel):
     readyForProduction: bool
     checks: list[ReadinessCheck] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class ExtensionPackageStatus(BaseModel):
+    packaged: bool
+    version: str | None = None
+    apiBaseUrl: str | None = None
+    webAppUrl: str | None = None
+    packagedFor: str | None = None
+    packagedAt: str | None = None
+    unpackedPath: str | None = None
+    zipPath: str | None = None
+    message: str
+
+
+class ReleaseSummaryResponse(BaseModel):
+    environment: str
+    readyForProduction: bool
+    readinessBlockers: int
+    readinessWarnings: int
+    demoUserPresent: bool
+    extensionPackage: ExtensionPackageStatus
+    launchDecision: str
+    nextActions: list[str] = Field(default_factory=list)

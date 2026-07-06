@@ -58,12 +58,12 @@ const checks = [
   {
     name: "settings launch readiness workflow",
     file: "src/main.tsx",
-    patterns: ["Production Readiness", "Release Readiness Dashboard", "Manual Launch Tracker", "Deployment Runbook", "Run Production Smoke", "Seed Demo Data", "Clean Demo Data", "Launch Readiness", "Resolve launch blockers before deploy"],
+    patterns: ["Production Readiness", "Release Readiness Dashboard", "Extension package", "/diagnostics/release-summary", "Manual Launch Tracker", "Deployment Runbook", "Run Production Smoke", "Seed Demo Data", "Clean Demo Data", "Launch Readiness", "Resolve launch blockers before deploy"],
   },
   {
     name: "launch tracker styles",
     file: "src/styles.css",
-    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions", ".prepNextAction", ".opportunityNextAction", ".commandCenter", ".commandTopActions", ".commandReadiness", ".commandReadinessList", ".runbookGrid", ".productionSmokeList", ".releaseDashboardGrid"],
+    patterns: [".launchTrackerSummary", ".launchTrackerList", ".statusPill.pass", ".nextTaskBox", ".recommendationActions", ".prepNextAction", ".opportunityNextAction", ".commandCenter", ".commandTopActions", ".commandReadiness", ".commandReadinessList", ".runbookGrid", ".productionSmokeList", ".releaseDashboardGrid", ".releaseNextActions"],
   },
   {
     name: "package smoke script wiring",

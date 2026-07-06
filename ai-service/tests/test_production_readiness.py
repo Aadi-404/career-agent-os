@@ -1,6 +1,8 @@
 import unittest
+from unittest.mock import patch
 
-from app.main import _build_production_readiness_checks, settings
+from app.main import _build_production_readiness_checks, _release_next_actions, release_summary, settings
+from app.models.system import ExtensionPackageStatus
 
 
 class ProductionReadinessTests(unittest.TestCase):
@@ -92,6 +94,59 @@ class ProductionReadinessTests(unittest.TestCase):
         checks = {check.key: check for check in _build_production_readiness_checks(database_ok=True)}
 
         self.assertEqual(checks["logging"].status, "warn")
+
+    def test_release_next_actions_include_extension_and_demo_cleanup(self):
+        actions = _release_next_actions(
+            blockers=0,
+            warnings=1,
+            extension_package=ExtensionPackageStatus(packaged=False, message="missing"),
+            demo_user_present=True,
+        )
+
+        self.assertTrue(any("warning" in action for action in actions))
+        self.assertTrue(any("Package the browser extension" in action for action in actions))
+        self.assertTrue(any("Clean demo workspace" in action for action in actions))
+
+    def test_release_summary_returns_server_backed_status(self):
+        package = ExtensionPackageStatus(packaged=True, version="0.1.0", message="ready")
+        original_environment = settings.environment
+        original_auth = settings.require_user_auth
+        original_admins = settings.admin_user_ids
+        original_billing_secret = settings.billing_webhook_secret
+        original_billing_provider = settings.billing_checkout_provider
+        original_billing_checkout = settings.billing_checkout_url
+        original_success = settings.billing_checkout_success_url
+        original_cancel = settings.billing_checkout_cancel_url
+        original_cors = settings.cors_allow_origins
+        try:
+            settings.environment = "production"
+            settings.require_user_auth = True
+            settings.admin_user_ids = "admin-1"
+            settings.billing_webhook_secret = "secret"
+            settings.billing_checkout_provider = "stripe"
+            settings.billing_checkout_url = "https://checkout.example.test"
+            settings.billing_checkout_success_url = "https://app.example.test/success"
+            settings.billing_checkout_cancel_url = "https://app.example.test/cancel"
+            settings.cors_allow_origins = "https://app.example.test"
+            with (
+                patch("app.main.initialize_database"),
+                patch("app.main._latest_extension_package_status", return_value=package),
+                patch("app.main.list_users", return_value=[]),
+            ):
+                summary = release_summary()
+        finally:
+            settings.environment = original_environment
+            settings.require_user_auth = original_auth
+            settings.admin_user_ids = original_admins
+            settings.billing_webhook_secret = original_billing_secret
+            settings.billing_checkout_provider = original_billing_provider
+            settings.billing_checkout_url = original_billing_checkout
+            settings.billing_checkout_success_url = original_success
+            settings.billing_checkout_cancel_url = original_cancel
+            settings.cors_allow_origins = original_cors
+
+        self.assertEqual(summary.launchDecision, "ready")
+        self.assertTrue(summary.extensionPackage.packaged)
 
 
 if __name__ == "__main__":

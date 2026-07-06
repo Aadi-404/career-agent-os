@@ -4,6 +4,7 @@ import re
 import time
 import hmac
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -112,7 +113,7 @@ from app.models.scoring_config import (
     ScoringCalibrationRestoreRequest,
     ScoringCalibrationUpdateRequest,
 )
-from app.models.system import ProductionReadinessResponse, ReadinessCheck, SystemDiagnostics
+from app.models.system import ExtensionPackageStatus, ProductionReadinessResponse, ReadinessCheck, ReleaseSummaryResponse, SystemDiagnostics
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.agent_orchestration_service import build_career_agent_plan
 from app.services.application_decision_service import build_application_decision
@@ -342,6 +343,35 @@ def production_readiness(userId: str | None = None, session_token: str | None = 
         readyForProduction=all(check.status != "fail" for check in checks),
         checks=checks,
         warnings=warnings,
+    )
+
+
+@app.get("/diagnostics/release-summary", response_model=ReleaseSummaryResponse)
+def release_summary(userId: str | None = None, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> ReleaseSummaryResponse:
+    database_ok = True
+    database_error = ""
+    try:
+        initialize_database()
+    except Exception as exc:
+        database_ok = False
+        database_error = str(exc)
+    if userId:
+        _authorize_user(userId, session_token)
+    checks = _build_production_readiness_checks(database_ok, database_error)
+    blockers = len([check for check in checks if check.status == "fail"])
+    warnings = len([check for check in checks if check.status == "warn"])
+    extension_package = _latest_extension_package_status()
+    demo_user_present = any(user.id == "demo-aditya" for user in list_users()) if database_ok else False
+    next_actions = _release_next_actions(blockers, warnings, extension_package, demo_user_present)
+    return ReleaseSummaryResponse(
+        environment=settings.environment,
+        readyForProduction=blockers == 0,
+        readinessBlockers=blockers,
+        readinessWarnings=warnings,
+        demoUserPresent=demo_user_present,
+        extensionPackage=extension_package,
+        launchDecision="ready" if blockers == 0 and extension_package.packaged and not demo_user_present else "needs_attention",
+        nextActions=next_actions,
     )
 
 
@@ -1232,6 +1262,53 @@ def _build_production_readiness_checks(database_ok: bool, database_error: str = 
         ),
     ]
     return checks
+
+
+def _latest_extension_package_status() -> ExtensionPackageStatus:
+    release_dir = Path(__file__).resolve().parents[2] / "deployment" / "releases" / "extension"
+    if not release_dir.exists():
+        return ExtensionPackageStatus(packaged=False, message="No extension release package has been generated yet.")
+    metadata_files = sorted(release_dir.glob("*/release.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    if not metadata_files:
+        return ExtensionPackageStatus(packaged=False, message="No extension release metadata was found.")
+    metadata_path = metadata_files[0]
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return ExtensionPackageStatus(packaged=False, message=f"Latest extension release metadata could not be read: {exc}")
+    zip_path = metadata.get("zipPath") or f"{metadata_path.parent}.zip"
+    zip_exists = Path(zip_path).exists()
+    return ExtensionPackageStatus(
+        packaged=zip_exists,
+        version=metadata.get("version"),
+        apiBaseUrl=metadata.get("apiBaseUrl"),
+        webAppUrl=metadata.get("webAppUrl"),
+        packagedFor=metadata.get("packagedFor"),
+        packagedAt=metadata.get("packagedAt"),
+        unpackedPath=metadata.get("unpackedPath") or str(metadata_path.parent),
+        zipPath=zip_path,
+        message="Latest extension package is available." if zip_exists else "Latest extension metadata exists, but the zip artifact is missing.",
+    )
+
+
+def _release_next_actions(
+    blockers: int,
+    warnings: int,
+    extension_package: ExtensionPackageStatus,
+    demo_user_present: bool,
+) -> list[str]:
+    actions: list[str] = []
+    if blockers:
+        actions.append(f"Resolve {blockers} production readiness blocker(s).")
+    elif warnings:
+        actions.append(f"Review {warnings} production readiness warning(s).")
+    if not extension_package.packaged:
+        actions.append("Package the browser extension for the deployed API and web URL.")
+    if demo_user_present:
+        actions.append("Clean demo workspace data before public production launch.")
+    if not actions:
+        actions.append("Run the CLI smoke check with --strict-production against the deployed URLs.")
+    return actions[:5]
 
 
 def _cors_readiness_detail(cors_origins: list[str], is_production: bool, has_local_cors: bool, has_wildcard_cors: bool) -> str:
