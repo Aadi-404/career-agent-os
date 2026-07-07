@@ -57,3 +57,18 @@ class ReleaseSummaryResponse(BaseModel):
     extensionPackage: ExtensionPackageStatus
     launchDecision: str
     nextActions: list[str] = Field(default_factory=list)
+
+
+class StagingValidationCommand(BaseModel):
+    label: str
+    command: str
+
+
+class StagingValidationResponse(BaseModel):
+    readyForStaging: bool
+    apiBaseUrl: str
+    frontendUrl: str
+    checks: list[ReadinessCheck] = Field(default_factory=list)
+    commands: list[StagingValidationCommand] = Field(default_factory=list)
+    extensionSites: dict[str, str] = Field(default_factory=dict)
+    nextActions: list[str] = Field(default_factory=list)

@@ -141,6 +141,7 @@ Built:
 - Parser quality feedback.
 - Extension validation records.
 - Extension packaging script.
+- Staging validation diagnostics endpoint and Settings panel.
 - Production env templates.
 - Dockerfiles and Docker Compose examples.
 - Production readiness diagnostics.
@@ -251,10 +252,11 @@ Built:
 - Command Center default workspace and `/ai/command-center/{user_id}` aggregate API for top actions, preparation memory, and opportunity pipeline next actions.
 - Preparation tracker automation that surfaces today focus, overdue plan tasks, low-confidence review signals, and sessions needing attention without another LLM call.
 - Apply-decision execution plan that converts apply / prepare / skip output into ordered agent steps with dependencies, blocker state, endpoint hints, and estimated units.
+- RAG-style workspace memory endpoint and Command Center panel that turn saved resumes, JDs, analyses, research, opportunities, and prep progress into top evidence, recurring gaps, retrieval queries, and next memory actions.
 
 Still planned:
 
-- RAG memory over saved resumes, JDs, analyses, feedback, and preparation progress.
+- Deeper vector/RAG retrieval after hosted validation data exists.
 
 Why it is later:
 
@@ -273,7 +275,7 @@ Why it is later:
 | Usage quotas | Free/premium/admin limits | Controls AI cost and supports commercial packaging. |
 | Session auth | Web and extension login | Enables multi-user history and protected APIs. |
 | Planner orchestration | Career Agent Plan | Chooses the next optional tool without generating every artifact at once. |
-| Future RAG memory | Planned deeper phase | Will use saved history as context for personal career guidance. |
+| RAG-style memory | Workspace Memory | Uses saved history as context signals for personal career guidance without another LLM call. |
 | Future agents | Planned deeper phase | Will execute research, scoring, prep, and rewrite workflows with stronger memory and guardrails. |
 
 ## Launch Blockers

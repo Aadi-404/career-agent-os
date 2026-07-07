@@ -29,12 +29,12 @@ Core app is implemented. Remaining public-launch work is deployment-specific: st
 | Auth | Complete | Password auth, session tokens, guarded user APIs, admin guard. |
 | Browser extension | Mostly complete | Saved resume matching, page parsing, manual JD fallback, parser feedback, research handoff. |
 | Evaluation/tuning | Complete groundwork | Feedback labels, role-family calibration, audit history, rollback. |
-| Admin readiness | Complete groundwork | Diagnostics, production readiness, release summary, usage dashboard, billing handoff, launch tracker, release dashboard, launch evidence export. |
-| Deployment tooling | Complete groundwork | Dockerfiles, compose examples, in-app smoke, CLI smoke check, extension package content verification, extension package status, production rehearsal, backup/restore. |
+| Admin readiness | Complete groundwork | Diagnostics, production readiness, staging validation, release summary, usage dashboard, billing handoff, launch tracker, release dashboard, launch evidence export. |
+| Deployment tooling | Complete groundwork | Dockerfiles, compose examples, in-app smoke, CLI smoke check, extension package content verification, extension package status, staging validation, production rehearsal, backup/restore. |
 | Research memory | Started | Manual and generated company/role/interview research notes saved in PostgreSQL for future cited research agents. |
 | Apply decisioning | Started | Score + research based apply / prepare / skip decision module. |
 | Resume rewrite | Started | Evidence-constrained rewrite suggestions with proof-safety labels. |
-| Agent orchestration | Started | Career Agent planner recommends the next optional module from saved score, research, prep, and artifact state. |
+| Agent orchestration | Started | Career Agent planner, apply-decision execution plans, prep automation, and workspace memory retrieval signals. |
 
 ## AI Design
 
@@ -62,7 +62,7 @@ Why:
 | LLM generation | Optional prep plans, questions, cross-questions, improvements. |
 | Tool orchestration | Career Agent planner ranks which optional module to run next without triggering every paid call. |
 | Calibration loop | Feedback labels and role-family weight tuning. |
-| Future RAG | Saved resumes, JDs, analyses, feedback, and prep progress can become memory. |
+| RAG-style memory | Workspace memory endpoint summarizes saved resumes, JDs, analyses, research, opportunities, and prep progress into retrieval signals. |
 | Future agents | Research, rewrite, apply-decision, and prep-tracker agents build on the current planner. |
 
 ## Tech Stack
@@ -182,10 +182,12 @@ Built:
 - Release readiness dashboard in Settings combining server release summary, production readiness, in-app smoke result, demo data state, extension package status, and extension validation status.
 - Preparation tracker automation that derives current-day focus items, overdue tasks, low-confidence review signals, and sessions needing attention from saved preparation progress.
 - Apply-decision execution plan that turns apply / prepare / skip guidance into ordered agent steps with dependencies, blockers, endpoints, and estimated units.
+- RAG-style workspace memory endpoint and Command Center panel that summarize saved resumes, JDs, analyses, research, opportunities, and prep progress into top evidence, recurring gaps, retrieval queries, and next memory actions.
+- Staging validation diagnostics that combine readiness, deployed URL checks, extension package state, real-site extension validation coverage, and exact staging commands.
 
 Remaining:
 
-- RAG memory over saved workspace history.
+- Real staging deployment and smoke/extension validation against hosted URLs.
 
 ## Important Docs
 

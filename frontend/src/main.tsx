@@ -187,6 +187,16 @@ type ReleaseSummary = {
   nextActions: string[];
 };
 
+type StagingValidation = {
+  readyForStaging: boolean;
+  apiBaseUrl: string;
+  frontendUrl: string;
+  checks: ProductionReadiness["checks"];
+  commands: Array<{ label: string; command: string }>;
+  extensionSites: Record<string, string>;
+  nextActions: string[];
+};
+
 type AdminUserRecord = {
   id: string;
   displayName: string;
@@ -522,6 +532,32 @@ type UsageSummary = {
   byUser: Record<string, number>;
   latestEvents: UsageEventRecord[];
   quota?: UsageQuotaStatus | null;
+};
+
+type WorkspaceMemory = {
+  userId: string;
+  summary: string;
+  memoryScore: number;
+  totalItems: number;
+  topEvidence: Array<{
+    id: string;
+    sourceType: string;
+    title: string;
+    summary: string;
+    tags: string[];
+    score: number;
+    createdAt?: string | null;
+  }>;
+  recurringGaps: Array<{
+    topic: string;
+    occurrences: number;
+    latestEvidence?: string | null;
+    recommendation: string;
+  }>;
+  researchSignals: string[];
+  preparationSignals: string[];
+  retrievalQueries: string[];
+  nextActions: string[];
 };
 
 type TaskStatus = "todo" | "in_progress" | "done" | "skipped";
@@ -936,6 +972,7 @@ function App() {
   const [systemDiagnostics, setSystemDiagnostics] = useState<SystemDiagnostics | null>(null);
   const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness | null>(null);
   const [releaseSummary, setReleaseSummary] = useState<ReleaseSummary | null>(null);
+  const [stagingValidation, setStagingValidation] = useState<StagingValidation | null>(null);
   const [commandCenterInfo, setCommandCenterInfo] = useState("");
   const [commandCenterTopActions, setCommandCenterTopActions] = useState<string[]>([]);
   const [commandCenterLoading, setCommandCenterLoading] = useState(false);
@@ -943,6 +980,7 @@ function App() {
   const [adminAnalyses, setAdminAnalyses] = useState<HistoryAnalysisRecord[]>([]);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [usageQuota, setUsageQuota] = useState<UsageQuotaStatus | null>(null);
+  const [workspaceMemory, setWorkspaceMemory] = useState<WorkspaceMemory | null>(null);
   const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
   const [demoSeedResult, setDemoSeedResult] = useState<DemoSeedResponse | null>(null);
   const [demoCleanupResult, setDemoCleanupResult] = useState<DemoCleanupResponse | null>(null);
@@ -1052,6 +1090,7 @@ function App() {
       loadSystemDiagnostics();
       loadProductionReadiness();
       loadReleaseSummary();
+      loadStagingValidation();
       loadAdminUsers();
       loadAdminAnalyses();
       loadUsageSummary();
@@ -1507,14 +1546,19 @@ function App() {
     setCommandCenterInfo("");
     try {
       await ensureLocalUser();
-      const response = await fetch(`${API_BASE_URL}/ai/command-center/${workspaceUserId}`, { headers: authHeaders(false) });
+      const [response, memoryResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/ai/command-center/${workspaceUserId}`, { headers: authHeaders(false) }),
+        fetch(`${API_BASE_URL}/ai/workspace-memory/${workspaceUserId}`, { headers: authHeaders(false) }),
+      ]);
       if (!response.ok) throw new Error(await readApiError(response, "Command Center refresh failed"));
+      if (!memoryResponse.ok) throw new Error(await readApiError(memoryResponse, "Workspace memory refresh failed"));
       const payload = await response.json() as CommandCenterResponse;
       setWorkspaceSummary(payload.workspace);
       setPrepMemory(payload.preparationMemory);
       setOpportunityActions(payload.opportunityActions);
       setProductionReadiness(payload.productionReadiness ?? null);
       setCommandCenterTopActions(payload.topActions);
+      setWorkspaceMemory(await memoryResponse.json() as WorkspaceMemory);
       setCommandCenterInfo(payload.summary);
     } catch (err) {
       setCommandCenterInfo(err instanceof Error ? err.message : "Command Center refresh failed");
@@ -2573,6 +2617,22 @@ function App() {
     }
   }
 
+  async function loadStagingValidation() {
+    try {
+      await ensureLocalUser();
+      const params = new URLSearchParams({
+        userId: workspaceUserId,
+        apiBaseUrl: API_BASE_URL,
+        frontendUrl: window.location.origin,
+      });
+      const response = await fetch(`${API_BASE_URL}/diagnostics/staging-validation?${params.toString()}`, { headers: authHeaders(false) });
+      if (!response.ok) throw new Error(await readApiError(response, "Staging validation unavailable"));
+      setStagingValidation(await response.json() as StagingValidation);
+    } catch (err) {
+      setSettingsInfo(err instanceof Error ? err.message : "Staging validation unavailable");
+    }
+  }
+
   async function exportLaunchEvidence() {
     setSettingsInfo("");
     try {
@@ -2581,6 +2641,7 @@ function App() {
         exportedAt: new Date().toISOString(),
         workspaceUserId,
         releaseSummary,
+        stagingValidation,
         productionReadiness,
         productionSmokeChecks,
         launchChecklist: launchChecklistItems.map((item) => ({
@@ -3487,6 +3548,7 @@ function App() {
                 prepMemory={prepMemory}
                 opportunityActions={opportunityActions}
                 workspaceSummary={workspaceSummary}
+                workspaceMemory={workspaceMemory}
                 productionReadiness={productionReadiness}
                 info={commandCenterInfo}
                 topActions={commandCenterTopActions}
@@ -4166,6 +4228,7 @@ function App() {
                 diagnostics={systemDiagnostics}
                 productionReadiness={productionReadiness}
                 releaseSummary={releaseSummary}
+                stagingValidation={stagingValidation}
                 users={adminUsers}
                 adminAnalyses={adminAnalyses}
                 extensionValidationCount={extensionValidations.length}
@@ -4195,6 +4258,7 @@ function App() {
                 onSeedDemo={seedDemoWorkspace}
                 onCleanupDemo={cleanupDemoWorkspace}
                 onRefreshReleaseSummary={loadReleaseSummary}
+                onRefreshStagingValidation={loadStagingValidation}
                 onExportLaunchEvidence={exportLaunchEvidence}
                 onRunProductionSmoke={runProductionSmokeCheck}
                 onToggleLaunchChecklist={updateLaunchChecklist}
@@ -4784,6 +4848,7 @@ function CommandCenterPanel({
   prepMemory,
   opportunityActions,
   workspaceSummary,
+  workspaceMemory,
   productionReadiness,
   info,
   topActions,
@@ -4800,6 +4865,7 @@ function CommandCenterPanel({
   prepMemory: PrepMemoryResponse | null;
   opportunityActions: OpportunityNextActionsResponse | null;
   workspaceSummary: WorkspaceSummary | null;
+  workspaceMemory: WorkspaceMemory | null;
   productionReadiness: ProductionReadiness | null;
   info: string;
   topActions: string[];
@@ -4869,6 +4935,47 @@ function CommandCenterPanel({
                 <small>Open settings to review the full production readiness checklist.</small>
               </button>
             )}
+          </div>
+        </section>
+      )}
+
+      {workspaceMemory && (
+        <section className="panel workspaceMemoryPanel">
+          <div className="panelHeader">
+            <div>
+              <p className="eyebrow">RAG Memory</p>
+              <h3>{workspaceMemory.memoryScore}% memory readiness</h3>
+              <p className="hint">{workspaceMemory.summary}</p>
+            </div>
+            <button type="button" className="secondaryButton" onClick={() => onOpenTask("history")}>Open History</button>
+          </div>
+          <div className="memoryGrid">
+            <div>
+              <h4>Top Evidence</h4>
+              {workspaceMemory.topEvidence.length ? workspaceMemory.topEvidence.slice(0, 4).map((item) => (
+                <div className="memoryItem" key={`${item.sourceType}-${item.id}`}>
+                  <strong>{item.title}</strong>
+                  <small>{formatCategory(item.sourceType)} / {item.score}%</small>
+                  <p>{item.summary}</p>
+                </div>
+              )) : <p className="hint">Save analyses, resumes, and research to build memory.</p>}
+            </div>
+            <div>
+              <h4>Retrieval Queries</h4>
+              {workspaceMemory.retrievalQueries.length ? (
+                <ul>{workspaceMemory.retrievalQueries.slice(0, 6).map((query) => <li key={query}>{query}</li>)}</ul>
+              ) : <p className="hint">No retrieval query yet.</p>}
+              {workspaceMemory.recurringGaps.length > 0 && (
+                <>
+                  <h4>Recurring Gaps</h4>
+                  <ul>{workspaceMemory.recurringGaps.slice(0, 4).map((gap) => <li key={gap.topic}>{gap.topic}: {gap.recommendation}</li>)}</ul>
+                </>
+              )}
+            </div>
+            <div>
+              <h4>Memory Actions</h4>
+              <ul>{workspaceMemory.nextActions.map((action) => <li key={action}>{action}</li>)}</ul>
+            </div>
           </div>
         </section>
       )}
@@ -5291,6 +5398,7 @@ function ScoringSettingsPanel({
   diagnostics,
   productionReadiness,
   releaseSummary,
+  stagingValidation,
   users,
   adminAnalyses,
   extensionValidationCount,
@@ -5310,6 +5418,7 @@ function ScoringSettingsPanel({
   onRestore,
   onRefreshDiagnostics,
   onRefreshReadiness,
+  onRefreshStagingValidation,
   onRefreshUsers,
   onSearchAnalyses,
   onLoadUsage,
@@ -5331,6 +5440,7 @@ function ScoringSettingsPanel({
   diagnostics: SystemDiagnostics | null;
   productionReadiness: ProductionReadiness | null;
   releaseSummary: ReleaseSummary | null;
+  stagingValidation: StagingValidation | null;
   users: AdminUserRecord[];
   adminAnalyses: HistoryAnalysisRecord[];
   extensionValidationCount: number;
@@ -5350,6 +5460,7 @@ function ScoringSettingsPanel({
   onRestore: (auditId: string) => void;
   onRefreshDiagnostics: () => void;
   onRefreshReadiness: () => void;
+  onRefreshStagingValidation: () => void;
   onRefreshUsers: () => void;
   onSearchAnalyses: (query?: string, userId?: string) => void;
   onLoadUsage: (userId?: string) => void;
@@ -5576,6 +5687,48 @@ function ScoringSettingsPanel({
           </>
         ) : (
           <p className="hint">Production readiness has not been loaded yet.</p>
+        )}
+      </div>
+
+      <div className="panel diagnosticsPanel stagingValidationPanel">
+        <div className="panelHeader">
+          <div>
+            <p className="eyebrow">Staging</p>
+            <h3>Staging Validation</h3>
+          </div>
+          <button type="button" className="secondaryButton" onClick={onRefreshStagingValidation}>Refresh Staging</button>
+        </div>
+        {stagingValidation ? (
+          <>
+            <div className="readinessSummary">
+              <strong>{stagingValidation.readyForStaging ? "Staging gates look usable" : "Staging needs validation"}</strong>
+              <span>{stagingValidation.apiBaseUrl} / {stagingValidation.frontendUrl}</span>
+            </div>
+            <div className="readinessList">
+              {stagingValidation.checks.map((check) => (
+                <div key={check.key}>
+                  <span className={`statusPill ${check.status}`}>{check.status}</span>
+                  <strong>{check.label}</strong>
+                  <p>{check.detail}</p>
+                </div>
+              ))}
+            </div>
+            <div className="verificationCommandList">
+              {stagingValidation.commands.map((item) => (
+                <div key={item.label}>
+                  <strong>{item.label}</strong>
+                  <code>{item.command}</code>
+                </div>
+              ))}
+            </div>
+            {stagingValidation.nextActions.length > 0 && (
+              <div className="releaseNextActions">
+                {stagingValidation.nextActions.map((action) => <span key={action}>{action}</span>)}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="hint">Staging validation has not been loaded yet.</p>
         )}
       </div>
 

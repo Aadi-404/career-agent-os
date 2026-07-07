@@ -27,6 +27,8 @@ Status: staging-ready after hosted environment values and secrets are configured
 - Research draft source review with citation confidence, source credibility ranking, gaps, and recommended next searches.
 - Apply-decision execution plans with ordered steps, dependencies, blocker state, endpoint hints, and estimated units.
 - Preparation memory with current-day focus, overdue task detection, low-confidence review signals, and sessions needing attention.
+- Workspace memory with top evidence, recurring gaps, retrieval queries, and next memory actions over saved history.
+- Staging validation diagnostics with hosted URL checks, extension validation coverage, and exact staging commands.
 - Settings release dashboard with readiness, smoke, demo-data, extension package, and validation status.
 
 ## AI And Cost-Control Design

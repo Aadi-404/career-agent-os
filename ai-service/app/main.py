@@ -114,7 +114,8 @@ from app.models.scoring_config import (
     ScoringCalibrationRestoreRequest,
     ScoringCalibrationUpdateRequest,
 )
-from app.models.system import ExtensionPackageStatus, ProductionReadinessResponse, ReadinessCheck, ReleaseSummaryResponse, SystemDiagnostics
+from app.models.system import ExtensionPackageStatus, ProductionReadinessResponse, ReadinessCheck, ReleaseSummaryResponse, StagingValidationResponse, SystemDiagnostics
+from app.models.workspace_memory import WorkspaceMemoryResponse
 from app.services.analyzer_service import analyze_resume_jd, match_resume_jd
 from app.services.agent_orchestration_service import build_career_agent_plan
 from app.services.application_decision_service import build_application_decision
@@ -187,6 +188,8 @@ from app.services.research_service import build_research_note_draft
 from app.services.resume_rewrite_service import build_resume_rewrite
 from app.services.resume_extractor import extract_resume
 from app.services.resume_normalizer import normalize_resume
+from app.services.staging_validation_service import build_staging_validation
+from app.services.workspace_memory_service import build_workspace_memory
 from app.services.scoring_config_service import (
     list_scoring_calibration_audit,
     list_scoring_calibrations,
@@ -373,6 +376,27 @@ def release_summary(userId: str | None = None, session_token: str | None = Heade
         extensionPackage=extension_package,
         launchDecision="ready" if blockers == 0 and extension_package.packaged and not demo_user_present else "needs_attention",
         nextActions=next_actions,
+    )
+
+
+@app.get("/diagnostics/staging-validation", response_model=StagingValidationResponse)
+def staging_validation(
+    userId: str | None = None,
+    apiBaseUrl: str = "https://api.your-domain.com",
+    frontendUrl: str = "https://app.your-domain.com",
+    session_token: str | None = Header(default=None, alias="X-Session-Token"),
+) -> StagingValidationResponse:
+    if userId:
+        _authorize_user(userId, session_token)
+    readiness = production_readiness(userId=userId, session_token=session_token)
+    validations = list_extension_validations(userId) if userId else []
+    return build_staging_validation(
+        readiness=readiness,
+        extension_package=_latest_extension_package_status(),
+        extension_validations=validations,
+        api_base_url=apiBaseUrl,
+        frontend_url=frontendUrl,
+        user_id=userId,
     )
 
 
@@ -862,6 +886,20 @@ def get_command_center(user_id: str, session_token: str | None = Header(default=
         list_preparation_sessions(user_id),
         list_job_opportunities_for_user(user_id),
         readiness,
+    )
+
+
+@app.get("/ai/workspace-memory/{user_id}", response_model=WorkspaceMemoryResponse)
+def get_workspace_memory(user_id: str, session_token: str | None = Header(default=None, alias="X-Session-Token")) -> WorkspaceMemoryResponse:
+    _authorize_user(user_id, session_token)
+    return build_workspace_memory(
+        user_id=user_id,
+        resumes=list_resumes(user_id),
+        job_descriptions=list_job_descriptions(user_id),
+        analyses=list_analyses(user_id),
+        research_notes=list_research_notes(user_id),
+        preparation_sessions=list_preparation_sessions(user_id),
+        opportunities=list_job_opportunities_for_user(user_id),
     )
 
 
